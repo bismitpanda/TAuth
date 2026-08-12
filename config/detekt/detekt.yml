@@ -1,0 +1,68 @@
+# Project overrides on top of detekt's default ruleset (buildUponDefaultConfig = true).
+# Formatting is kotlinter's job and is not configured here.
+# See STYLE_GUIDE.md for the conventions these rules enforce.
+
+complexity:
+  LongMethod:
+    # Composables and the vault write path are legitimately long and linear.
+    allowedLines: 80
+  LongParameterList:
+    allowedFunctionParameters: 8
+    allowedConstructorParameters: 10
+    ignoreDefaultParameters: true
+  TooManyFunctions:
+    allowedFunctionsPerFile: 30
+    allowedFunctionsPerClass: 20
+    ignorePrivate: true
+    ignoreOverridden: true
+
+exceptions:
+  TooGenericExceptionCaught:
+    # STYLE_GUIDE.md §4: JDK exceptions are caught at the boundary and converted
+    # to a VaultError. Catching broadly is correct there, but must be deliberate.
+    active: true
+  SwallowedException:
+    active: true
+  ThrowingExceptionsWithoutMessageOrCause:
+    active: true
+
+naming:
+  FunctionNaming:
+    # @Composable functions are PascalCase by convention.
+    ignoreAnnotated: ['Composable']
+  MatchingDeclarationName:
+    # STYLE_GUIDE.md §2: platform source sets use the source-set suffix, so
+    # Platform.jvm.kt holds JvmPlatform. detekt's default list omits 'jvm'.
+    # Upstream PR detekt/detekt#9438 expands these defaults; drop this override once
+    # it ships in a release we depend on.
+    multiplatformTargets:
+      - 'jvm'
+      - 'ios'
+      - 'android'
+  TopLevelPropertyNaming:
+    constantPattern: '[A-Z][_A-Z0-9]*'
+
+style:
+  MagicNumber:
+    # STYLE_GUIDE.md §2: cryptographic sizes are named constants.
+    ignorePropertyDeclaration: true
+    ignoreCompanionObjectPropertyDeclaration: true
+    ignoreAnnotation: true
+    ignoreEnums: true
+    ignoreNumbers: ['-1', '0', '1', '2']
+  MaxLineLength:
+    # kotlinter enforces the 120-column limit; detekt must not double-report it.
+    active: false
+  ForbiddenComment:
+    # A bare TODO is noise; a TODO naming its blocker is fine.
+    active: false
+  ReturnCount:
+    max: 4
+    excludeGuardClauses: true
+
+potential-bugs:
+  UnsafeCallOnNullableType:
+    # STYLE_GUIDE.md §5: !! does not appear outside tests.
+    active: true
+  LateinitUsage:
+    active: true

@@ -1,0 +1,31 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{yml,yaml,json,toml}]
+indent_size = 2
+
+[*.{kt,kts}]
+# STYLE_GUIDE.md §1 — Kotlin official style, 120 columns, trailing commas.
+max_line_length = 120
+ktlint_code_style = intellij_idea
+
+# Trailing commas keep a one-line diff when a parameter is added.
+ij_kotlin_allow_trailing_comma = true
+ij_kotlin_allow_trailing_comma_on_call_site = true
+ktlint_standard_trailing-comma-on-declaration-site = enabled
+ktlint_standard_trailing-comma-on-call-site = enabled
+
+# @Composable functions are PascalCase; ktlint's function-naming rule does not
+# know that. Naming is specified in STYLE_GUIDE.md §2 and checked by detekt,
+# which is configured with an exemption for the Composable annotation.
+ktlint_standard_function-naming = disabled
+
+[*.md]
+trim_trailing_whitespace = false
