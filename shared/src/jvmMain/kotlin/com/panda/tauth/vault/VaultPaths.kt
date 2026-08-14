@@ -5,6 +5,9 @@ import java.nio.file.Path
 const val VAULT_FILE_NAME = "vault.tauth"
 const val TEMP_FILE_NAME = "vault.tauth.tmp"
 const val LOCK_FILE_NAME = "vault.lock"
+const val PREFERENCES_FILE_NAME = "preferences.json"
+const val INSTANCE_LOCK_FILE_NAME = "instance.lock"
+const val INSTANCE_PORT_FILE_NAME = "instance.port"
 
 enum class OperatingSystem {
     LINUX,
@@ -43,6 +46,17 @@ class VaultPaths(
     val tempFile: Path get() = directory.resolve(TEMP_FILE_NAME)
 
     val lockFile: Path get() = directory.resolve(LOCK_FILE_NAME)
+
+    // Plaintext, and read before the vault is opened.
+    val preferencesFile: Path get() = directory.resolve(PREFERENCES_FILE_NAME)
+
+    // Held for the life of a running instance, and distinct from the lock a write takes: a lock
+    // released between writes would let a second launch believe no instance is running.
+    val instanceLockFile: Path get() = directory.resolve(INSTANCE_LOCK_FILE_NAME)
+
+    // The loopback port the running instance answers on. It names a socket every local process can
+    // reach by scanning, so it carries nothing an attacker does not already have.
+    val instancePortFile: Path get() = directory.resolve(INSTANCE_PORT_FILE_NAME)
 
     // An empty user.home leaves every branch above relative, which would put the vault under
     // whatever directory the application was launched from.

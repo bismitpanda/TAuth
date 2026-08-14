@@ -4,6 +4,7 @@ import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 private val HOME: Path = Path.of("/synthetic-home")
@@ -109,6 +110,32 @@ class VaultPathsTest {
     fun `the lock file sits beside the vault`() {
         val resolved = paths(OperatingSystem.LINUX, mapOf("XDG_DATA_HOME" to Path.of("/data").toString()))
         assertEquals(Path.of("/data", "tauth", "vault.lock"), resolved.lockFile)
+    }
+
+    @Test
+    fun `the preferences file sits beside the vault`() {
+        val resolved = paths(OperatingSystem.LINUX, mapOf("XDG_DATA_HOME" to Path.of("/data").toString()))
+        assertEquals(Path.of("/data", "tauth", "preferences.json"), resolved.preferencesFile)
+    }
+
+    @Test
+    fun `the instance lock file sits beside the vault`() {
+        val resolved = paths(OperatingSystem.LINUX, mapOf("XDG_DATA_HOME" to Path.of("/data").toString()))
+        assertEquals(Path.of("/data", "tauth", "instance.lock"), resolved.instanceLockFile)
+    }
+
+    @Test
+    fun `the instance port file sits beside the vault`() {
+        val resolved = paths(OperatingSystem.LINUX, mapOf("XDG_DATA_HOME" to Path.of("/data").toString()))
+        assertEquals(Path.of("/data", "tauth", "instance.port"), resolved.instancePortFile)
+    }
+
+    @Test
+    fun `the instance lock is not the lock a write takes`() {
+        // One lock is held for the life of a running instance and the other only across a write, so
+        // a single file would let a second launch believe no instance is running.
+        val resolved = paths(OperatingSystem.LINUX)
+        assertNotEquals(resolved.lockFile, resolved.instanceLockFile)
     }
 
     @Test

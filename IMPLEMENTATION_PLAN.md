@@ -130,7 +130,9 @@ shared/src/commonMain/kotlin/com/panda/tauth/ui/
 
 desktopApp/src/main/kotlin/com/panda/tauth/
   Main.kt                     application scope, window, tray, lifecycle
-  TrayHost.kt                 tray construction and availability fallback
+  TrayAvailability.kt         whether this desktop has a tray
+  WindowLifecycle.kt          close and startup behaviour that follows
+  TrayHost.kt                 tray construction
   SingleInstance.kt           lock file + local socket
   ClipboardService.kt         copy with timed clear
   QrDecoder.kt                ZXing image decode
@@ -572,7 +574,7 @@ fun cancelScheduledLock()
 
 | Trigger | Source | Default |
 |---|---|---|
-| Window hidden to tray | `onCloseRequest` setting `visible = false` | on |
+| Window hidden to tray | `onCloseRequest` setting `visible = false` | always |
 | Window minimised | `WindowState.isMinimized` observed via `snapshotFlow` | on |
 | Explicit "Lock now" | in-app button and tray menu item | always |
 | Idle timeout while visible | no pointer or key input for N minutes | on, 5 min |
@@ -582,6 +584,8 @@ fun cancelScheduledLock()
 Every configurable trigger reads from the `SecurityPolicy` in the unlocked vault body, never from `preferences.json`. The policy is available whenever it is needed, since a trigger can only fire against an unlocked vault, and it is unavailable exactly when it is irrelevant. Editing the plaintext preferences file cannot extend a timeout or disable a trigger.
 
 Focus loss defaults to off: copying a code and switching to a browser is the application's most common interaction, and locking on focus loss makes every such action cost a full Argon2id re-derivation.
+
+Hiding to the tray carries no switch, only the grace period below. It is what §1 means by the vault being unlocked while the window is on screen, and nothing else would catch a window that stayed hidden: the idle timeout runs while the window is visible, so a hidden window that did not lock would hold the key until the process ended.
 
 A configurable grace period delays the hide-triggered and minimise-triggered lock. Default is 0 seconds, meaning immediate. Options are 0 / 30 s / 2 min. The grace timer is cancelled if the window becomes visible again before it fires. The timer runs as a cancellable coroutine on the application scope, not as a `java.util.Timer`, so that shutdown cancels it deterministically.
 
@@ -723,10 +727,11 @@ The distinction is stated once in the screen's header rather than repeated per c
 fun main() = application {
     val session = remember { VaultSession(...) }
     val prefs = remember { PreferencesStore.load() }        // plaintext, pre-unlock
-    var visible by remember { mutableStateOf(!prefs.startMinimised) }
-    val trayAvailable = remember { isTraySupported }
+    val lifecycle = remember { WindowLifecycle.of(isSystemTraySupported(), prefs) }
+    val windowState = rememberWindowState(isMinimized = lifecycle.startup == StartupWindow.ICONIFIED)
+    var visible by remember { mutableStateOf(lifecycle.startup != StartupWindow.HIDDEN_TO_TRAY) }
 
-    if (trayAvailable && prefs.minimiseToTray) {
+    if (lifecycle.isTrayShown) {
         Tray(
             icon = TrayIcon,
             tooltip = "TAuth",
@@ -743,8 +748,10 @@ fun main() = application {
 
     Window(
         onCloseRequest = {
-            if (trayAvailable && prefs.minimiseToTray) visible = false
-            else { session.lock(LockReason.Exit); exitApplication() }
+            when (lifecycle.onCloseRequest) {
+                CloseAction.HIDE_TO_TRAY -> visible = false
+                CloseAction.EXIT -> { session.lock(LockReason.Exit); exitApplication() }
+            }
         },
         visible = visible,
         state = windowState,
@@ -756,7 +763,11 @@ fun main() = application {
 }
 ```
 
-`isTraySupported` is a **global** property in `androidx.compose.ui.window`, not an `ApplicationScope` extension, and delegates to `java.awt.SystemTray.isSupported()`. `Tray` is an `ApplicationScope` extension taking `(icon: Painter, state: TrayState, tooltip: String, onAction: () -> Unit, menu: @Composable MenuScope.() -> Unit)`. Both are confirmed present in Compose Multiplatform 1.11.1 (§15).
+`WindowLifecycle.of` takes tray availability and the two tray preferences and answers what a close request does, where the window opens, whether a tray icon exists and whether the tray settings are offered. The window leaves the screen only where a tray icon can bring it back, so the answer turns on `isTraySupported && minimiseToTray` rather than on availability alone: a desktop with no tray and a user who turned the tray off both take the fallback of §10.2. Whether the settings are offered turns on availability alone, since those settings are the controls that set the preferences.
+
+Minimising is the platform's own on every desktop and is not one of those answers. Hiding the window is the close request's alone, which is what leaves `WindowState.isMinimized` an observable thing for the minimise trigger of §8.3 to fire on and for `SecurityPolicy` to govern.
+
+`isSystemTraySupported()` is `java.awt.SystemTray.isSupported()`. `isTraySupported` is a **global** property in `androidx.compose.ui.window`, not an `ApplicationScope` extension, and delegates to the same call. `Tray` is an `ApplicationScope` extension taking `(icon: Painter, state: TrayState, tooltip: String, onAction: () -> Unit, menu: @Composable MenuScope.() -> Unit)`. Both are confirmed present in Compose Multiplatform 1.11.1 (§15).
 
 Relock is driven by observing visibility and minimisation rather than by wiring each call site:
 
@@ -775,11 +786,13 @@ LaunchedEffect(Unit) {
 
 The window layer reports what happened and does not decide what it means; §8.2 states what the session does with it. The policy therefore never has to be passed through composables or read while the vault is closed.
 
+A window another process raised is the exception the collector has to carry: it becomes visible without the user having come back to it, so a relock scheduled before it went up survives the transition rather than being cancelled by it (§10.3).
+
 ### 10.2 Platform behaviour
 
 **Linux.** `java.awt.SystemTray.isSupported()` returns true only when a StatusNotifierItem or legacy notification-area host is present. GNOME removed built-in tray support in 3.26. Recovery requires a shell extension: the third-party AppIndicator/KStatusNotifierItem extension, or the official Status Icons extension shipped with GNOME Shell Extensions from GNOME 47, neither of which is installed by default in most distributions. The AppIndicator extension has broken across GNOME major releases, notably at GNOME 48. The practical consequence is that a large fraction of GNOME users have no tray.
 
-The application must therefore never become invisible and unquittable. When `isTraySupported` is false, the tray-related settings are disabled with an explanation, `onCloseRequest` exits the application, and minimise behaves conventionally.
+The application must therefore never become invisible and unquittable. When `isTraySupported` is false, the tray-related settings are disabled with an explanation, `onCloseRequest` exits the application, and `startMinimised` opens the window minimised on the taskbar rather than hidden with nothing to restore it. A tray the desktop supports and the user has turned off reaches the same close and startup behaviour, since no icon is on screen to raise a hidden window either way; its settings stay offered, because they are what turns the tray back on.
 
 Ubuntu ships `ubuntu-appindicators` enabled by default, so the AWT tray works there without user action; on the reference machine (§15) `SystemTray.isSupported()` returns true under a Wayland session, because AWT runs through XWayland with the X11 toolkit. A GNOME installation without that extension, which is most non-Ubuntu GNOME, reports false and takes the degraded path above.
 
@@ -804,11 +817,17 @@ Neither this nor the equivalent `-Dapple.awt.UIElement=true` JVM argument is use
 
 ### 10.3 Single instance
 
-Two TAuth processes writing one vault risks a lost update, and a tray application relaunched from the Start menu or Spotlight should raise the existing window rather than start a second process.
+Two TAuth processes writing one vault lose an update, and a tray application relaunched from the Start menu or Spotlight should raise the existing window rather than start a second process.
 
-Implementation: at startup, attempt an exclusive `FileLock` on `<vaultDir>/instance.lock`. On success, bind a `ServerSocket` on `127.0.0.1:0`, write the chosen port into the lock file's sibling `instance.port`, and listen for a `SHOW` command. On failure to acquire the lock, read the port, connect, send `SHOW`, and exit with status 0. The running instance sets `visible = true` and requests window focus.
+Implementation: at startup, attempt an exclusive `FileLock` on `<vaultDir>/instance.lock`. On success, bind a `ServerSocket` on `127.0.0.1:0`, write the chosen port into the lock file's sibling `instance.port`, and listen for a `SHOW` command. On failure to acquire the lock, read the port, connect, send `SHOW`, and wait for the running instance's acknowledgement; the launch that receives it exits with status 0. The running instance makes its window visible and requests focus, and reports that raise as a show request rather than as the user returning to the window: the relock collector of §10.1 cancels a pending relock only for the user's return, so a window raised by `SHOW` comes up with a scheduled relock still standing.
 
-A stale port file from a crashed process yields a connection refusal; the new instance then deletes the stale files and proceeds as primary.
+The exit turns on the acknowledgement rather than on the send, because a port a crashed instance recorded can have been taken since by an unrelated program: a launch that exited on the send alone would raise nothing and report nothing. The running instance records the request before it answers, so an acknowledged request is a request that will be acted on.
+
+A launch that becomes primary replaces `instance.port`, which covers whatever a crashed instance left there. The lock file is never unlinked: unlinking releases no lock a live process holds on the inode, and the next launch would then take a second lock on a new inode, which is two primaries.
+
+A launch that can neither take the lock nor reach a running instance opens its window without single-instance service and says so on screen, since exiting silently would leave the application unstartable for as long as whatever holds the lock does. That state costs a vault: two live instances each hold their own decrypted body, and a save rewrites the whole file, so the later save drops whatever the other wrote. `VaultStore`'s lock spans one `write()` and refuses only writes that overlap it, and `read()` takes no lock at all, so nothing reports the loss. Closing it needs the write to be a compare-and-swap against the file it read, which is not in this design.
+
+A `SHOW` arrives over loopback, which carries no owner check, so it can come from any process on the machine and from a different OS user. That is why the raise it causes is not the user's return: a show request that cancelled a pending relock would let anything on the machine hold an unlocked window open on screen.
 
 ---
 
@@ -880,7 +899,7 @@ The Argon2 cost test states the parameters as literals on the reference side, ne
 
 **Vault paths** — resolution under a set `XDG_DATA_HOME`, an unset one, a blank one and a relative one, the same for `%APPDATA%`, an empty home leaving the location unresolved, and per-OS branches driven by an injected OS identifier rather than the real `os.name`.
 
-**Session** — `lock()` zeroes the DEK array, verified by retaining a reference to the backing array; the KEK is zeroed after unwrap; scheduled lock fires after the grace period; scheduled lock is cancelled when the window becomes visible again; the ticker stops on lock; the ticker never computes an HOTP entry; `scheduleLock` reads its grace period and arming from the session's policy and is a no-op against a locked vault.
+**Session** — `lock()` zeroes the DEK array, verified by retaining a reference to the backing array; the KEK is zeroed after unwrap; scheduled lock fires after the grace period; scheduled lock is cancelled when the user brings the window back, and stands when another process's show request raises it; the ticker stops on lock; the ticker never computes an HOTP entry; `scheduleLock` reads its grace period and arming from the session's policy and is a no-op against a locked vault.
 
 **Preferences** — `preferences.json` absent, empty, malformed or holding unknown keys all yield usable defaults rather than a startup failure, since the file is attacker-writable and the application must open regardless. No security-relevant field is read from it.
 
