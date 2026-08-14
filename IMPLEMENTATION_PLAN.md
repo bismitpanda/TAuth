@@ -99,7 +99,6 @@ shared/src/commonMain/kotlin/com/panda/tauth/
   session/
     SessionState.kt           Locked | Unlocked
     LockReason.kt             enum of relock triggers
-    LockPolicy.kt             configurable triggers and grace period
   settings/
     Preferences.kt            plaintext model, readable before unlock
     SecurityPolicy.kt         encrypted model, carried in the vault body
@@ -562,7 +561,12 @@ fun lock(reason: LockReason) {
     clipboard.clearIfHoldsOwnValue()
     _state.value = SessionState.Locked(reason)
 }
+
+fun scheduleLock(reason: LockReason)
+fun cancelScheduledLock()
 ```
+
+`scheduleLock` reads the grace period from the `SecurityPolicy` the session holds, and whether the reason is armed at all; a zero grace period locks at once. It is a no-op against an already-locked vault, so a caller never has to ask what state the session is in. `cancelScheduledLock` drops a pending timer without locking. Both are on the session rather than on the window because the policy lives in the unlocked body and is unreadable exactly when it is irrelevant.
 
 ### 8.3 Lock triggers
 
@@ -583,7 +587,9 @@ A configurable grace period delays the hide-triggered and minimise-triggered loc
 
 ### 8.4 Handling of decoded secret material
 
-Base32-decoded secrets are held as `SecureBytes` and are never converted to `String`. `SecureBytes.destroy()` fills the backing array with zeros and marks the holder unusable; a later lend refuses to run its block and returns `null`, which the vault path reports as `VaultError.VaultClosed`. JVM `String` instances are immutable and cannot be wiped, so the boundary is enforced by the API: `VaultEntry.secret` is a `String` only inside the serialised body, and the session decodes it into `SecureBytes` immediately on unlock, retaining the body JSON string no longer than necessary.
+Base32-decoded secrets are held as `SecureBytes` and are never converted to `String`. `SecureBytes.destroy()` fills the backing array with zeros and marks the holder unusable; a later lend refuses to run its block and returns `null`, which the vault path reports as `VaultError.VaultClosed`.
+
+JVM `String` instances are immutable and cannot be wiped, and this boundary is **not** enforced by the API. `VaultEntry.secret` holds the base32 text as a `String`, `OpenVault` retains the whole `VaultBody`, and kotlinx's lexer materialises every string token before any deserialiser sees it, so each stored secret exists as an unwipeable `String` for as long as the vault is open. The rule above forbids a *decoded* secret in a `String`, and the base32 text passes it by the letter while being the credential in full. Closing the gap belongs to the session (§14, M3): decode each secret into `SecureBytes` on unlock and drop the body, so that the text exists only between the parse and that decode. Until then a heap dump of an unlocked vault yields every secret in encoded form.
 
 `SecureBytes.adopt` is the only constructor and it takes ownership of the array, so a caller cannot hold a second reference by accident. The destroyed flag is `@Volatile`, written after the zeroing and read before the array, so a thread that observes the flag also observes the zeroed bytes rather than a cached view of a live key. Nothing zeroes a holder that is dropped without `destroy()`; the discipline is the API contract, not a collector hook.
 
@@ -663,7 +669,7 @@ Screen-region QR capture is listed in §16.8: it requires `java.awt.Robot` scree
 
 ### 9.6 Edit account
 
-Issuer, account name and notes are freely editable. Algorithm, digits, and period or counter are editable behind an "advanced" disclosure carrying a warning that changing them invalidates codes unless the server side matches. The secret is not editable; changing a secret means deleting and re-adding, which prevents a mistyped edit from silently destroying the only copy of a credential. The type is not editable, since TOTP and HOTP take different parameters and switching between them discards one of them.
+Issuer and account name are freely editable. Algorithm, digits, and period or counter are editable behind an "advanced" disclosure carrying a warning that changing them invalidates codes unless the server side matches. The secret is not editable; changing a secret means deleting and re-adding, which prevents a mistyped edit from silently destroying the only copy of a credential. The type is not editable, since TOTP and HOTP take different parameters and switching between them discards one of them.
 
 The counter is editable because resynchronisation requires it: a client that has generated codes beyond the server's look-ahead window can only recover by being set back or forward (§5.6). The field shows the stored value and accepts any unsigned 64-bit value.
 
@@ -767,7 +773,7 @@ LaunchedEffect(Unit) {
 }
 ```
 
-The window layer reports what happened and does not decide what it means. `scheduleLock` consults the `SecurityPolicy` held by the session for the grace period and for whether the reason is armed at all, and is a no-op against an already-locked vault. The policy therefore never has to be passed through composables or read while the vault is closed.
+The window layer reports what happened and does not decide what it means; §8.2 states what the session does with it. The policy therefore never has to be passed through composables or read while the vault is closed.
 
 ### 10.2 Platform behaviour
 
@@ -902,13 +908,15 @@ Argon2id timing is measured on the lowest-specification target machine to confir
 
 **M2 — Vault format.** `crypto` expect/actual set, `VaultHeader`, `VaultBody`, `VaultEntry`, `SecurityPolicy` as a field of the body, `VaultCodec`, `VaultStore`, `VaultPaths`, `VaultError`, and the tests from §13.1 and §13.2. No UI. Deliverable: create, write, read and round-trip a vault from tests. The store's POSIX branch is exercised here; its access-control-list branch is verified with the packaged artifacts in M5.
 
-**M3 — Session and unlocked UI.** `VaultSession`, `SessionState`, the code ticker, create-vault screen, unlock screen, account list with live TOTP codes and generate-on-request HOTP rows, the HOTP persist-before-display path, add-account by URI and manual entry, edit including counter, delete, and the secret disclosure gate stated at the head of §9. Deliverable: a usable authenticator.
+**M3a — Shell infrastructure.** `Preferences` and `PreferencesStore`, `ClipboardService`, single instance (§10.3), and tray availability with the fallback §10.2 describes. Deliverable: a preference file that survives a restart, a clipboard that clears only the string it placed, a second launch that raises the first window and exits, and a correct answer to whether this desktop has a tray.
 
-**M4 — Tray and lifecycle.** Tray with availability fallback, hide-to-tray, relock triggers, grace period, idle timeout, single instance, clipboard with timed clear, `Preferences` and `PreferencesStore`, the lifecycle behaviour `SecurityPolicy` governs, and the settings screen split across the two.
+**M3 — Session and unlocked UI.** `VaultSession` including `scheduleLock` and `cancelScheduledLock`, `SessionState`, `LockReason`, the code ticker, create-vault screen, unlock screen, account list with live TOTP codes and generate-on-request HOTP rows, the HOTP persist-before-display path, add-account by URI and manual entry, edit including counter, delete, and the secret disclosure gate stated at the head of §9, built as a component rather than at its one call site. Deliverable: a usable authenticator. Delete has no recovery path until export arrives in M4.
 
-**M5 — QR, export, packaging.** ZXing image decode for import and `QRCodeWriter` for the show-QR dialog (§9.7), encrypted and plaintext export, import with duplicate detection, change-password and re-encrypt actions, DMG/MSI/DEB configuration, icons for all three platforms, and verification of the packaged artifacts on each OS.
+**M4 — Tray, lifecycle and settings.** Tray construction and menu, hide-to-tray, the relock triggers of §8.3, grace period, idle timeout, the lifecycle behaviour `SecurityPolicy` governs, and the settings screen of §9.8 including change master password, re-encrypt, and encrypted export.
 
-M1 and M2 have no dependency on Compose and are fully testable headless.
+**M5 — QR, plaintext export, packaging.** ZXing image decode for import and `QRCodeWriter` for the show-QR dialog (§9.7), plaintext export, import with duplicate detection, DMG/MSI/DEB configuration, icons for all three platforms, and verification of the packaged artifacts on each OS.
+
+M1 and M2 have no dependency on Compose and are fully testable headless. M3a touches neither the session nor the vault, so it is buildable and testable ahead of M3; every relock trigger in M4 resolves to a call on the session M3 builds, and every M5 item is an entry point added to a screen M3 or M4 already has.
 
 ---
 
