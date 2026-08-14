@@ -24,6 +24,18 @@ dependencies {
     implementation(libs.kotlinx.coroutinesSwing)
 
     implementation(libs.compose.uiToolingPreview)
+
+    testImplementation(libs.kotlin.test)
+}
+
+// The launcher records `mainClass` as a string and resolves it at startup, so nothing in
+// the build fails when it names a class that does not exist. Handing the declaration
+// itself to the test puts the assertion on it rather than on a copy of it.
+tasks.test {
+    systemProperty(
+        "tauth.mainClass",
+        requireNotNull(compose.desktop.application.mainClass) { "compose.desktop.application.mainClass is unset" },
+    )
 }
 
 compose.desktop {
