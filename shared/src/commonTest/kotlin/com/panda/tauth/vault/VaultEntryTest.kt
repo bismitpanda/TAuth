@@ -80,6 +80,29 @@ class VaultEntryTest {
     }
 
     @Test
+    fun `a digits count of zero is rejected`() {
+        // Truncation takes 10^digits, so zero digits is the empty code for every secret and every
+        // step. The accepted range is 6 to 8, rejected rather than clamped at either end.
+        assertFailsWith<IllegalArgumentException> { totpEntry().copy(digits = 0) }
+    }
+
+    @Test
+    fun `five digits are rejected`() {
+        assertFailsWith<IllegalArgumentException> { totpEntry().copy(digits = 5) }
+    }
+
+    @Test
+    fun `six digits are accepted`() {
+        // RFC 4226 §5.3 puts the floor at six digits.
+        assertEquals(6, totpEntry().copy(digits = 6).digits)
+    }
+
+    @Test
+    fun `eight digits are accepted`() {
+        assertEquals(8, totpEntry().copy(digits = 8).digits)
+    }
+
+    @Test
     fun `an empty id is rejected`() {
         // The id is what a rename, a reorder and a delete address; an empty one addresses whichever
         // other entry also has none.
@@ -94,6 +117,41 @@ class VaultEntryTest {
     @Test
     fun `an empty secret is rejected`() {
         assertFailsWith<IllegalArgumentException> { totpEntry().copy(secret = "") }
+    }
+
+    @Test
+    fun `a secret of only whitespace is rejected`() {
+        // Base32 skips whitespace, so this decodes to a key of no bytes, which HMAC refuses at
+        // code-generation time — a whole session after the entry was stored.
+        assertFailsWith<IllegalArgumentException> { totpEntry().copy(secret = " ") }
+    }
+
+    @Test
+    fun `a secret outside the base32 alphabet is rejected`() {
+        assertFailsWith<IllegalArgumentException> { totpEntry().copy(secret = "NOT!BASE32") }
+    }
+
+    @Test
+    fun `an account name holding the label separator is rejected`() {
+        // The colon splits a URI label, so exporting this entry produces a URI that reads back as
+        // account "alice" under an issuer "work" nobody entered.
+        assertFailsWith<IllegalArgumentException> { totpEntry().copy(accountName = "work:alice") }
+    }
+
+    @Test
+    fun `an empty issuer is rejected rather than stored as a second spelling of absence`() {
+        assertFailsWith<IllegalArgumentException> { totpEntry().copy(issuer = "") }
+    }
+
+    @Test
+    fun `an account name holding an unpaired surrogate is rejected`() {
+        // A lone surrogate has no UTF-8 encoding, so the entry could never be exported as a URI.
+        assertFailsWith<IllegalArgumentException> { totpEntry().copy(accountName = "al\uD800ice") }
+    }
+
+    @Test
+    fun `an issuer holding an unpaired surrogate is rejected`() {
+        assertFailsWith<IllegalArgumentException> { totpEntry().copy(issuer = "Git\uDC00Hub") }
     }
 
     @Test
@@ -147,6 +205,37 @@ class VaultEntryTest {
         val json = """
             {"id":"a","type":"totp","accountName":"alice","secret":"$TEST_SECRET",
              "createdAt":"2026-08-13T09:41:12Z"}
+        """.trimIndent()
+        assertFailsWith<IllegalArgumentException> { vaultJson.decodeFromString<VaultEntry>(json) }
+    }
+
+    @Test
+    fun `deserialising an entry whose account name holds an unpaired surrogate fails`() {
+        // JSON carries \ud800 through as readily as any other escape, and the decoded string has no
+        // UTF-8 encoding.
+        val json = """
+            {"id":"a","type":"totp","accountName":"al\ud800ice","secret":"$TEST_SECRET",
+             "createdAt":"2026-08-13T09:41:12Z","period":30}
+        """.trimIndent()
+        assertFailsWith<IllegalArgumentException> { vaultJson.decodeFromString<VaultEntry>(json) }
+    }
+
+    @Test
+    fun `deserialising an entry whose account name holds the label separator fails`() {
+        // The body is attacker-writable, and an entry the URI constructor would refuse reaches that
+        // constructor at export time, where the failure is a throw rather than a returned error.
+        val json = """
+            {"id":"a","type":"totp","accountName":"work:alice","secret":"$TEST_SECRET",
+             "createdAt":"2026-08-13T09:41:12Z","period":30}
+        """.trimIndent()
+        assertFailsWith<IllegalArgumentException> { vaultJson.decodeFromString<VaultEntry>(json) }
+    }
+
+    @Test
+    fun `deserialising an entry whose secret decodes to no key fails`() {
+        val json = """
+            {"id":"a","type":"totp","accountName":"alice","secret":" ",
+             "createdAt":"2026-08-13T09:41:12Z","period":30}
         """.trimIndent()
         assertFailsWith<IllegalArgumentException> { vaultJson.decodeFromString<VaultEntry>(json) }
     }

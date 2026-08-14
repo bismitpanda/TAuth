@@ -14,14 +14,15 @@ import com.panda.tauth.crypto.base64Encode
 import com.panda.tauth.crypto.crc32
 import com.panda.tauth.crypto.secureRandomBytes
 import com.panda.tauth.flatMap
+import com.panda.tauth.map
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 
 internal const val VAULT_ID_BYTES = 16
 
 private val NO_ASSOCIATED_DATA = ByteArray(0)
 
-// close() zeroes the DEK, and every path that finishes with it must call close(), error paths
-// included.
+// Every path that finishes with this vault must call close(), error paths included: it zeroes the DEK.
 class OpenVault internal constructor(
     val body: VaultBody,
     internal val header: VaultHeader,
@@ -29,20 +30,21 @@ class OpenVault internal constructor(
 ) : AutoCloseable {
     val isClosed: Boolean get() = dek.isDestroyed
 
-    internal fun dekBytes(): ByteArray = dek.reveal()
+    // The key is lent for the length of a block and never handed out, so a close arriving mid-write
+    // waits rather than zeroing the key that write is sealing under.
+    internal fun <T> useDek(block: (ByteArray) -> T): T? = dek.lendOrNull(block)
 
     override fun close() = dek.destroy()
 
     override fun toString(): String = "OpenVault(entries=${body.entries.size}, closed=$isClosed)"
 }
 
-// Every nonce comes from secureRandomBytes and no function here takes one as a parameter. Reusing a
-// nonce with one key across two plaintexts breaks GCM completely.
+// Every nonce is drawn fresh from secureRandomBytes on every write, and no function in this file
+// takes one as a parameter. Reusing a nonce with one key across two plaintexts breaks GCM completely.
 object VaultCodec {
-    fun create(password: CharArray, body: VaultBody = VaultBody()): ByteArray {
+    fun create(password: CharArray, body: VaultBody = VaultBody()): Outcome<ByteArray, VaultError> {
         val salt = secureRandomBytes(ARGON2_SALT_BYTES)
-        val dek = secureRandomBytes(AEAD_KEY_BYTES)
-        return try {
+        return withFreshDek { dek ->
             val header = VaultHeader(
                 v = HEADER_VERSION,
                 vaultId = base64Encode(secureRandomBytes(VAULT_ID_BYTES)),
@@ -51,15 +53,14 @@ object VaultCodec {
                 body = BodyBlock(""),
             )
             assemble(header, body, dek)
-        } finally {
-            dek.fill(0)
         }
     }
 
     fun open(bytes: ByteArray, password: CharArray): Outcome<OpenVault, VaultError> =
         readEnvelope(bytes).flatMap { envelope -> unlock(envelope, password) }
 
-    fun encode(vault: OpenVault, body: VaultBody): ByteArray = assemble(vault.header, body, vault.dekBytes())
+    fun encode(vault: OpenVault, body: VaultBody): Outcome<ByteArray, VaultError> =
+        vault.useDek { dek -> assemble(vault.header, body, dek) } ?: Outcome.Failure(VaultError.VaultClosed)
 
     // The DEK is unchanged, so a leaked one survives a password change; rotateDek replaces it.
     fun changePassword(
@@ -68,12 +69,14 @@ object VaultCodec {
         newPassword: CharArray,
     ): Outcome<ByteArray, VaultError> = open(bytes, currentPassword).flatMap { vault ->
         vault.use {
-            val salt = secureRandomBytes(ARGON2_SALT_BYTES)
-            val header = vault.header.copy(
-                salt = base64Encode(salt),
-                wrap = wrapDek(newPassword, salt, vault.dekBytes()),
-            )
-            Outcome.Success(assemble(header, vault.body, vault.dekBytes()))
+            vault.useDek { dek ->
+                val salt = secureRandomBytes(ARGON2_SALT_BYTES)
+                val header = vault.header.copy(
+                    salt = base64Encode(salt),
+                    wrap = wrapDek(newPassword, salt, dek),
+                )
+                assemble(header, vault.body, dek)
+            } ?: Outcome.Failure(VaultError.VaultClosed)
         }
     }
 
@@ -82,12 +85,9 @@ object VaultCodec {
             vault.use {
                 val salt = base64Decode(vault.header.salt)
                     ?: return@use Outcome.Failure(VaultError.Corrupt("salt is not valid base64"))
-                val fresh = secureRandomBytes(AEAD_KEY_BYTES)
-                try {
+                withFreshDek { fresh ->
                     val header = vault.header.copy(wrap = wrapDek(password, salt, fresh))
-                    Outcome.Success(assemble(header, vault.body, fresh))
-                } finally {
-                    fresh.fill(0)
+                    assemble(header, vault.body, fresh)
                 }
             }
         }
@@ -110,12 +110,52 @@ object VaultCodec {
         }
     }
 
-    private fun assemble(header: VaultHeader, body: VaultBody, dek: ByteArray): ByteArray {
+    // The fresh DEK is zeroed on every path out of the block, and internal so a test can watch that.
+    internal inline fun <T> withFreshDek(block: (ByteArray) -> T): T {
+        val dek = secureRandomBytes(AEAD_KEY_BYTES)
+        return try {
+            block(dek)
+        } finally {
+            dek.fill(0)
+        }
+    }
+
+    // The DEK passes to the OpenVault built here and nowhere else; every other way out of the block
+    // zeroes it, a refused body and a throw from the decrypt included. Internal so a test can watch.
+    internal inline fun adoptedOrZeroed(
+        dek: ByteArray,
+        header: VaultHeader,
+        block: () -> Outcome<VaultBody, VaultError>,
+    ): Outcome<OpenVault, VaultError> {
+        var adopted = false
+        return try {
+            block().map { body -> OpenVault(body, header, SecureBytes.adopt(dek)).also { adopted = true } }
+        } finally {
+            if (!adopted) dek.fill(0)
+        }
+    }
+
+    // The versions and sizes checked here are the reader's own, so no file this returns fails a read on either.
+    private fun assemble(header: VaultHeader, body: VaultBody, dek: ByteArray): Outcome<ByteArray, VaultError> {
+        if (header.v != HEADER_VERSION) {
+            return Outcome.Failure(VaultError.UnsupportedVersion(header.v, HEADER_VERSION))
+        }
+        if (body.v != BODY_VERSION) {
+            return Outcome.Failure(VaultError.UnsupportedVersion(body.v, BODY_VERSION))
+        }
         val bodyBytes = vaultJson.encodeToString(body.renumbered()).encodeToByteArray()
-        // A fresh nonce on every write without exception.
         val nonce = secureRandomBytes(AEAD_NONCE_BYTES)
         val prefix = prefixOf(header.copy(body = BodyBlock(base64Encode(nonce))))
-        return prefix + aeadSeal(dek, nonce, bodyBytes, prefix)
+        val headerLength = prefix.size - PREFIX_BYTES
+        if (headerLength > MAX_HEADER_BYTES) {
+            return Outcome.Failure(VaultError.TooLarge(headerLength, MAX_HEADER_BYTES))
+        }
+        val file = prefix + aeadSeal(dek, nonce, bodyBytes, prefix)
+        return if (file.size > MAX_VAULT_BYTES) {
+            Outcome.Failure(VaultError.TooLarge(file.size, MAX_VAULT_BYTES))
+        } else {
+            Outcome.Success(file)
+        }
     }
 
     internal fun prefixOf(header: VaultHeader): ByteArray =
@@ -157,27 +197,26 @@ object VaultCodec {
         }
     }
 
-    // The checksum runs before any key is derived, so damage is reported as damage rather than as a
-    // wrong password.
+    // The checksum runs before any key is derived, so damage reads as damage, not as a wrong password.
     private fun sliceEnvelope(bytes: ByteArray, headerLength: Int): Outcome<Envelope, VaultError> {
         val headerEnd = PREFIX_BYTES + headerLength
         val headerJson = bytes.copyOfRange(PREFIX_BYTES, headerEnd)
         if (headerChecksum(bytes, headerJson) != readUInt32(bytes, CRC_OFFSET)) {
             return Outcome.Failure(VaultError.Corrupt("header checksum does not match the header"))
         }
-        // After the checksum, so a damaged byte is damage rather than an upgrade that does not
-        // exist. Offset 5 is unsigned.
+        // After the checksum, so a damaged byte is damage and not a release that never shipped.
         val version = bytes[MAGIC_BYTES].toUByte().toInt()
         if (version != FORMAT_VERSION) {
             return Outcome.Failure(VaultError.UnsupportedVersion(version, FORMAT_VERSION))
         }
+        val json = headerJson.decodeToString()
+        unsupportedVersion(json, HEADER_VERSION)?.let { return Outcome.Failure(it) }
         val header = try {
-            vaultJson.decodeFromString<VaultHeader>(headerJson.decodeToString())
-        } catch (e: SerializationException) {
-            return Outcome.Failure(VaultError.Corrupt("header is not valid JSON: ${e.message}"))
-        }
-        if (header.v != HEADER_VERSION) {
-            return Outcome.Failure(VaultError.UnsupportedVersion(header.v, HEADER_VERSION))
+            vaultJson.decodeFromString<VaultHeader>(json)
+        } catch (_: SerializationException) {
+            // The parser quotes the document it stopped in: here the salt and the wrapped DEK, all an
+            // offline password search needs. The error reaches the log and the screen, so it carries none.
+            return Outcome.Failure(VaultError.Corrupt("header is not valid JSON"))
         }
         // The prefix is kept verbatim off disk for use as the body's associated data. Re-serialising
         // the header would make decryption depend on the serialiser never changing its output.
@@ -197,39 +236,43 @@ object VaultCodec {
         val dek = withKek(password, fields.salt) { kek ->
             aeadOpen(kek, fields.wrapNonce, fields.wrapCiphertext, NO_ASSOCIATED_DATA)
         } ?: return Outcome.Failure(VaultError.WrongPassword)
-        // Ownership passes to the OpenVault only on success; until then the DEK is zeroed on every
-        // way out, including a throw from the decrypt.
-        var owned = false
-        try {
+        return adoptedOrZeroed(dek, header) {
             val plaintext = aeadOpen(dek, fields.bodyNonce, envelope.ciphertext, envelope.prefix)
-                ?: return Outcome.Failure(VaultError.IntegrityFailure)
-            return when (val decoded = decodeBody(plaintext)) {
-                is Outcome.Failure -> decoded
-
-                is Outcome.Success -> {
-                    owned = true
-                    Outcome.Success(OpenVault(decoded.value, header, SecureBytes.adopt(dek)))
-                }
-            }
-        } finally {
-            if (!owned) dek.fill(0)
+                ?: return@adoptedOrZeroed Outcome.Failure(VaultError.IntegrityFailure)
+            decodeBody(plaintext)
         }
     }
 
     private fun decodeBody(plaintext: ByteArray): Outcome<VaultBody, VaultError> {
-        val body = try {
-            vaultJson.decodeFromString<VaultBody>(plaintext.decodeToString())
-        } catch (e: SerializationException) {
-            return Outcome.Failure(VaultError.Corrupt("body is not valid JSON: ${e.message}"))
-        } catch (e: IllegalArgumentException) {
-            return Outcome.Failure(VaultError.Corrupt("body holds an invalid value: ${e.message}"))
-        }
-        return if (body.v != BODY_VERSION) {
-            Outcome.Failure(VaultError.UnsupportedVersion(body.v, BODY_VERSION))
-        } else {
-            Outcome.Success(body)
+        val json = plaintext.decodeToString()
+        unsupportedVersion(json, BODY_VERSION)?.let { return Outcome.Failure(it) }
+        return try {
+            Outcome.Success(vaultJson.decodeFromString<VaultBody>(json))
+        } catch (_: SerializationException) {
+            // The parser quotes the document it stopped in: here the decrypted body, every entry's
+            // secret. The error reaches the log and the screen, so it carries none of it.
+            Outcome.Failure(VaultError.Corrupt("body is not valid JSON"))
+        } catch (_: IllegalArgumentException) {
+            // A refused value can arrive in the message, which is dropped for the same reason.
+            Outcome.Failure(VaultError.Corrupt("body holds an invalid value"))
         }
     }
+}
+
+// A document's `v` is read on its own, ahead of the rest of it: a later version can give a field a
+// type this model never used, and decoding under this model would report its vault as damage.
+@Serializable
+private class VersionTag(val v: Int? = null)
+
+// A `v` absent or not a number is left to the decode that follows: required in a header, defaulted
+// in a body.
+private fun unsupportedVersion(json: String, supported: Int): VaultError.UnsupportedVersion? {
+    val found = try {
+        vaultJson.decodeFromString<VersionTag>(json).v
+    } catch (_: SerializationException) {
+        null
+    }
+    return if (found != null && found != supported) VaultError.UnsupportedVersion(found, supported) else null
 }
 
 private class Envelope(val header: VaultHeader, val prefix: ByteArray, val ciphertext: ByteArray)

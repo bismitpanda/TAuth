@@ -1,9 +1,12 @@
 package com.panda.tauth.vault
 
+import com.panda.tauth.totp.Base32
 import com.panda.tauth.totp.HashAlgorithm
+import com.panda.tauth.totp.OtpAuthUri
 import com.panda.tauth.totp.OtpCore
 import com.panda.tauth.totp.OtpType
 import com.panda.tauth.totp.Totp
+import com.panda.tauth.totp.isWellFormed
 import kotlinx.serialization.Serializable
 import kotlin.time.Instant
 import kotlin.uuid.ExperimentalUuidApi
@@ -47,7 +50,24 @@ private fun VaultEntry.validateFields(): String? = when {
 
     accountName.isEmpty() -> "account name must not be empty"
 
-    secret.isEmpty() -> "secret must not be empty"
+    // A URI is decoded before it is split on the separator, so an account name holding a colon
+    // exports to a label that reads back as a different account under an issuer never entered.
+    OtpAuthUri.LABEL_SEPARATOR in accountName -> "account name must not contain a colon"
+
+    // A name with no UTF-8 encoding cannot be percent-encoded into a URI, and JSON carries one
+    // through as readily as any other escape.
+    !accountName.isWellFormed() -> "account name must be well-formed text"
+
+    // Absence has one spelling. An empty issuer does not survive a URI: it exports either as a
+    // label beginning with the separator, which no parse accepts, or as an `issuer=` that reads
+    // back as no issuer at all.
+    issuer != null && issuer.isEmpty() -> "issuer must be absent rather than empty"
+
+    issuer != null && !issuer.isWellFormed() -> "issuer must be well-formed text"
+
+    // The rule the URI parser applies, so an entry off disk is no weaker than one off a QR code.
+    // The message states the rule rather than the value, which is the secret.
+    Base32.validateSecret(secret) != null -> "secret must be base32 that decodes to a key"
 
     orderIndex < 0 -> "orderIndex must not be negative"
 

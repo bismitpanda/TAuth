@@ -10,9 +10,9 @@ TAuth is a desktop TOTP authenticator: Kotlin Multiplatform + Compose Multiplatf
 
 | Path | Contents |
 |---|---|
-| `shared/src/commonMain` | TOTP, vault format, session, models, Compose UI. Most code. |
-| `shared/src/jvmMain` | `actual` platform primitives: crypto, filesystem, paths. |
-| `desktopApp/src/main` | Application shell: window, tray, single instance, clipboard, QR codec. |
+| `shared/src/commonMain` | OTP core, vault format, entry model, security policy, crypto declarations, Compose UI. Most code. |
+| `shared/src/jvmMain` | Platform code: the `actual` crypto primitives, the vault store, path resolution. |
+| `desktopApp/src/main` | Application shell: the window. |
 
 Where new code goes, in order: pure logic → `commonMain`; needs a platform API → `expect` in `commonMain` + `actual` in `jvmMain`; is inherently the desktop shell → `:desktopApp`. Keep `java.*` imports out of `commonMain` — the `jvm()` target makes them compile, which is why the discipline has to be deliberate.
 
@@ -33,7 +33,7 @@ The lint tasks are `lintKotlin`/`formatKotlin`, not `ktlintCheck`/`ktlintFormat`
 
 Bare `./gradlew detekt` is misleading in `:shared`: the aggregate task is NO-SOURCE in a KMP module because the analysable tasks are per-source-set. `check` wires up the right ones — use it, or name a source-set task directly.
 
-detekt runs **without type resolution**, so rules that need type information are skipped rather than run. That is deliberate: [detekt/detekt#9602](https://github.com/detekt/detekt/issues/9602) makes type-aware analysis misfire on KMP `expect`/`actual`. Type checking is the compiler's job and is unaffected. Do not switch it on to chase a finding; see `build.gradle.kts`.
+detekt runs **without type resolution**, so rules that need type information are skipped rather than run, and skipped without a message. That is deliberate: [detekt/detekt#9602](https://github.com/detekt/detekt/issues/9602) makes type-aware analysis misfire on KMP `expect`/`actual`. Type checking is the compiler's job and is unaffected. Dead-code detection is not: `UnusedPrivateProperty`, `UnusedPrivateFunction` and `style>UnusedImport` need type information, so an unused private property or private function fails no task. A dead import is failed by ktlint's `no-unused-imports` instead (@STYLE_GUIDE.md §1). Do not switch type resolution on to chase a finding; see `build.gradle.kts`.
 
 Prefer `:shared:jvmTest` over `build` while iterating. The vault format and OTP core are fully testable headless and most work needs no UI run.
 

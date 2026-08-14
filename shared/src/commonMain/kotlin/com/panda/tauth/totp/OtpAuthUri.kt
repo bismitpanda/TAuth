@@ -40,6 +40,13 @@ data class OtpAuthUri(
         // a different account name.
         require(LABEL_SEPARATOR !in accountName) { "accountName must not contain a colon" }
         require(issuer == null || issuer.isNotEmpty()) { "issuer must be absent rather than empty" }
+        // A name with no UTF-8 encoding cannot be percent-encoded, and build() is the only thing
+        // that would find out.
+        require(accountName.isWellFormed()) { "accountName must be well-formed text" }
+        require(issuer == null || issuer.isWellFormed()) { "issuer must be well-formed text" }
+        // The rule the parser applies, so every URI this constructor accepts re-parses. The message
+        // states the rule rather than the value, which is the secret.
+        require(Base32.validateSecret(secret) == null) { "secret must be base32 that decodes to a key" }
         require(digits in OtpCore.DIGITS_MIN..OtpCore.DIGITS_MAX) {
             "digits must be ${OtpCore.DIGITS_MIN}..${OtpCore.DIGITS_MAX}"
         }
@@ -86,7 +93,11 @@ data class OtpAuthUri(
 
     companion object {
         private const val SCHEME = "otpauth://"
-        private const val LABEL_SEPARATOR = ':'
+
+        // Internal because a stored entry is held to the same rule as a parsed one, and one colon
+        // defines it for both.
+        internal const val LABEL_SEPARATOR = ':'
+
         private const val PARAM_SEPARATOR = "&"
         private const val PARAM_SECRET = "secret"
         private const val PARAM_ISSUER = "issuer"
@@ -95,8 +106,16 @@ data class OtpAuthUri(
         private const val PARAM_PERIOD = "period"
         private const val PARAM_COUNTER = "counter"
 
+        // What a paste or a line wrap adds. Char.isWhitespace is wider and would shed characters a
+        // label is entitled to hold.
+        private const val WRAPPING_WHITESPACE = " \t\r\n"
+
         fun parse(input: String): Outcome<OtpAuthUri, VaultError> {
-            val trimmed = input.trim()
+            // A paste carries the wrapping of the window it came from, and only these four
+            // characters are shed, only at the ends. The single value a shed character can come
+            // out of is the last query parameter's, with no fragment behind it: a trailing space
+            // is dropped there, while the same space one character earlier makes the URI malformed.
+            val trimmed = input.trim { it in WRAPPING_WHITESPACE }
             if (!trimmed.startsWith(SCHEME, ignoreCase = true)) {
                 return Outcome.Failure(VaultError.MalformedUri("not an otpauth URI"))
             }
@@ -134,6 +153,12 @@ data class OtpAuthUri(
         }
 
         private fun parseQuery(query: String): Outcome<Map<String, String>, VaultError> {
+            // A producer writes %20 into a value, so raw whitespace here came from a wrapped paste,
+            // and a value would keep it faithfully and store an issuer nobody typed. The label ends
+            // at the '?' and a space in it is part of a name, so it keeps its own.
+            if (query.any { it in WRAPPING_WHITESPACE }) {
+                return Outcome.Failure(VaultError.MalformedUri("the query holds whitespace"))
+            }
             val params = mutableMapOf<String, String>()
             for (pair in query.split(PARAM_SEPARATOR)) {
                 if (pair.isEmpty()) continue
@@ -188,18 +213,8 @@ data class OtpAuthUri(
         private fun parseSecret(params: Map<String, String>): Outcome<String, VaultError> {
             val secret = params[PARAM_SECRET]
                 ?: return Outcome.Failure(VaultError.InvalidSecret("missing secret"))
-            val decoded = Base32.decode(secret)
-            val bytes = when (decoded) {
-                is Outcome.Failure -> return decoded
-                is Outcome.Success -> decoded.value
-            }
-            val isEmpty = bytes.isEmpty()
-            bytes.fill(0)
-            return if (isEmpty) {
-                Outcome.Failure(VaultError.InvalidSecret("empty secret"))
-            } else {
-                Outcome.Success(secret)
-            }
+            val error = Base32.validateSecret(secret)
+            return if (error == null) Outcome.Success(secret) else Outcome.Failure(error)
         }
 
         private fun parseAlgorithm(params: Map<String, String>): Outcome<HashAlgorithm, VaultError> {

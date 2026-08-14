@@ -3,6 +3,7 @@ package com.panda.tauth.vault
 import com.panda.tauth.Outcome
 import com.panda.tauth.crypto.AEAD_KEY_BYTES
 import com.panda.tauth.crypto.ARGON2_SALT_BYTES
+import com.panda.tauth.crypto.SecureBytes
 import com.panda.tauth.crypto.aeadSeal
 import com.panda.tauth.crypto.base64Decode
 import com.panda.tauth.crypto.base64Encode
@@ -16,14 +17,19 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 private const val PASSWORD = "correct horse battery staple"
 
 private fun password() = PASSWORD.toCharArray()
 
-private fun newVault(body: VaultBody = VaultBody()) = VaultCodec.create(password(), body)
+private fun newVault(body: VaultBody = VaultBody()) = written(VaultCodec.create(password(), body))
+
+// The writer refuses a file the reader would not take, so a test that wants bytes says so once.
+private fun written(outcome: Outcome<ByteArray, VaultError>): ByteArray {
+    assertIs<Outcome.Success<ByteArray>>(outcome)
+    return outcome.value
+}
 
 // Takes a block so the DEK is zeroed when the test finishes with it, on the failure path too.
 private fun <T> opened(bytes: ByteArray, secret: CharArray = password(), block: (OpenVault) -> T): T {
@@ -177,6 +183,25 @@ class VaultCodecTest {
     }
 
     @Test
+    fun `a header longer than the reader slices is corrupt though the file holds it`() {
+        // 64 KiB is the bound the reader puts on the header length. The checksum matches, the body
+        // is sealed under this very header and the length is well inside the file, so the bound is
+        // the only thing between an unbounded slice and a successful open.
+        val bytes = opened(newVault()) { vault ->
+            seal(vault, { body -> paddedHeaderJson(vault.header.copy(body = body)) }, EMPTY_BODY)
+        }
+        assertIs<VaultError.Corrupt>(VaultCodec.open(bytes, password()).errorOrNull)
+    }
+
+    @Test
+    fun `a file larger than a vault can be is corrupt at the codec`() {
+        // 16 MiB is the whole-file ceiling, applied before anything is sliced or decrypted.
+        // Everything ahead of the padding is a vault this reader opens.
+        val padded = newVault() + ByteArray(16 * 1024 * 1024)
+        assertIs<VaultError.Corrupt>(VaultCodec.open(padded, password()).errorOrNull)
+    }
+
+    @Test
     fun `a truncated file is corrupt`() {
         val bytes = newVault()
         assertIs<VaultError.Corrupt>(VaultCodec.open(bytes.copyOf(bytes.size / 2), password()).errorOrNull)
@@ -239,8 +264,8 @@ class VaultCodecTest {
     @Test
     fun `re-encoding an open vault changes the body nonce`() {
         opened(newVault()) { vault ->
-            val first = VaultCodec.encode(vault, vault.body)
-            val second = VaultCodec.encode(vault, vault.body)
+            val first = written(VaultCodec.encode(vault, vault.body))
+            val second = written(VaultCodec.encode(vault, vault.body))
             assertNotEquals(
                 vaultJson.decodeFromString<VaultHeader>(headerJsonOf(first)).body.nonce,
                 vaultJson.decodeFromString<VaultHeader>(headerJsonOf(second)).body.nonce,
@@ -251,7 +276,7 @@ class VaultCodecTest {
     @Test
     fun `a re-encoded vault opens with the same password`() {
         val reencoded = opened(newVault()) { vault ->
-            VaultCodec.encode(vault, VaultBody(entries = listOf(totpEntry())))
+            written(VaultCodec.encode(vault, VaultBody(entries = listOf(totpEntry()))))
         }
         assertEquals(1, opened(reencoded) { it.body.entries.size })
     }
@@ -260,7 +285,7 @@ class VaultCodecTest {
     fun `re-encoding keeps the vault id`() {
         val original = newVault()
         val vaultId = opened(original) { it.header.vaultId }
-        val reencoded = opened(original) { VaultCodec.encode(it, it.body) }
+        val reencoded = opened(original) { written(VaultCodec.encode(it, it.body)) }
         assertEquals(vaultId, opened(reencoded) { it.header.vaultId })
     }
 
@@ -269,9 +294,54 @@ class VaultCodecTest {
         val outcome = VaultCodec.open(newVault(), password())
         assertIs<Outcome.Success<OpenVault>>(outcome)
         val vault = outcome.value
-        val key = vault.dekBytes()
+        // The lend hands out the array the vault holds, so this is the vault's own key, not a copy.
+        val key = checkNotNull(vault.useDek { it })
         vault.close()
         assertTrue(key.all { it == 0.toByte() })
+    }
+
+    @Test
+    fun `encoding a closed vault is a failure rather than a throw`() {
+        val outcome = VaultCodec.open(newVault(), password())
+        assertIs<Outcome.Success<OpenVault>>(outcome)
+        val vault = outcome.value
+        vault.close()
+        assertEquals(VaultError.VaultClosed, VaultCodec.encode(vault, vault.body).errorOrNull)
+    }
+
+    @Test
+    fun `a body version the reader refuses is refused at the write`() {
+        // Written, this file would open as UnsupportedVersion(2, 1) and take the previous vault's
+        // place. The literals are the versions the format defines, not the constants under test.
+        assertEquals(
+            VaultError.UnsupportedVersion(2, 1),
+            VaultCodec.create(password(), VaultBody(v = 2)).errorOrNull,
+        )
+    }
+
+    @Test
+    fun `a header version the reader refuses is refused at the write`() {
+        val vault = handMadeVault(headerOf(newVault()).copy(v = 2))
+        assertEquals(
+            VaultError.UnsupportedVersion(2, 1),
+            vault.use { VaultCodec.encode(it, VaultBody()).errorOrNull },
+        )
+    }
+
+    @Test
+    fun `a header past the size the reader accepts is refused at the write`() {
+        val error = oversizedHeaderVault().use { VaultCodec.encode(it, VaultBody()).errorOrNull }
+        assertIs<VaultError.TooLarge>(error)
+        // 64 KiB is the bound the reader puts on the header length it will slice.
+        assertEquals(64 * 1024, error.limit)
+    }
+
+    @Test
+    fun `a vault past the size the reader accepts is refused at the write`() {
+        val error = VaultCodec.create(password(), oversizedBody()).errorOrNull
+        assertIs<VaultError.TooLarge>(error)
+        // 16 MiB is the whole-file ceiling the reader applies before it will allocate.
+        assertEquals(16 * 1024 * 1024, error.limit)
     }
 
     @Test
@@ -290,11 +360,21 @@ class VaultCodecTest {
     }
 
     @Test
+    fun `a body holding a secret that decodes to no key is corrupt`() {
+        // Base32 skips whitespace, so this secret carries no key at all. Reported at the read, not
+        // at the first code the entry is asked for.
+        val body = """{"v":1,"entries":[{"id":"a","type":"totp","accountName":"b","secret":" ",
+            "period":30,"createdAt":"2026-08-13T09:41:12Z"}]}"""
+        val bytes = opened(newVault()) { rewriteBody(it, body) }
+        assertIs<VaultError.Corrupt>(VaultCodec.open(bytes, password()).errorOrNull)
+    }
+
+    @Test
     fun `two vaults created in a row hold different keys`() {
         // A key that came from anywhere but the CSPRNG — a constant, a counter, a seeded generator —
         // would repeat here, and every vault on earth would share it.
-        val first = opened(newVault()) { it.dekBytes().toList() }
-        val second = opened(newVault()) { it.dekBytes().toList() }
+        val first = opened(newVault()) { vault -> checkNotNull(vault.useDek { it.toList() }) }
+        val second = opened(newVault()) { vault -> checkNotNull(vault.useDek { it.toList() }) }
         assertNotEquals(first, second)
     }
 
@@ -373,11 +453,73 @@ class VaultCodecTest {
 
     @Test
     fun `the KEK is zeroed once the caller is done with it`() {
-        // Every other zeroing in this file is of a local the test cannot reach; this one runs the
-        // block the KEK is lent to, so the array it was given can be checked after the lending ends.
         var lent = ByteArray(0)
         VaultCodec.withKek(password(), ByteArray(ARGON2_SALT_BYTES) { 0x07 }) { kek -> lent = kek }
         assertContentEquals(ByteArray(AEAD_KEY_BYTES), lent)
+    }
+
+    @Test
+    fun `the KEK is zeroed when the block throws`() {
+        // A throw out of the block leaves nothing else holding the KEK, so the zeroing has to happen
+        // on the way out rather than after the block returns.
+        var lent = ByteArray(0)
+        runCatching {
+            VaultCodec.withKek(password(), ByteArray(ARGON2_SALT_BYTES) { 0x07 }) { kek ->
+                lent = kek
+                throw IllegalStateException("the unwrap threw")
+            }
+        }
+        assertContentEquals(ByteArray(AEAD_KEY_BYTES), lent)
+    }
+
+    @Test
+    fun `a fresh DEK is zeroed once the caller is done with it`() {
+        var lent = ByteArray(0)
+        VaultCodec.withFreshDek { dek -> lent = dek }
+        assertContentEquals(ByteArray(AEAD_KEY_BYTES), lent)
+    }
+
+    @Test
+    fun `a fresh DEK is zeroed when the block throws`() {
+        var lent = ByteArray(0)
+        runCatching {
+            VaultCodec.withFreshDek { dek ->
+                lent = dek
+                throw IllegalStateException("the write threw")
+            }
+        }
+        assertContentEquals(ByteArray(AEAD_KEY_BYTES), lent)
+    }
+
+    @Test
+    fun `a DEK whose body the reader refuses is zeroed`() {
+        // Nothing holds this key once the open has failed, and an array left un-zeroed keeps the
+        // vault's contents readable to whatever reads the heap next.
+        val dek = ByteArray(AEAD_KEY_BYTES) { 0x2A }
+        VaultCodec.adoptedOrZeroed(dek, plainHeader()) { Outcome.Failure(VaultError.IntegrityFailure) }
+        assertContentEquals(ByteArray(AEAD_KEY_BYTES), dek)
+    }
+
+    @Test
+    fun `a DEK is zeroed when the decode throws`() {
+        val dek = ByteArray(AEAD_KEY_BYTES) { 0x2A }
+        runCatching {
+            VaultCodec.adoptedOrZeroed(dek, plainHeader()) { throw IllegalStateException("the decode threw") }
+        }
+        assertContentEquals(ByteArray(AEAD_KEY_BYTES), dek)
+    }
+
+    @Test
+    fun `a DEK the open hands to a vault is left alone`() {
+        // Zeroing on this path too would return a vault holding a key of zeros, and the next write
+        // would seal the body under it.
+        val dek = ByteArray(AEAD_KEY_BYTES) { 0x2A }
+        val outcome = VaultCodec.adoptedOrZeroed(dek, plainHeader()) { Outcome.Success(VaultBody()) }
+        assertIs<Outcome.Success<OpenVault>>(outcome)
+        assertContentEquals(
+            ByteArray(AEAD_KEY_BYTES) { 0x2A },
+            outcome.value.use { vault -> vault.useDek { it.copyOf() } },
+        )
     }
 
     @Test
@@ -446,8 +588,92 @@ class VaultCodecTest {
 
     @Test
     fun `a vault created with a blank password still opens with it`() {
-        val bytes = VaultCodec.create(CharArray(0), VaultBody())
+        val bytes = written(VaultCodec.create(CharArray(0), VaultBody()))
         assertTrue(opened(bytes, CharArray(0)) { it.body.entries.isEmpty() })
+    }
+
+    @Test
+    fun `a body the parser refuses keeps the secret out of the error`() {
+        val bytes = opened(newVault()) { rewriteBody(it, """{"v":1,"entries":"$TEST_SECRET"}""") }
+        val error = VaultCodec.open(bytes, password()).errorOrNull
+        assertIs<VaultError.Corrupt>(error)
+        assertFalse(carriesRunOf(error.toString(), TEST_SECRET))
+    }
+
+    @Test
+    fun `a body value the model refuses keeps the secret out of the error`() {
+        val entry = """{"id":"a","type":"totp","accountName":"b","secret":"$TEST_SECRET","period":30,
+            "createdAt":"$TEST_SECRET"}"""
+        val bytes = opened(newVault()) { rewriteBody(it, """{"v":1,"entries":[$entry]}""") }
+        val error = VaultCodec.open(bytes, password()).errorOrNull
+        assertIs<VaultError.Corrupt>(error)
+        assertFalse(carriesRunOf(error.toString(), TEST_SECRET))
+    }
+
+    @Test
+    fun `a header the parser refuses keeps the salt out of the error`() {
+        val original = newVault()
+        val error = VaultCodec.open(headerBrokenAfter(original, "salt"), password()).errorOrNull
+        assertIs<VaultError.Corrupt>(error)
+        assertFalse(carriesRunOf(error.toString(), headerOf(original).salt))
+    }
+
+    @Test
+    fun `a header the parser refuses keeps the wrapped key out of the error`() {
+        val original = newVault()
+        val error = VaultCodec.open(headerBrokenAfter(original, "ct"), password()).errorOrNull
+        assertIs<VaultError.Corrupt>(error)
+        assertFalse(carriesRunOf(error.toString(), headerOf(original).wrap.ct))
+    }
+
+    @Test
+    fun `a body whose version is not a number is corrupt rather than a matching version`() {
+        // The version is read on its own ahead of the body it stands for. A `v` that read cannot
+        // take is left to the decode behind it, which reports it as damage; the read itself must
+        // not carry its parse failure out of a function whose failures are returned values.
+        val bytes = opened(newVault()) { rewriteBody(it, """{"v":"one","entries":[]}""") }
+        assertIs<VaultError.Corrupt>(VaultCodec.open(bytes, password()).errorOrNull)
+    }
+
+    @Test
+    fun `a body version this reader does not know is unsupported whatever shape its fields take`() {
+        // A version this reader does not have is free to give a field a type this one never used.
+        // The literals are the versions the format defines, not the constants under test.
+        val bytes = opened(newVault()) { rewriteBody(it, """{"v":2,"entries":{"first":"a"},"policy":7}""") }
+        assertEquals(VaultError.UnsupportedVersion(2, 1), VaultCodec.open(bytes, password()).errorOrNull)
+    }
+
+    @Test
+    fun `a header version this reader does not know is unsupported whatever shape its fields take`() {
+        val bytes = opened(newVault()) { vault ->
+            seal(vault, { """{"v":2,"vaultId":7,"salt":[],"wrap":"","body":{"nonce":0}}""" }, EMPTY_BODY)
+        }
+        assertEquals(VaultError.UnsupportedVersion(2, 1), VaultCodec.open(bytes, password()).errorOrNull)
+    }
+
+    @Test
+    fun `a header carrying its version as a quoted digit reads as that version`() {
+        // The parser takes a quoted integer for the number the format specifies, on every numeric
+        // field. The version the reader acts on is the same either way, so a header written this
+        // way is read rather than refused.
+        val bytes = opened(newVault()) { vault ->
+            seal(vault, { body -> quotedVersionHeaderJson(vault.header, body) }, EMPTY_BODY)
+        }
+        assertEquals(1, opened(bytes) { it.header.v })
+    }
+
+    @Test
+    fun `a body carrying its version as a quoted digit reads as that version`() {
+        val bytes = opened(newVault()) { rewriteBody(it, """{"v":"1","entries":[]}""") }
+        assertEquals(1, opened(bytes) { it.body.v })
+    }
+
+    @Test
+    fun `an entry carrying its period as a quoted number reads as that period`() {
+        val entry = """{"id":"a","type":"totp","accountName":"b","secret":"$TEST_SECRET","period":"30",
+            "createdAt":"2026-08-13T09:41:12Z"}"""
+        val bytes = opened(newVault()) { rewriteBody(it, """{"v":1,"entries":[$entry]}""") }
+        assertEquals(30, opened(bytes) { it.body.entries.single().period })
     }
 
     @Test
@@ -477,7 +703,65 @@ private fun tampered(field: String, value: String): ByteArray {
 
 private fun openTampered(field: String, value: String) = VaultCodec.open(tampered(field, value), password())
 
-// The same, for the one header field that is a number rather than base64 text.
+// A parser reports a window around the position it stopped at, so a leak is a run out of the secret
+// rather than the whole of it. Sixteen base32 or base64 characters occur together by chance nowhere.
+private const val LEAK_RUN = 16
+
+private fun carriesRunOf(text: String, secret: String): Boolean {
+    // A shorter value has no run to look for, and the search would answer no to everything.
+    check(secret.length >= LEAK_RUN) { "a secret of $LEAK_RUN characters or more is needed to see a leak" }
+    return (0..secret.length - LEAK_RUN).any { start -> secret.substring(start, start + LEAK_RUN) in text }
+}
+
+// Breaks the header JSON one character past the named field, so the parser stops with that field's
+// value just behind it. The checksum is rebuilt, so the read reaches the parser at all.
+private fun headerBrokenAfter(bytes: ByteArray, field: String): ByteArray {
+    val length = readUInt32(bytes, MAGIC_BYTES + VERSION_BYTES).toInt()
+    val json = headerJsonOf(bytes)
+    val broken = Regex("\"$field\":\"[^\"]*\"").replace(json) { "${it.value};" }
+    check(broken != json) { "no $field field to break" }
+    return VaultCodec.prefixOf(broken.encodeToByteArray()) + bytes.copyOfRange(PREFIX_BYTES + length, bytes.size)
+}
+
+// A header padded past the 64 KiB the reader will slice, left parseable and of the right shape so
+// that its length is the only thing wrong with it.
+private fun paddedHeaderJson(header: VaultHeader): String =
+    vaultJson.encodeToString(header).dropLast(1) + ""","pad":"${"A".repeat(64 * 1024)}"}"""
+
+// The header's own fields, with `v` written as the JSON string "1" where the format has the number 1.
+private fun quotedVersionHeaderJson(header: VaultHeader, body: BodyBlock): String =
+    """{"v":"1","vaultId":"${header.vaultId}","salt":"${header.salt}",""" +
+        """"wrap":{"nonce":"${header.wrap.nonce}","ct":"${header.wrap.ct}"},""" +
+        """"body":{"nonce":"${body.nonce}"}}"""
+
+// One entry whose account name alone is larger than the whole file the reader will accept.
+private fun oversizedBody() = VaultBody(entries = listOf(totpEntry(accountName = "n".repeat(16 * 1024 * 1024))))
+
+// A header of the right shape and no interest of its own, for cases about what happens to the key
+// beside it.
+private fun plainHeader(): VaultHeader = VaultHeader(
+    v = HEADER_VERSION,
+    vaultId = base64Encode(ByteArray(VAULT_ID_BYTES)),
+    salt = base64Encode(ByteArray(ARGON2_SALT_BYTES)),
+    wrap = WrapBlock(nonce = "", ct = ""),
+    body = BodyBlock(""),
+)
+
+// The header is a public data class, so a caller can hand the writer one open() would never return.
+private fun handMadeVault(header: VaultHeader): OpenVault =
+    OpenVault(VaultBody(), header, SecureBytes.adopt(ByteArray(AEAD_KEY_BYTES)))
+
+// A vault id long enough that the header JSON around it passes the length the reader will slice.
+private fun oversizedHeaderVault(): OpenVault = handMadeVault(
+    VaultHeader(
+        v = HEADER_VERSION,
+        vaultId = "A".repeat(64 * 1024),
+        salt = base64Encode(ByteArray(ARGON2_SALT_BYTES)),
+        wrap = WrapBlock(nonce = "", ct = ""),
+        body = BodyBlock(""),
+    ),
+)
+
 private fun containsSubsequence(haystack: ByteArray, needle: ByteArray): Boolean =
     (0..haystack.size - needle.size).any { start ->
         needle.indices.all { haystack[start + it] == needle[it] }
@@ -489,7 +773,8 @@ private fun containsSubsequence(haystack: ByteArray, needle: ByteArray): Boolean
 private fun seal(vault: OpenVault, headerJson: (BodyBlock) -> String, bodyJson: String): ByteArray {
     val nonce = secureRandomBytes(12)
     val prefix = VaultCodec.prefixOf(headerJson(BodyBlock(base64Encode(nonce))).encodeToByteArray())
-    return prefix + aeadSeal(vault.dekBytes(), nonce, bodyJson.encodeToByteArray(), prefix)
+    val ciphertext = checkNotNull(vault.useDek { dek -> aeadSeal(dek, nonce, bodyJson.encodeToByteArray(), prefix) })
+    return prefix + ciphertext
 }
 
 private fun rewriteBody(vault: OpenVault, bodyJson: String): ByteArray =

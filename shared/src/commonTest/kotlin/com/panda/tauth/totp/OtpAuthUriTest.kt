@@ -14,8 +14,12 @@ import kotlin.test.assertTrue
 // Base32 of the RFC 4226 seed "12345678901234567890".
 private const val SECRET = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
 
-// The RFC 4231 SHA-256 seed, for the cases that need two secrets that are both valid and different.
+// The RFC 4226 seed and half of it again, 30 bytes of ASCII digits, for the cases that need two
+// secrets that are both valid and different.
 private const val OTHER_SECRET = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+
+// U+2028 LINE SEPARATOR, spelled by code point so it stays visible in this source.
+private val LINE_SEPARATOR = Char(0x2028).toString()
 
 private fun parsed(uri: String): OtpAuthUri {
     val outcome = OtpAuthUri.parse(uri)
@@ -377,6 +381,76 @@ class OtpAuthUriTest {
     @Test
     fun `a label that is only a space is that account name`() {
         assertEquals(" ", parsed("otpauth://totp/%20?secret=$SECRET").accountName)
+    }
+
+    @Test
+    fun `an algorithm written with a long s is malformed`() {
+        // U+017F percent-encoded. Unicode case folding maps it onto ASCII 'S', which would import
+        // this account as SHA-256 from a URI no SHA-256 producer wrote.
+        assertIs<VaultError.MalformedUri>(errorOf("otpauth://totp/alice?secret=$SECRET&algorithm=%C5%BFHA256"))
+    }
+
+    @Test
+    fun `a raw space in the label prefix is part of the issuer`() {
+        // What issuers emit and scanners hand back verbatim.
+        assertEquals("ACME Corp", parsed("otpauth://totp/ACME Corp:alice@acme.com?secret=$SECRET").issuer)
+    }
+
+    @Test
+    fun `a raw space in the label is part of the account name`() {
+        assertEquals("alice smith", parsed("otpauth://totp/ACME Corp:alice smith?secret=$SECRET").accountName)
+    }
+
+    @Test
+    fun `a raw space in the query is malformed even when the label holds one`() {
+        assertIs<VaultError.MalformedUri>(errorOf("otpauth://totp/ACME Corp:alice?secret=$SECRET&issuer=A B"))
+    }
+
+    @Test
+    fun `a trailing space is shed rather than kept by the last parameter`() {
+        assertEquals("Iss", parsed("otpauth://totp/alice?secret=$SECRET&issuer=Iss ").issuer)
+    }
+
+    @Test
+    fun `a Unicode line separator does not wrap the URI`() {
+        // Shedding it would let a character no producer emits stand in for the surrounding
+        // whitespace of a paste.
+        assertIs<VaultError.MalformedUri>(errorOf(LINE_SEPARATOR + "otpauth://totp/alice?secret=$SECRET"))
+    }
+
+    @Test
+    fun `an empty secret is rejected at construction`() {
+        assertFailsWith<IllegalArgumentException> { OtpAuthUri(OtpType.TOTP, "alice", "") }
+    }
+
+    @Test
+    fun `a secret of one base32 symbol is rejected at construction`() {
+        // A trailing group of one symbol carries five bits and ends no encoding, so it is a group
+        // that lost characters on the way here.
+        assertFailsWith<IllegalArgumentException> { OtpAuthUri(OtpType.TOTP, "alice", "A") }
+    }
+
+    @Test
+    fun `a secret of whitespace alone is rejected at construction`() {
+        // Whitespace is skipped, so this is a whole number of groups carrying no symbol at all: it
+        // clears every rule about shape and decodes to none of the bytes an HMAC key needs.
+        assertFailsWith<IllegalArgumentException> { OtpAuthUri(OtpType.TOTP, "alice", " \t") }
+    }
+
+    @Test
+    fun `a secret outside the base32 alphabet is rejected at construction`() {
+        assertFailsWith<IllegalArgumentException> { OtpAuthUri(OtpType.TOTP, "alice", "1") }
+    }
+
+    @Test
+    fun `an account name holding an unpaired surrogate is rejected at construction`() {
+        // A lone surrogate has no UTF-8 encoding, so build() could not percent-encode it.
+        assertFailsWith<IllegalArgumentException> { OtpAuthUri(OtpType.TOTP, "al\uD800ice", SECRET) }
+    }
+
+    @Test
+    fun `an issuer holding an unpaired surrogate is rejected at construction`() {
+        assertFailsWith<IllegalArgumentException> { OtpAuthUri(OtpType.TOTP, "alice", SECRET, issuer = "A\uDC00cme") }
     }
 
     @Test

@@ -15,7 +15,7 @@ private const val NEW = "new password"
 
 private fun body() = VaultBody(entries = listOf(totpEntry(), hotpEntry(counter = 5uL)))
 
-private fun vault() = VaultCodec.create(OLD.toCharArray(), body())
+private fun vault() = checkNotNull(VaultCodec.create(OLD.toCharArray(), body()).valueOrNull)
 
 private fun opened(bytes: ByteArray, password: String): OpenVault {
     val outcome = VaultCodec.open(bytes, password.toCharArray())
@@ -24,7 +24,7 @@ private fun opened(bytes: ByteArray, password: String): OpenVault {
 }
 
 private fun dekOf(bytes: ByteArray, password: String): ByteArray =
-    opened(bytes, password).use { it.dekBytes().copyOf() }
+    opened(bytes, password).use { vault -> checkNotNull(vault.useDek { dek -> dek.copyOf() }) }
 
 private fun changed(): ByteArray =
     checkNotNull(VaultCodec.changePassword(vault(), OLD.toCharArray(), NEW.toCharArray()).valueOrNull)

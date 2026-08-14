@@ -27,5 +27,9 @@ ktlint_standard_trailing-comma-on-call-site = enabled
 # which is configured with an exemption for the Composable annotation.
 ktlint_standard_function-naming = disabled
 
+# ktlint ships no-unused-imports disabled under every code style. Enabled here, this
+# line is what fails a dead import (STYLE_GUIDE.md §1).
+ktlint_standard_no-unused-imports = enabled
+
 [*.md]
 trim_trailing_whitespace = false

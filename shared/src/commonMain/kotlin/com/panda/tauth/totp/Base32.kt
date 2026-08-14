@@ -57,6 +57,19 @@ object Base32 {
         return null
     }
 
+    // Whitespace and padding are skipped, so a string that looks non-empty can still carry no key,
+    // and a key of no bytes reaches HMAC only at code-generation time. The decode is key material
+    // and is zeroed before this returns.
+    fun validateSecret(secret: String): VaultError? {
+        val bytes = when (val decoded = decode(secret)) {
+            is Outcome.Failure -> return decoded.error
+            is Outcome.Success -> decoded.value
+        }
+        val isEmpty = bytes.isEmpty()
+        bytes.fill(0)
+        return if (isEmpty) VaultError.InvalidSecret("empty secret") else null
+    }
+
     fun encode(bytes: ByteArray): String {
         val out = StringBuilder((bytes.size * BITS_PER_BYTE + BITS_PER_SYMBOL - 1) / BITS_PER_SYMBOL)
         var buffer = 0

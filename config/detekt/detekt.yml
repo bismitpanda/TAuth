@@ -43,6 +43,19 @@ naming:
     constantPattern: '[A-Z][_A-Z0-9]*'
 
 style:
+  ForbiddenImport:
+    # Salts, nonces, keys and identifiers are drawn from SecureRandom. kotlin.random.Random
+    # is a seeded generator whose output is predictable from a handful of draws, and it
+    # passes every test that only asks for bytes of the right length. The invariant is
+    # stated over the two packages, so every source set holding them is included, tests
+    # among them.
+    active: true
+    includes:
+      - '**/src/*/kotlin/com/panda/tauth/crypto/**'
+      - '**/src/*/kotlin/com/panda/tauth/vault/**'
+    forbiddenImports:
+      - value: 'kotlin.random.*'
+        reason: 'crypto and vault draw randomness from SecureRandom alone'
   MagicNumber:
     # STYLE_GUIDE.md §2: cryptographic sizes are named constants.
     ignorePropertyDeclaration: true
@@ -59,6 +72,10 @@ style:
   ReturnCount:
     max: 4
     excludeGuardClauses: true
+  UnusedImport:
+    # A dead import is failed by ktlint's no-unused-imports in .editorconfig; this rule
+    # needs the type resolution detekt does not run here (STYLE_GUIDE.md §1).
+    active: true
 
 potential-bugs:
   UnsafeCallOnNullableType:

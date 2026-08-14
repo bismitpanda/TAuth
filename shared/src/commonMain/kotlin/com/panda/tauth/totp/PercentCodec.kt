@@ -41,8 +41,8 @@ private fun escapeByteAt(input: String, index: Int): Byte? {
     return hex.toInt(HEX_RADIX).toByte()
 }
 
-// Every string arriving here comes through percentDecode or the vault body, both valid by
-// construction, so an unpaired surrogate is a contract violation rather than an operational failure.
+// Every string arriving here has been through a constructor that rejects an unpaired surrogate, so
+// one here is a contract violation rather than an operational failure.
 internal fun percentEncode(input: String): String {
     val encoded = try {
         input.encodeToByteArray(throwOnInvalidSequence = true)
@@ -67,6 +67,7 @@ private fun flush(pending: MutableList<Byte>, out: StringBuilder): Boolean {
     val text = try {
         pending.toByteArray().decodeToString(throwOnInvalidSequence = true)
     } catch (_: CharacterCodingException) {
+        // The throw is the whole answer: this escape run is not UTF-8, and the returned false says so.
         return false
     }
     out.append(text)
@@ -74,7 +75,9 @@ private fun flush(pending: MutableList<Byte>, out: StringBuilder): Boolean {
     return true
 }
 
-private fun String.isWellFormed(): Boolean = try {
+// True when the string holds no unpaired surrogate. One that does is not text: it has no UTF-8
+// encoding, so it could be held and displayed but never exported.
+internal fun String.isWellFormed(): Boolean = try {
     encodeToByteArray(throwOnInvalidSequence = true)
     true
 } catch (_: CharacterCodingException) {

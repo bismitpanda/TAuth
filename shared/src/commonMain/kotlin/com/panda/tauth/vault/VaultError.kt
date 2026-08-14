@@ -2,6 +2,7 @@ package com.panda.tauth.vault
 
 // `detail` strings never carry secret material: a VaultError reaches log output and the screen.
 sealed interface VaultError {
+    // Absence established by looking. A failure to look is Io: this sends a caller to the create flow.
     data object NoVaultFile : VaultError
 
     // The unwrap did not authenticate: a wrong password, or a salt or wrap block rewritten by
@@ -19,6 +20,12 @@ sealed interface VaultError {
     data class InvalidSecret(val detail: String) : VaultError
 
     data class MalformedUri(val detail: String) : VaultError
+
+    // The key held for the session is zeroed; the vault has to be opened again to write.
+    data object VaultClosed : VaultError
+
+    // The reader refuses a file past a ceiling, so the writer refuses to produce one.
+    data class TooLarge(val size: Int, val limit: Int) : VaultError
 
     data class Io(val cause: Throwable) : VaultError
 

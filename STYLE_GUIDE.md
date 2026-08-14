@@ -19,14 +19,14 @@ IntelliJ's **Kotlin style guide** preset matches this. Set it once under Setting
 
 ktlint runs through the kotlinter Gradle plugin and takes its rules from `.editorconfig`, so the IDE and the build read the same file. `./gradlew formatKotlin` fixes what is mechanically fixable; `./gradlew lintKotlin` reports the rest. Do not hand-format around ktlint; if a rule is wrong for this project, change it in `.editorconfig` and say why in the commit.
 
-Static analysis is detekt, configured in `config/detekt/detekt.yml` on top of its default ruleset. detekt's formatting ruleset is deliberately absent so the two tools cannot disagree about the same line: kotlinter owns formatting, detekt owns code smells. It runs without type resolution while [detekt/detekt#9602](https://github.com/detekt/detekt/issues/9602) is open, so type-aware rules are skipped; the Kotlin compiler remains the type checker.
+Static analysis is detekt, configured in `config/detekt/detekt.yml` on top of its default ruleset. detekt's formatting ruleset is deliberately absent so the two tools cannot disagree about the same line: kotlinter owns formatting, detekt owns code smells. It runs without type resolution while [detekt/detekt#9602](https://github.com/detekt/detekt/issues/9602) is open, so type-aware rules are skipped without a message; the Kotlin compiler remains the type checker. The dead-code rules `UnusedPrivateProperty` and `UnusedPrivateFunction` need type information too and therefore report nothing, so an unused private property or private function fails no task. `style>UnusedImport` is enabled there and needs type information as well, so what fails a dead import is ktlint's `no-unused-imports`, enabled in `.editorconfig`.
 
 ## 2. Naming
 
 Standard Kotlin conventions apply. The project-specific points:
 
 - **Files.** One top-level class per file, named for it. Files holding several top-level declarations get a descriptive name — `VaultPaths.kt`, not `VaultUtils.kt`. `Util`, `Helper`, `Manager` and `Common` are not acceptable file or class names; if no better name exists, the file is doing more than one thing.
-- **Platform files.** Files with top-level declarations in a platform source set carry the source-set suffix: `Aead.kt` in `commonMain`, `Aead.jvm.kt` in `jvmMain`. This is a Kotlin convention, not a preference.
+- **Platform files.** A file holding `actual` declarations carries the source-set suffix: `Aead.kt` in `commonMain`, `Aead.jvm.kt` in `jvmMain`. This is a Kotlin convention, not a preference. A platform file with no `actual` in it is named for what it holds, like any other.
 - **Acronyms.** Two letters uppercase (`IOStream`); three or more capitalise the first only (`TotpGenerator`, `QrEncoder`, `OtpAuthUri`, `HttpClient`). `TOTP`, `QR` and `URI` do not appear in identifiers in those forms.
 - **Backing properties.** `private val _entries` exposed as `val entries: List<VaultEntry> get() = _entries`. Used for every mutable collection or flow exposed read-only.
 - **Constants.** `const val` in screaming snake case, declared in a `companion object` or at file top level, never inline as a magic number. Cryptographic sizes in particular are named: `NONCE_BYTES = 12`, `TAG_BITS = 128`, `DEK_BYTES = 32`.
@@ -64,6 +64,7 @@ sealed interface VaultError {
 - Exceptions are caught at the boundary where they originate — JDK and third-party APIs throw — and converted immediately into a `VaultError`. `IOException` never propagates past `VaultStore`; `GeneralSecurityException` never propagates past the `crypto` package.
 - `Result.getOrThrow()` and `!!` do not appear outside tests.
 - A caught exception is never discarded. It goes into `VaultError.Io(cause)` or is logged with its stack trace.
+- Two kinds of catch discard it, written `catch (_: T)`. Which one applies is stated on the catch, or on the enclosing function where that reads better. The first is an exception used as a validity test — `base64Decode`, `String.isWellFormed`, `aeadOpen` on a failed tag — where the throw is the whole answer and the returned `null` or `false` carries it. The second is a parser exception on a vault path, whose message quotes the document it stopped in: the salt and the wrapped DEK on the header path, every entry's secret on the body path. Carrying it into `Io(cause)` puts that on the screen and logging it prints it, so the failure is reported as `Corrupt` naming which document it was and nothing out of it.
 
 Distinct failures get distinct types. `WrongPassword` and `IntegrityFailure` are separate cases because they mean different things to the user, and collapsing them into one error would let the UI tell someone to retype their password when the real problem is a damaged file.
 

@@ -4,7 +4,6 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 
@@ -23,11 +22,6 @@ private val CASE16_CIPHERTEXT = (
 private val CASE16_TAG = "76fc6ece0f4e1768cddf8853bb2d551b".hexToByteArray()
 
 private val KEY = ByteArray(AEAD_KEY_BYTES) { it.toByte() }
-private val NONCE = ByteArray(AEAD_NONCE_BYTES) { (it + 0x40).toByte() }
-
-// One nonce per sealing test under the shared key. Sealing twice under a single key and nonce is
-// what the ledger in Aead.jvm.kt refuses, so tests that seal cannot share one.
-private fun nonce(distinguisher: Int) = ByteArray(AEAD_NONCE_BYTES) { (it + distinguisher).toByte() }
 
 class AeadTest {
     @Test
@@ -86,22 +80,24 @@ class AeadTest {
     fun `a sealed message opens to the original plaintext`() {
         val plaintext = "vault body".encodeToByteArray()
         val aad = "prefix".encodeToByteArray()
-        val nonce = nonce(0x10)
+        val nonce = ByteArray(AEAD_NONCE_BYTES) { (it + 0x10).toByte() }
         assertContentEquals(plaintext, aeadOpen(KEY, nonce, aeadSeal(KEY, nonce, plaintext, aad), aad))
     }
 
     @Test
     fun `two nonces produce different ciphertext for identical input`() {
         val plaintext = "same".encodeToByteArray()
+        val one = ByteArray(AEAD_NONCE_BYTES) { (it + 0x20).toByte() }
+        val other = ByteArray(AEAD_NONCE_BYTES) { (it + 0x30).toByte() }
         assertNotEquals(
-            aeadSeal(KEY, nonce(0x20), plaintext, ByteArray(0)).toHexString(),
-            aeadSeal(KEY, nonce(0x30), plaintext, ByteArray(0)).toHexString(),
+            aeadSeal(KEY, one, plaintext, ByteArray(0)).toHexString(),
+            aeadSeal(KEY, other, plaintext, ByteArray(0)).toHexString(),
         )
     }
 
     @Test
     fun `opening with the wrong associated data fails`() {
-        val nonce = nonce(0x50)
+        val nonce = ByteArray(AEAD_NONCE_BYTES) { (it + 0x50).toByte() }
         val sealed = aeadSeal(KEY, nonce, "body".encodeToByteArray(), "one".encodeToByteArray())
         assertNull(aeadOpen(KEY, nonce, sealed, "two".encodeToByteArray()))
     }

@@ -19,7 +19,8 @@ internal const val BODY_VERSION = 1
 
 internal const val MAX_HEADER_BYTES = 64 * 1024
 
-// Without a ceiling a hostile file raises OutOfMemoryError, which no catch here would see.
+// Without a ceiling a hostile file raises OutOfMemoryError, an Error the IOException catch in
+// VaultStore.readFile does not take and no Outcome carries.
 internal const val MAX_VAULT_BYTES = 16 * 1024 * 1024
 
 // Unknown keys are tolerated so a later version fails on its version number, not on a parse error.

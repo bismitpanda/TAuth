@@ -286,7 +286,7 @@ Parsing rules:
 
 - **Type** — the authority component. `totp` and `hotp` are accepted. Any other value is `VaultError.MalformedUri`.
 - **Label** — percent-decoded path, leading `/` stripped. If it contains a `:` (or its percent-encoded `%3A`), the portion before the first colon is the issuer prefix and the remainder, with surrounding whitespace trimmed, is the account name. Otherwise the whole label is the account name.
-- **secret** — required, base32, padding optional. Absent or undecodable produces `VaultError.InvalidSecret`.
+- **secret** — required, base32, padding optional. Absent, undecodable, or decoding to no bytes at all produces `VaultError.InvalidSecret`. Whitespace and padding decode to nothing, so a non-empty secret can still carry no key.
 - **issuer** — optional. When both the `issuer` parameter and an issuer label prefix are present and differ, the `issuer` parameter wins and the discrepancy is surfaced in the import preview.
 - **algorithm** — optional, one of `SHA1`, `SHA256`, `SHA512`, case-insensitive. Default `SHA1`.
 - **digits** — optional integer. Accepted range 6–8. Default 6. Values outside the range are rejected rather than clamped.
@@ -295,7 +295,13 @@ Parsing rules:
 
 Unknown query parameters are ignored and not preserved.
 
+Space, tab, carriage return and newline are shed from the ends of the input, which is what a paste from a chat window or a wrapped mail carries. One of those four surviving in the query makes the URI `VaultError.MalformedUri`: the query is where a wrapped paste is taken in silently, since base32 skips whitespace inside a secret and a parameter name carrying whitespace is an unknown parameter and ignored. The label carries its own whitespace raw, which is how issuers write it — `otpauth://totp/ACME Corp:alice@acme.com?secret=...` — and it is unambiguous there, since the label runs to the `?` and every character of it is part of a name.
+
+The type and the algorithm are matched by ASCII case alone. Unicode case folding maps U+017F LATIN SMALL LETTER LONG S onto `S`, which would read `algorithm=%C5%BFHA256` as SHA-256 from a character the grammar's VCHAR has no room for.
+
 URI construction for export percent-encodes the label as `issuer:accountName`, emits `issuer` as an explicit parameter, and omits `algorithm`, `digits` and `period` when they hold default values. A `hotp` URI always carries `counter`, holding the entry's current value at the moment the URI is built.
+
+Construction applies the parser's rules to its own arguments, so `parse(build(x)) == x` for every value the constructor accepts: the secret decodes to a key, the issuer and account name are well-formed UTF-16, the account name carries no colon, and an absent issuer is null rather than empty. A lone surrogate has no UTF-8 encoding and so cannot be percent-encoded at all. The last two rules are what the round trip rests on for those values: a colon in the account name builds a label that reads back as a different account under an issuer nobody entered, and an empty issuer builds `&issuer=`, which reads back as no issuer.
 
 ### 5.6 HOTP counter semantics
 
@@ -413,6 +419,8 @@ Deserialisation must be tolerant of unknown keys (`ignoreUnknownKeys = true`), s
 
 `type` is `totp` or `hotp`. `period` applies to `totp` and is null on `hotp`; `counter` applies to `hotp` and is null on `totp`. The pairing is enforced on deserialisation, and a `hotp` entry with a null counter is `VaultError.Corrupt` rather than a silent default to zero, which would generate codes from the wrong position.
 
+An entry meets the rules §5.5 places on a URI: `secret` is base32 that decodes to at least one byte, `issuer` and `accountName` are well-formed UTF-16, `accountName` carries no colon, and `issuer` is absent rather than empty. The body is attacker-writable and JSON carries an unpaired surrogate through as readily as any other escape, so a body failing any of them is `VaultError.Corrupt` at the read rather than a failure at the first code the entry is asked for or a throw out of the URI constructor when the entry is exported.
+
 `policy` carries the security settings described in §6.1. Absent fields take the defaults shown, so a body written before a field existed opens unchanged; an absent `policy` object is the full default set. Defaults are the conservative value in every case, so a truncated or partially-understood policy locks sooner rather than later. Changing a policy value is an ordinary vault write and therefore requires an unlocked session.
 
 The three durations are rejected when negative, which makes the body `VaultError.Corrupt`. Zero disables a control and is a choice the user can make; a negative reads as disabled to every check while naming a duration, so it would switch a control off in a body that appears to set it.
@@ -453,28 +461,44 @@ The two-level hierarchy — password to KEK to DEK to body — makes password ch
 4. Assemble the prefix (magic, version, length, CRC, header) and use it as AAD.
 5. Encrypt the body under the DEK.
 6. Take the lock.
-7. Write prefix and ciphertext to `vault.tauth.tmp` in the same directory, with owner-only permissions applied as a creation attribute and read back before any ciphertext is written.
+7. Write prefix and ciphertext to `vault.tauth.tmp` in the same directory. On POSIX the owner-only mode is a creation attribute and is read back before any ciphertext is written; elsewhere the file is created with no mode of its own and the directory's inheritable access control entry is what restricts it.
 8. `FileChannel.force(true)` on the temp file.
 9. `Files.move(tmp, target, ATOMIC_MOVE, REPLACE_EXISTING)`.
 10. Force the parent directory's channel, so the rename itself is durable and not only the bytes it renames.
 
-The rename at step 9 is the commit point: a reader sees the previous file whole or the new one whole, never a mixture, and no spare copy is needed to make that true. Where `ATOMIC_MOVE` is unsupported the move falls back to `REPLACE_EXISTING` and logs a warning, and a save that fails leaves `vault.tauth.tmp` in place and logs its path, since without an atomic rename that file can be the only complete copy.
+The rename at step 9 is the commit point: a reader sees the previous file whole or the new one whole, never a mixture, and no spare copy is needed to make that true. Where `ATOMIC_MOVE` is unsupported the move falls back to `REPLACE_EXISTING` and logs a warning.
 
-Durability across a power cut is best effort and is not reported: macOS returns from `fsync` before the drive empties its write cache, `F_FULLFSYNC` is not reachable through `FileChannel`, a network store can acknowledge a flush its server has not performed, and Windows will not open a directory as a channel.
+A save that fails at step 7 or 8 deletes `vault.tauth.tmp`: it holds part of a file nothing can read, and the vault file has not been touched. A save that fails at step 9 leaves it in place and logs its path, because it holds the whole new vault and, where the rename was not atomic, can be the only complete copy of it.
 
-The lock at step 6 is an exclusive `FileLock` on a sibling `vault.lock`. It is advisory across processes on the same machine and stops two instances, or an instance and an export, from interleaving writes. It is a separate file so that locking never opens the vault for writing.
+Steps 1 to 5 refuse a body the read procedure would reject: a `v` the reader does not support, a header past the 64 KiB bound of §6.7, or a file past the 16 MiB whole-file ceiling. No version and no size reaching step 7 is one that step 9 would commit as a vault this version cannot open.
+
+Durability across a power cut is best effort and is not reported: on macOS, from JDK 21, `FileChannel.force` is `fcntl(fd, F_FULLFSYNC)` for a local mount and plain `fsync` for any other (JDK-8080589), and `fsync` returns before the drive empties its write cache; a network store can acknowledge a flush its server has not performed; Windows will not open a directory as a channel.
+
+The lock at step 6 is an exclusive `FileLock` on a sibling `vault.lock`. It is advisory across processes on the same machine and stops two instances, or an instance and an export, from interleaving writes. It is a separate file so that locking never opens the vault for writing. `vault.lock` is opened without following links, so a symbolic link left at that name opens nothing and, where it dangles, creates nothing.
+
+Ahead of the lock, the directory holding the vault is restricted to its owner. On POSIX it is created at `0700` and it alone: a creation attribute reaches every parent `createDirectories` makes, and those parents are the data root shared with every other application, so they keep the mode a directory is created with. A directory that is anything other than `0700` is chmodded to it and the mode is then read back, so a mount that accepts a chmod and discards it produces `VaultError.Io` instead of a success that leaves the directory traversable. A directory reached through a symbolic link is left as it is found, because a chmod through the link tightens whatever it points at; the mode read back is that of the directory the link resolves to. A data directory linked onto another disk at `0700` is therefore written to, and one linked onto a directory anyone can traverse produces `VaultError.Io` and no write.
+
+Elsewhere the directory is created with no mode of its own and its access control list is set to a single ALLOW entry for the owner, carrying `FILE_INHERIT` and `DIRECTORY_INHERIT`, which a file created inside the directory inherits. A path with no access control view produces `VaultError.Io`. Nothing is read back, and the entry is written through a symbolic link to whatever the link resolves to, so the mode-discarding guarantee and the symbolic-link exemption above hold on POSIX alone.
+
+Reading is not gated on the directory's mode: a vault already there stays readable.
 
 ### 6.7 Read procedure
 
-1. Read the whole file into memory.
+1. Read the whole file into memory through one open descriptor, whose size decides the ceiling, so that the file measured is the file read. A file past the 16 MiB whole-file ceiling produces `VaultError.Corrupt` before the read is attempted, since a hostile size raises `OutOfMemoryError` rather than an exception that can be caught and converted.
 2. Verify the magic. A file that does not carry it produces `VaultError.Corrupt`.
 3. Parse `headerLength` and slice the header JSON. A length exceeding the file size, or exceeding a 64 KiB sanity bound, produces `VaultError.Corrupt`.
 4. Verify the CRC over bytes `0`–`9` and the header JSON. A mismatch produces `VaultError.Corrupt`, before any key is derived.
 5. Verify the format version. An unknown version produces `VaultError.UnsupportedVersion`.
-6. Deserialise the header.
+6. Read the header's `v`, then deserialise the header. A `v` other than the supported header version produces `VaultError.UnsupportedVersion`.
 7. Derive the KEK from the supplied password and the salt, then unwrap the DEK.
 8. Decrypt the body with the retained prefix as AAD. An authentication failure produces `VaultError.IntegrityFailure`, which the UI reports as tampering or corruption rather than as a wrong password.
-9. Deserialise the body. A `v` greater than the supported body version produces `VaultError.UnsupportedVersion`.
+9. Read the body's `v`, then deserialise the body. A `v` other than the supported body version produces `VaultError.UnsupportedVersion`.
+
+`v` is read out of a document on its own, ahead of the rest of that document, because only the version says what the rest of it means: a later version is free to give a field a type this one never used, and deserialising those fields under this version's model would report a vault from a later TAuth as damage.
+
+The parser takes a quoted integer wherever this format specifies a number, so a `v` of `"1"` reads as version 1 on the header path and on the body path alike, and an entry's `period`, `digits` and `orderIndex` read the same way quoted. The two reads of `v` — the standalone one and the model's — go through the same parser and so agree on the value; the writer emits a number.
+
+A document that will not deserialise produces `VaultError.Corrupt` naming which document it was, and nothing out of the document itself. A parser reports the input it stopped in, and that input is the salt with the wrapped DEK on the header path and every entry's secret on the body path.
 
 The order of steps 4 and 5 is what separates the three failures a user can act on. GCM reports a wrong key and a rewritten ciphertext identically, so without the checksum first, damage to the salt or the wrap block would surface as a wrong password. With it, damage to the header fails at step 4 as `Corrupt`, damage to the body fails at step 8 as `IntegrityFailure`, and a version byte the writer never wrote is damage rather than a release that does not exist.
 
@@ -559,9 +583,11 @@ A configurable grace period delays the hide-triggered and minimise-triggered loc
 
 ### 8.4 Handling of decoded secret material
 
-Base32-decoded secrets are held as `SecureBytes` and are never converted to `String`. `SecureBytes.destroy()` fills the backing array with zeros and marks the holder unusable; subsequent access throws. JVM `String` instances are immutable and cannot be wiped, so the boundary is enforced by the API: `VaultEntry.secret` is a `String` only inside the serialised body, and the session decodes it into `SecureBytes` immediately on unlock, retaining the body JSON string no longer than necessary.
+Base32-decoded secrets are held as `SecureBytes` and are never converted to `String`. `SecureBytes.destroy()` fills the backing array with zeros and marks the holder unusable; a later lend refuses to run its block and returns `null`, which the vault path reports as `VaultError.VaultClosed`. JVM `String` instances are immutable and cannot be wiped, so the boundary is enforced by the API: `VaultEntry.secret` is a `String` only inside the serialised body, and the session decodes it into `SecureBytes` immediately on unlock, retaining the body JSON string no longer than necessary.
 
 `SecureBytes.adopt` is the only constructor and it takes ownership of the array, so a caller cannot hold a second reference by accident. The destroyed flag is `@Volatile`, written after the zeroing and read before the array, so a thread that observes the flag also observes the zeroed bytes rather than a cached view of a live key. Nothing zeroes a holder that is dropped without `destroy()`; the discipline is the API contract, not a collector hook.
+
+Key material is lent to a block rather than handed out: the lend is the only member that gives a caller the array, and `destroy()` and that block exclude each other. What the lend guarantees is that no `destroy()` runs while the block holds the array, not that the block cannot keep the array past its own return; a block that keeps it holds bytes a later `destroy()` zeroes under it. A lock arriving during a write waits for that write to finish, and a write beginning after the lock finds the key gone and fails. Zeros reaching a seal part-way through it would leave a body encrypted under them beside a header carrying the real wrapped key, and the rename would commit that over the previous file. The common standard library offers atomics but no mutex, so the exclusion is an `expect`/`actual` primitive in `crypto` like the other platform primitives.
 
 The master password is handled as `CharArray` from the text field through to the KDF call, and zeroed after derivation. Compose's `TextField` state is `String`-based, so this boundary is imperfect: a `BasicTextField` with a custom `CharArray`-backed state holder is the conforming approach and is used on the unlock and create screens.
 
@@ -801,6 +827,8 @@ sealed interface VaultError {
     data class UnsupportedVersion(val found: Int, val supported: Int) : VaultError
     data class InvalidSecret(val detail: String) : VaultError
     data class MalformedUri(val detail: String) : VaultError
+    data object VaultClosed : VaultError                    // the session key is zeroed
+    data class TooLarge(val size: Int, val limit: Int) : VaultError // refused rather than written
     data class Io(val cause: Throwable) : VaultError
     data class LockedByAnotherProcess(val path: String) : VaultError
 }
@@ -824,25 +852,25 @@ Every error maps to a specific user-facing message. `WrongPassword` and `Integri
 
 **Base32** — RFC 4648 §10 vectors, padded and unpadded input, padding of the wrong length in both directions, every trailing group length that cannot end an encoding, lowercase input, embedded whitespace, invalid characters, empty input.
 
-**otpauth URI** — issuer in the label prefix only; issuer as a parameter only; both present and equal; both present and conflicting; percent-encoded label with a colon and with spaces; missing secret; unknown type; digits outside 6–8; a period below the minimum; `hotp` without `counter`; `totp` carrying `counter`; `hotp` carrying `period`; counter at the 64-bit maximum; unknown parameters ignored; parameter names matched without regard to case; surrounding whitespace tolerated; round-trip build-then-parse for every entry configuration of both types.
+**otpauth URI** — issuer in the label prefix only; issuer as a parameter only; both present and equal; both present and conflicting; percent-encoded label with a colon and with spaces; missing secret; unknown type; digits outside 6–8; a period below the minimum; `hotp` without `counter`; `totp` carrying `counter`; `hotp` carrying `period`; counter at the 64-bit maximum; unknown parameters ignored; parameter names matched without regard to case; leading spaces and a trailing newline shed from the input while a leading U+2028 is not; a trailing space shed rather than kept by the last parameter's value; round-trip build-then-parse for every entry configuration of both types.
 
 **Vault codec** — round trip with an empty entry list and with several hundred entries; wrong password produces `WrongPassword`; a flipped bit in the ciphertext or the GCM tag produces `IntegrityFailure`; a flipped bit at every offset across the header produces `Corrupt` and never `WrongPassword`, swept exhaustively rather than sampled; a flipped bit in the CRC itself produces `Corrupt`; a flipped bit at every offset ahead of the CRC produces `Corrupt`; a modified `headerLength` produces `Corrupt` and never a silent success; truncated file; a version byte the writer never wrote produces `Corrupt` while a later version whose CRC agrees produces `UnsupportedVersion`; an unknown header key is tolerated; two successive writes of identical content produce different ciphertext, proving nonce freshness.
 
-Every value drawn from the CSPRNG — the DEK, the salt, the wrap nonce — is compared across two independently created vaults, because a constant satisfies any assertion made within one. Rotation keeps the salt and draws a fresh wrap nonce, which matters because it wraps under the KEK that wrapped the previous key. A header or body `v` the reader does not know produces `UnsupportedVersion`; a `headerLength` with the high bit set produces `Corrupt` rather than a backwards slice.
+Every value drawn from the CSPRNG — the DEK, the salt, the wrap nonce — is compared across two independently created vaults, because a constant satisfies any assertion made within one. Rotation keeps the salt and draws a fresh wrap nonce, which matters because it wraps under the KEK that wrapped the previous key. A header or body `v` the reader does not know produces `UnsupportedVersion`; a `headerLength` with the high bit set produces `Corrupt` rather than a backwards slice. A `v` written as a quoted digit reads as that version on both paths, and an entry's quoted `period` reads as that period, which is the latitude §6.7 records.
 
-The KEK's zeroing is observable because `withKek` lends the array to a block that can keep it. Every other key array in the codec is a local no test can reach, and those zeroings rest on inspection.
+Each of the codec's three key arrays is lent to a block, so each zeroing is asserted rather than inspected: the KEK through `withKek`, a freshly drawn DEK through `withFreshDek`, and the DEK an unlock hands over through `adoptedOrZeroed`. Every one is checked both after a block that returns and after a block that throws. The adopted DEK is also checked to survive the one path that keeps it, since zeroing there would hand back a vault whose key is zeros.
 
-**Entry model** — `orderIndex` renumbering on insert, delete and reorder; UUIDv7 ordering; `period`/`counter` pairing enforced per type; a `hotp` entry with a null counter rejected as `Corrupt`.
+**Entry model** — `orderIndex` renumbering on insert, delete and reorder; an `id` in canonical form carrying the version 7 nibble, ordering and uniqueness being `Uuid.generateV7`'s contract rather than this project's; `period`/`counter` pairing enforced per type; a `hotp` entry with a null counter rejected as `Corrupt`.
 
 **Security policy** — a body with no `policy` object yields the full defaults; a partial `policy` fills the remainder from defaults; each default is asserted field by field so a later change names itself; a negative duration is rejected; a policy edit round-trips through a write and read; tampering with a policy value in the ciphertext produces `IntegrityFailure` rather than an altered policy.
 
 ### 13.2 `jvmTest`
 
-**Crypto primitives** — Argon2id against published Argon2 reference vectors, confirming BouncyCastle is invoked with the intended version and parameters; AES-GCM against NIST test vectors; HMAC against RFC 2202 and RFC 4231 vectors, including the case 6 keys that exceed the hash's block size and so are hashed down before use; base64 over input producing `+` and `/`, and rejecting the URL-safe alphabet that replaces them.
+**Crypto primitives** — Argon2id against published Argon2 reference vectors, confirming BouncyCastle is invoked with the intended version and parameters; AES-GCM against NIST test vectors; HMAC against RFC 2202 and RFC 4231 vectors, including the case 6 keys that exceed the hash's block size and so are hashed down before use; base64 over input producing `+` and `/`, and rejecting the URL-safe alphabet that replaces them; the generator behind `secureRandomBytes` is asserted to be a `java.security.SecureRandom`, which nothing about the bytes themselves establishes from inside one process.
 
 The Argon2 cost test states the parameters as literals on the reference side, never through the constants under test, and each constant has a test of its own naming its value. The cost travels nowhere in the file, so these are the only things standing between a hand-edited constant and a silently weaker KDF.
 
-**Vault store** — atomic write leaves no `.tmp` on success; a failed write leaves the original file intact and readable; POSIX permissions are `0600` on the vault and the lock file and `0700` on the directory, including a directory or lock file that already existed too widely; concurrent writes from two `VaultStore` instances serialise via the file lock and leave one whole payload rather than a mixture.
+**Vault store** — atomic write leaves no `.tmp` on success; a failed write leaves the original file intact and readable; a write that fails at the rename leaves the whole new vault in `vault.tauth.tmp`; a vault behind a directory the process cannot traverse is reported as unreadable rather than as absent; POSIX permissions are `0600` on the vault and the lock file and `0700` on the directory, including a directory or lock file that already existed too widely; concurrent writes from two `VaultStore` instances serialise on the in-process lock and leave one whole payload rather than a mixture. A write that cannot take the file lock reports `LockedByAnotherProcess` and leaves the previous vault byte for byte, driven by an injected channel whose `tryLock` declines the way it does when another process holds the lock — two channels in one JVM collide instead, and both stores queue on the in-process lock before either reaches the file lock.
 
 **Vault paths** — resolution under a set `XDG_DATA_HOME`, an unset one, a blank one and a relative one, the same for `%APPDATA%`, an empty home leaving the location unresolved, and per-OS branches driven by an injected OS identifier rather than the real `os.name`.
 
@@ -872,11 +900,11 @@ Argon2id timing is measured on the lowest-specification target machine to confir
 
 **M1 — OTP core.** `Base32`, `Hmac` expect/actual, `Hotp`, `Totp`, `OtpAuthUri` covering both types, and the full test suite from §13.1. No UI. Deliverable: a green test run covering every RFC 4226 and RFC 6238 vector.
 
-**M2 — Vault format.** `crypto` expect/actual set, `VaultHeader`, `VaultBody`, `VaultEntry`, `VaultCodec`, `VaultStore`, `VaultPaths`, `VaultError`, and the tests from §13.1 and §13.2. No UI. Deliverable: create, write, read and round-trip a vault from tests.
+**M2 — Vault format.** `crypto` expect/actual set, `VaultHeader`, `VaultBody`, `VaultEntry`, `SecurityPolicy` as a field of the body, `VaultCodec`, `VaultStore`, `VaultPaths`, `VaultError`, and the tests from §13.1 and §13.2. No UI. Deliverable: create, write, read and round-trip a vault from tests. The store's POSIX branch is exercised here; its access-control-list branch is verified with the packaged artifacts in M5.
 
 **M3 — Session and unlocked UI.** `VaultSession`, `SessionState`, the code ticker, create-vault screen, unlock screen, account list with live TOTP codes and generate-on-request HOTP rows, the HOTP persist-before-display path, add-account by URI and manual entry, edit including counter, delete, and the secret disclosure gate stated at the head of §9. Deliverable: a usable authenticator.
 
-**M4 — Tray and lifecycle.** Tray with availability fallback, hide-to-tray, relock triggers, grace period, idle timeout, single instance, clipboard with timed clear, `Preferences` and `PreferencesStore`, `SecurityPolicy` in the vault body, and the settings screen split across the two.
+**M4 — Tray and lifecycle.** Tray with availability fallback, hide-to-tray, relock triggers, grace period, idle timeout, single instance, clipboard with timed clear, `Preferences` and `PreferencesStore`, the lifecycle behaviour `SecurityPolicy` governs, and the settings screen split across the two.
 
 **M5 — QR, export, packaging.** ZXing image decode for import and `QRCodeWriter` for the show-QR dialog (§9.7), encrypted and plaintext export, import with duplicate detection, change-password and re-encrypt actions, DMG/MSI/DEB configuration, icons for all three platforms, and verification of the packaged artifacts on each OS.
 
