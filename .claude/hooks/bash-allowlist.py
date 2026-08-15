@@ -33,7 +33,7 @@ ALLOWED = {
 
 PATTERNED = (
     re.compile(r"\./gradlew :shared:jvmTest --tests '[A-Za-z0-9_.*]{1,60}'"),
-    re.compile(r"rg -[nl] -- '[^']{1,100}'( [A-Za-z0-9_./-]{1,100})?"),
+    re.compile(r"rg -[nl] -- '[^']{1,139}'( [A-Za-z0-9_./-]{1,100})?"),
 )
 
 PATTERNED_FORMS = (
@@ -41,6 +41,10 @@ PATTERNED_FORMS = (
     "rg -n -- '<regex>' [path]",
     "rg -l -- '<regex>' [path]",
 )
+
+PIPE_SUFFIX = re.compile(r"\s*\|\s*(?:head|tail)\s+-\d+$")
+
+SUFFIX_FORM = "any of the above may end with a single | head -<number> or | tail -<number>"
 
 MAX_COMMAND_LENGTH = 250
 
@@ -76,10 +80,11 @@ def main() -> None:
     if len(command) > MAX_COMMAND_LENGTH:
         deny("the command is longer than anything this agent is allowed to run")
 
-    if command in ALLOWED[agent_type] or any(p.fullmatch(command) for p in PATTERNED):
+    base = PIPE_SUFFIX.sub("", command, count=1).rstrip()
+    if base in ALLOWED[agent_type] or any(p.fullmatch(base) for p in PATTERNED):
         sys.exit(0)
 
-    permitted = sorted(ALLOWED[agent_type]) + list(PATTERNED_FORMS)
+    permitted = sorted(ALLOWED[agent_type]) + list(PATTERNED_FORMS) + [SUFFIX_FORM]
     deny("Not a permitted command. Permitted:\n" + "\n".join(permitted))
 
 

@@ -59,10 +59,8 @@ class Argon2Test {
 
     @Test
     fun `argon2id derives at the cost the format fixes`() {
-        // The reference side names the cost in literals rather than through the same constants. The
-        // cost is not stored in the file, so a constant changed by hand has nothing else to catch it
-        // — and a test that fed the constants to both sides would agree with itself whatever they
-        // became.
+        // The reference side names the cost in literals: the cost is not stored in the file, and a
+        // test that fed the constants to both sides would agree with itself whatever they became.
         val salt = ByteArray(16) { 0x05 }
         assertEquals(
             bouncyCastle(

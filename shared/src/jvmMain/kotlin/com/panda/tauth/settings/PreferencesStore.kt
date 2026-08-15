@@ -19,9 +19,8 @@ private const val MAX_PREFERENCES_BYTES = 64 * 1024
 
 private val LOGGER = System.getLogger("com.panda.tauth.settings.PreferencesStore")
 
-// The file holds no secrets and is created with the process umask and no mode of its own.
-// TRUNCATE_EXISTING is what keeps a shorter document from leaving the tail of a longer one behind,
-// which would be read back as a damaged file.
+// The file holds no secrets and takes the process umask. TRUNCATE_EXISTING keeps a shorter document
+// from leaving the tail of a longer one behind.
 private val WRITE_TEXT = arrayOf<OpenOption>(
     StandardOpenOption.CREATE,
     StandardOpenOption.WRITE,

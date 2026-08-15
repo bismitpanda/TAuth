@@ -17,9 +17,8 @@ private val SPIN_LIMIT_NANOS = TimeUnit.MILLISECONDS.toNanos(50)
 
 private val PARK_LIMIT_NANOS = TimeUnit.SECONDS.toNanos(30)
 
-// Returns once the thread is parked. A thread can pass through BLOCKED while it starts, and the
-// wait under test ends on BLOCKED, so the case is about a parked target or about nothing. A target
-// that never parks is reported rather than waited on for ever.
+// Returns once the thread is parked. The wait under test ends on BLOCKED, which a thread can pass
+// through while it starts, so the case is about a parked target or about nothing.
 private fun awaitParked(thread: Thread) {
     val deadline = System.nanoTime() + PARK_LIMIT_NANOS
     while (thread.state != Thread.State.WAITING) {

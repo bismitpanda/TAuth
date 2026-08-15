@@ -16,6 +16,13 @@ object Totp {
         return (epochSeconds - T0_SECONDS).floorDiv(period.toLong())
     }
 
+    // A full period on a boundary, one second at the last second before the next. Derived from the
+    // clock rather than counted down, so a late tick reports the truth instead of a stale remainder.
+    fun secondsRemaining(epochSeconds: Long, period: Int): Int {
+        require(period >= PERIOD_MIN) { "period must be at least $PERIOD_MIN" }
+        return (period - (epochSeconds - T0_SECONDS).mod(period.toLong())).toInt()
+    }
+
     fun generate(
         secret: ByteArray,
         epochSeconds: Long,

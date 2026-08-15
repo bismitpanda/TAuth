@@ -3,10 +3,8 @@ package com.panda.tauth.crypto
 import java.security.SecureRandom
 import kotlin.concurrent.Volatile
 
-// Every salt, nonce, key and vault id in the process is drawn from this instance. Entry ids are not:
-// VaultEntry draws those from Uuid.generateV7(). The declared type excludes kotlin.random.Random and
-// java.util.Random and nothing further — a SecureRandom given a seed through the setSeed it inherits
-// is still a SecureRandom.
+// Every salt, nonce, key and vault id in the process is drawn from this instance; entry ids come
+// from Uuid.generateV7(). The declared type excludes kotlin.random.Random and java.util.Random.
 @Volatile
 private var randomnessSource: SecureRandom = SecureRandom()
 

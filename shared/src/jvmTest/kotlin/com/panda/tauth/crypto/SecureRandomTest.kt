@@ -9,8 +9,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 
 // The generator standing at the end of the call path, read by name off the file class holding it.
-// The cases below that install a stand-in reach it through withRandomnessSource; this is the only
-// way to see the one the process runs on.
+// This is the only way to see the one the process runs on.
 private fun processRandomnessSource(): Any {
     val field = Class.forName("com.panda.tauth.crypto.SecureRandom_jvmKt").getDeclaredField("randomnessSource")
     field.isAccessible = true
@@ -66,10 +65,8 @@ class SecureRandomTest {
 
     @Test
     fun `the draws come from a java security SecureRandom`() {
-        // A java.util.Random seeded with a constant returns bytes of the requested length and
-        // returns different ones on a second draw, so it satisfies every other case here while
-        // handing every vault on earth the same key, salt and nonce sequence. The declared type of
-        // the source excludes it at compile time; this holds the type if that declaration widens.
+        // A seeded java.util.Random satisfies every other case here while handing every vault on
+        // earth the same key, salt and nonce sequence. This holds the type if the declaration widens.
         assertIs<SecureRandom>(processRandomnessSource())
     }
 }

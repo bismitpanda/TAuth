@@ -27,13 +27,8 @@ import kotlin.concurrent.thread
 
 private val LOGGER = System.getLogger("com.panda.tauth.SingleInstance")
 
-// The whole protocol: one US-ASCII line naming the command, one US-ASCII line answering it. A web
-// page can be made to open a connection to any loopback port, but not to choose the first line it
-// sends, so a request that must match this exactly is out of a browser's reach.
-//
-// The command carries no credential and the listener is found by scanning loopback, so anything on
-// this machine can send it, a different OS user included: loopback carries no owner check. What it
-// does is raise a window; it names no account, reaches no vault operation and unlocks nothing.
+// A web page can be made to open a connection to any loopback port but not to choose the first line
+// it sends, so a request that must match this exactly is out of a browser's reach.
 private const val SHOW_COMMAND = "SHOW"
 private const val ACKNOWLEDGEMENT = "OK"
 
@@ -54,8 +49,7 @@ private const val EPHEMERAL_PORT = 0
 // the timeout below; the queue is what keeps a launch arriving meanwhile from being refused.
 private const val BACKLOG = 4
 
-// Bounds every wait in the handshake: the connect, the listener's read of the command, and the
-// launch's read of the answer. A peer that connects and then says nothing is dropped after this
+// Bounds every wait in the handshake, so a peer that connects and then says nothing is dropped
 // rather than holding the listener.
 private const val HANDSHAKE_TIMEOUT_MILLIS = 2_000
 
@@ -95,20 +89,13 @@ sealed interface InstanceRole {
         AutoCloseable {
         private val _showRequests = MutableStateFlow(0L)
 
-        // Raised once per accepted SHOW, for the window layer to collect and raise itself on, which
-        // keeps Compose out of here. A count rather than a signal, so two launches in quick
-        // succession are two requests rather than one.
-        //
-        // A request here is another process's, and anything on the machine can send one. The window
-        // layer owes it a raised window and nothing else: it is not evidence the user is present,
-        // so a relock already scheduled has to survive it rather than being cancelled the way a
-        // window the user reopens cancels one.
+        // Loopback carries no owner check, so a request is anything on this machine and not evidence
+        // the user is present: a scheduled relock survives it. A count, so two launches are two.
         val showRequests: StateFlow<Long> = _showRequests.asStateFlow()
 
         internal fun startListening() {
             // A blocking accept is a thread rather than a coroutine: cancelling a coroutine does not
-            // return from accept, so the socket has to be closed to stop the loop either way. The
-            // thread is a daemon, so it holds no exit open.
+            // return from accept. The thread is a daemon, so it holds no exit open.
             thread(isDaemon = true, name = LISTENER_THREAD_NAME) { serve() }
         }
 
@@ -147,14 +134,12 @@ sealed interface InstanceRole {
             }
         }
 
-        // The operating system closes the socket and releases the lock when the process exits,
-        // however it exits, so an abrupt exit leaves at most a port file naming nothing — which the
-        // next launch probes and replaces.
+        // The operating system closes the socket and releases the lock however the process exits, so
+        // an abrupt exit leaves at most a port file naming nothing.
         override fun close() {
             closeListener()
-            // The port file goes while the lock is still held. Releasing first opens a window for
-            // the next launch to take the lock and record its own port, which this deletion would
-            // then remove, leaving a running primary no later launch can find.
+            // The port file goes while the lock is still held: releasing first would let the next
+            // launch record its own port into the gap, which this deletion would then remove.
             deletePortFile()
             lock.release()
         }
@@ -179,15 +164,8 @@ sealed interface InstanceRole {
     // A running instance took the show request. This process opens no window.
     data object Superseded : InstanceRole
 
-    // The launch could neither serve nor hand over, and holds no lock: the window opens without
-    // single-instance service. A launch that exited here instead would leave the application
-    // unstartable for as long as whatever holds the lock does.
-    //
-    // What this costs, and what the window layer has to tell the user: two live instances each hold
-    // their own decrypted body and each save rewrites the whole file, so the later save drops
-    // whatever the other wrote. The vault's own lock spans one write() and refuses only writes that
-    // overlap it, and read() takes no lock at all, so nothing reports the loss. It is not a rare
-    // state either — a port file that cannot be written puts every launch here.
+    // The window opens without single-instance service. Two live instances each hold their own
+    // decrypted body and each save rewrites the whole file, so the later save drops the other's.
     data class Unprotected(val reason: UnprotectedReason) : InstanceRole
 }
 
@@ -215,8 +193,7 @@ internal fun interface HeldInstanceLock {
 }
 
 // A FileLock taken twice inside one JVM raises OverlappingFileLockException rather than returning
-// null, so no second object in a test can stand in for a second process holding it. This is the seam
-// a stand-in goes through: the socket, the port file and the handshake are real on both paths.
+// null, so this is the seam a test's stand-in for a second process goes through.
 internal fun interface InstanceLockFile {
     // Null when another process holds the lock.
     fun tryHold(path: Path): HeldInstanceLock?
@@ -233,8 +210,7 @@ internal class ChannelInstanceLock(private val attempt: LockAttempt = LockAttemp
     override fun tryHold(path: Path): HeldInstanceLock? {
         val channel = FileChannel.open(path, LOCK_OPEN)
         // A null lock is another process holding it. Returning a handle here would make this process
-        // a second primary: it would bind its own socket over the running instance's port file, and
-        // both would write the vault from bodies neither had seen the other change.
+        // a second primary, with both writing the vault from bodies neither had seen the other change.
         val lock = attemptOrClose(channel) ?: run {
             channel.close()
             return null
@@ -242,10 +218,8 @@ internal class ChannelInstanceLock(private val attempt: LockAttempt = LockAttemp
         return HeldInstanceLock { release(lock, channel) }
     }
 
-    // Closing the channel releases every lock this JVM holds on the file, so the lock going back is
-    // what the close turns on and the close happens whether or not the release above it does. A
-    // second call finds a lock already invalid and a channel already closed, which is the ordinary
-    // shutdown path calling this after a caller has: neither is a failure.
+    // Closing the channel releases every lock this JVM holds on the file, so the close happens
+    // whether or not the release above it does. A second call finds both already done, which is fine.
     private fun release(lock: FileLock, channel: FileChannel) {
         try {
             if (lock.isValid) lock.release()
@@ -303,11 +277,8 @@ class SingleInstance internal constructor(
         }
     }
 
-    // A first run reaches its window before any vault exists, so this mechanism is what creates the
-    // directory. The leaf carries the mode as a creation attribute, so it never exists at the
-    // process umask: a directory another local user can traverse discloses the vault's size and the
-    // time of its last write. The parents are the data root shared with every other application and
-    // keep the mode they are created with.
+    // The leaf carries its mode as a creation attribute, so it never exists at the process umask: a
+    // directory another local user can traverse discloses the vault's size and its last write time.
     private fun createVaultDirectory() {
         if (Files.isDirectory(paths.directory)) return
         paths.directory.parent?.let { Files.createDirectories(it) }
@@ -323,15 +294,11 @@ class SingleInstance internal constructor(
 
     private fun takeRoleOrHandOff(): InstanceRole {
         lockFile.tryHold(paths.instanceLockFile)?.let { return listenOn(it) }
-        // Something holds the lock. Whether it is a running TAuth is answered by the handshake, not
-        // by the lock: a port file left by a crashed instance names a port nobody listens on, or one
-        // an unrelated program has since taken.
+        // Whether the holder is a running TAuth is answered by the handshake, not by the lock: a
+        // crashed instance's port file names a port nobody listens on, or one another program took.
         if (handOff()) return InstanceRole.Superseded
-        // The lock file is not deleted. Unlinking it releases no lock a process holds on the inode,
-        // and the next launch would create a second file and take a second lock, which is two
-        // primaries. Taking the lock again is what tells a crashed instance's leftovers from a live
-        // one; the port file it left is replaced rather than deleted, so a live holder that has yet
-        // to write its own is not robbed of it.
+        // The lock file is not deleted: unlinking it releases no lock a process holds on the inode,
+        // and the next launch would take a second lock on a second file, which is two primaries.
         val retaken = lockFile.tryHold(paths.instanceLockFile) ?: return unprotected(
             UnprotectedReason.NOTHING_ANSWERED,
             "another process holds the instance lock and answers nothing",
@@ -388,10 +355,8 @@ class SingleInstance internal constructor(
         null
     }
 
-    // The open refuses a symbolic link itself rather than trusting the type read a moment earlier,
-    // so a link swapped in at that name sends this launch's request nowhere. The ceiling bounds the
-    // read rather than a size measured beforehand, so a file that grows between the two is still
-    // bounded.
+    // The open refuses a symbolic link itself rather than trusting the type read a moment earlier.
+    // The ceiling bounds the read rather than a size measured beforehand.
     private fun readPortFile(): ByteArray = Files.newInputStream(paths.instancePortFile, LinkOption.NOFOLLOW_LINKS)
         .use { it.readNBytes(MAX_PORT_FILE_BYTES + 1) }
 

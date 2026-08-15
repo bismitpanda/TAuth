@@ -23,11 +23,13 @@ internal const val VAULT_ID_BYTES = 16
 private val NO_ASSOCIATED_DATA = ByteArray(0)
 
 // Every path that finishes with this vault must call close(), error paths included: it zeroes the DEK.
-class OpenVault internal constructor(
-    val body: VaultBody,
-    internal val header: VaultHeader,
-    private val dek: SecureBytes,
-) : AutoCloseable {
+class OpenVault internal constructor(body: VaultBody, internal val header: VaultHeader, private val dek: SecureBytes) :
+    AutoCloseable {
+    // A write assigns the body it has committed, so what this carries is what the file holds. The
+    // setter is internal because only the path that has just written the file may move it.
+    var body: VaultBody = body
+        internal set
+
     val isClosed: Boolean get() = dek.isDestroyed
 
     // The key is lent for the length of a block and never handed out, so a close arriving mid-write
@@ -61,6 +63,21 @@ object VaultCodec {
 
     fun encode(vault: OpenVault, body: VaultBody): Outcome<ByteArray, VaultError> =
         vault.useDek { dek -> assemble(vault.header, body, dek) } ?: Outcome.Failure(VaultError.VaultClosed)
+
+    // The salt and the wrap come from the header of the vault that is open rather than from a fresh
+    // read, so this answers about the vault on screen and not about whatever now sits at the path.
+    internal fun verify(header: VaultHeader, password: CharArray): Outcome<Unit, VaultError> {
+        val fields = decodeHeaderFields(header)
+            ?: return Outcome.Failure(VaultError.Corrupt("a header field is missing, malformed or the wrong size"))
+        // withKek zeroes the derived key on every path out of the block, a throw included.
+        val dek = withKek(password, fields.salt) { kek ->
+            aeadOpen(kek, fields.wrapNonce, fields.wrapCiphertext, NO_ASSOCIATED_DATA)
+        } ?: return Outcome.Failure(VaultError.WrongPassword)
+        // A second live copy of the vault's data key. The unwrap succeeding is the whole answer, so it
+        // is zeroed here rather than returned.
+        dek.fill(0)
+        return Outcome.Success(Unit)
+    }
 
     // The DEK is unchanged, so a leaked one survives a password change; rotateDek replaces it.
     fun changePassword(

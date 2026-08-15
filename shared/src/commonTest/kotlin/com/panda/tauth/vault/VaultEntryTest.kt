@@ -1,6 +1,7 @@
 package com.panda.tauth.vault
 
 import com.panda.tauth.totp.HashAlgorithm
+import com.panda.tauth.totp.OtpCore
 import com.panda.tauth.totp.OtpType
 import com.panda.tauth.totp.Totp
 import kotlin.test.Test
@@ -32,12 +33,16 @@ internal fun hotpEntry(
     id: String = "0192f4c1-0000-7000-8000-000000000002",
     counter: ULong = 0uL,
     orderIndex: Int = 0,
+    algorithm: HashAlgorithm = HashAlgorithm.SHA1,
+    digits: Int = OtpCore.DIGITS_DEFAULT,
 ) = VaultEntry(
     id = id,
     type = OtpType.HOTP,
     accountName = "bob",
     secret = TEST_SECRET,
     createdAt = CREATED_AT,
+    algorithm = algorithm,
+    digits = digits,
     counter = counter,
     orderIndex = orderIndex,
 )

@@ -41,15 +41,13 @@ private val LOOPBACK: InetAddress = InetAddress.getLoopbackAddress()
 private val DIRECTORY_OWNER_ONLY_MODE = PosixFilePermissions.fromString("rwx------")
 
 // A lock file another process holds: tryLock reports that by returning null. A second SingleInstance
-// in this JVM cannot stand in for it — an overlapping lock raises OverlappingFileLockException — so
-// this is what puts a case on the path a second process takes.
+// in this JVM cannot stand in for it — an overlapping lock raises instead.
 private object LockHeldElsewhere : InstanceLockFile {
     override fun tryHold(path: Path): HeldInstanceLock? = null
 }
 
 // What FileChannel.tryLock does when another process holds the lock. Inside one JVM it raises
-// OverlappingFileLockException instead, so this is the only way a case reaches the refusal the real
-// lock file has to report.
+// OverlappingFileLockException instead, so this is the only way a case reaches that refusal.
 private val DECLINED = LockAttempt { null }
 
 // Refuses once and then lets the real lock through: the holder exited between the two attempts.
@@ -166,10 +164,8 @@ class SingleInstanceTest {
     // leaves in its port file.
     private fun refusedPort(): Int = ServerSocket(0, 1, LOOPBACK).use { it.localPort }
 
-    // Speaks the wire protocol as literals rather than through SingleInstance, so what the listener
-    // answers is checked against the line the protocol names and not against the constant the code
-    // happens to hold. A refusal, a reset, or a close with nothing written are all "no answer"; a
-    // case that expects one fails on each.
+    // Speaks the wire protocol as literals rather than through SingleInstance, so the answer is
+    // checked against the line the protocol names and not the constant the code happens to hold.
     private fun exchange(port: Int, request: String): String? = try {
         Socket(LOOPBACK, port).use { socket ->
             socket.soTimeout = PATIENCE_MILLIS
@@ -220,8 +216,7 @@ class SingleInstanceTest {
     @Test
     fun `a launch refused the lock leaves the running instance's port file alone`() {
         // Two primaries is the whole failure: the second binds its own socket over the first's port
-        // file, every later launch is handed to the second, and both write the vault from bodies
-        // neither has seen the other change.
+        // file, and both write the vault from bodies neither has seen the other change.
         claimPrimary()
         val running = Files.readString(paths.instancePortFile)
         refusedTheLock().claim()
@@ -403,8 +398,8 @@ class SingleInstanceTest {
 
     @Test
     fun `a crashed instance's port file is replaced by the launch that follows it`() {
-        // What §10.3 requires of a stale port file: the next launch is the primary, and the port
-        // file names the socket it answers on rather than the one nobody listens on.
+        // The next launch is the primary, and the port file names the socket it answers on rather
+        // than the one nobody listens on.
         writePortFile(refusedPort().toString())
         claimPrimary()
         assertEquals("OK", exchange(listeningPort(), "SHOW"))
@@ -474,9 +469,8 @@ class SingleInstanceTest {
 
     @Test
     fun `a closing primary leaves the port file of the launch that takes over`() {
-        // The deletion belongs under the lock. Releasing first lets the next launch record its port
-        // into the window between the two, and this close would take that file with it, leaving a
-        // running primary no later launch can find.
+        // The deletion belongs under the lock: releasing first lets the next launch record its port
+        // into the gap, and this close would then take that file with it.
         val primary = claimPrimary(NextLaunchOnRelease(paths.instancePortFile, ChannelInstanceLock()))
         primary.close()
         assertEquals(NEXT_LAUNCH_PORT, Files.readString(paths.instancePortFile))

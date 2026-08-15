@@ -34,8 +34,7 @@ class OpenVaultTest {
     @Test
     fun `a close landing inside a write does not zero the key the write is using`() {
         // Hiding the window closes the vault from another thread. A key zeroed part-way through a
-        // write seals the body under zeros while the header wraps the real key, and the rename
-        // commits that over the previous vault.
+        // write seals the body under zeros while the header wraps the real key.
         val vault = openVault()
         val key = checkNotNull(vault.useDek { it.copyOf() })
         val lent = CountDownLatch(1)

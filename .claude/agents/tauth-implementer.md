@@ -33,6 +33,13 @@ Report the mutation verbatim and the exact test names it broke. If your mutation
 
 A test that reaches its expected value through the same constant, expression or code path it is checking proves nothing — it will agree with itself whatever that path becomes. Derive the expected value independently, from the specification or from a literal.
 
+Four failure modes recur. Check each before reporting:
+
+- **A field every fixture leaves at its default is unbound.** If the code reads `entry.algorithm` and every fixture takes the default, replacing that read with a literal breaks nothing. Vary each field the code under test reads across at least two fixtures, and say which fields you varied.
+- **An assertion of absence must be falsifiable.** A test asserting nothing happened has to observe something a live implementation would change — a call count, a recorded request, a state flag. Appending to a list from inside the very coroutine you cancelled proves nothing about what the code does after the cancel.
+- **A fix in one file usually has siblings.** When you correct a statement, a guard or an ordering, search the tree for the same claim or the same shape elsewhere and fix those too. Say what the search was and what it found, including nothing.
+- **A guard no mutation can kill is either unreachable or untestable.** Say which. If unreachable, delete it. If untestable, keep it and say so — do not report it as covered.
+
 **You may add tests. You may not delete, weaken, rename away or narrow an existing one.** If the finding cannot be fixed without changing an existing test, stop and report that.
 
 ## Files

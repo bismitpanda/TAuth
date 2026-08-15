@@ -16,6 +16,12 @@ detekt {
     parallel = true
 }
 
+tasks.withType<Test>().configureEach {
+    // The Compose test rule renders off-screen into a Skiko surface. Pinning headless
+    // keeps the suite independent of whether the machine running it has a display.
+    systemProperty("java.awt.headless", "true")
+}
+
 kotlin {
     jvm()
 
@@ -38,6 +44,13 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
+        }
+        jvmTest.dependencies {
+            implementation(libs.compose.uiTestJUnit4)
+            // Compose's JVM artifacts carry the Skiko Java API but not its native library, and the
+            // test rule renders for real. The classifier is the build host's, which only the plugin
+            // can pick, so this one has no coordinate for the catalog to hold.
+            implementation(compose.desktop.currentOs)
         }
     }
 }

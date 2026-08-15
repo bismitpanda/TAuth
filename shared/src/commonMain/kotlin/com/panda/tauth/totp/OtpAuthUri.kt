@@ -111,10 +111,8 @@ data class OtpAuthUri(
         private const val WRAPPING_WHITESPACE = " \t\r\n"
 
         fun parse(input: String): Outcome<OtpAuthUri, VaultError> {
-            // A paste carries the wrapping of the window it came from, and only these four
-            // characters are shed, only at the ends. The single value a shed character can come
-            // out of is the last query parameter's, with no fragment behind it: a trailing space
-            // is dropped there, while the same space one character earlier makes the URI malformed.
+            // A paste carries the wrapping of the window it came from; only these four characters
+            // are shed, and only at the ends.
             val trimmed = input.trim { it in WRAPPING_WHITESPACE }
             if (!trimmed.startsWith(SCHEME, ignoreCase = true)) {
                 return Outcome.Failure(VaultError.MalformedUri("not an otpauth URI"))
@@ -153,9 +151,8 @@ data class OtpAuthUri(
         }
 
         private fun parseQuery(query: String): Outcome<Map<String, String>, VaultError> {
-            // A producer writes %20 into a value, so raw whitespace here came from a wrapped paste,
-            // and a value would keep it faithfully and store an issuer nobody typed. The label ends
-            // at the '?' and a space in it is part of a name, so it keeps its own.
+            // A producer writes %20 into a value, so raw whitespace here came from a wrapped paste
+            // and would be kept faithfully, storing an issuer nobody typed.
             if (query.any { it in WRAPPING_WHITESPACE }) {
                 return Outcome.Failure(VaultError.MalformedUri("the query holds whitespace"))
             }

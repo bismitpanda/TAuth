@@ -63,8 +63,7 @@ class HotpTest {
     @Test
     fun `the 64-bit maximum counter is not narrowed to 32 bits`() {
         // No published vector exists past counter 9, so the assertion is the property rather than a
-        // value: a truncating entry point would collapse these onto each other. The exact byte
-        // encoding is pinned against 0xFF eight times in OtpCoreTest.
+        // value: a truncating entry point would collapse these onto each other.
         assertNotEquals(codeAt(0xFFFFFFFFuL), codeAt(ULong.MAX_VALUE))
     }
 

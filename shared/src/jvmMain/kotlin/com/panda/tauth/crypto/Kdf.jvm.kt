@@ -16,9 +16,8 @@ actual fun argon2id(password: CharArray, salt: ByteArray, outputBytes: Int): Byt
     val generator = Argon2BytesGenerator()
     generator.init(specification)
     val derived = ByteArray(outputBytes)
-    // Argon2BytesGenerator 1.85 zeroes its memory blocks but leaves the UTF-8 password, the H0
-    // prehash seeds and its scratch block on the heap. H0 finishes the derivation without the
-    // password. All three are its own locals, unreachable from here.
+    // Argon2BytesGenerator 1.85 leaves the UTF-8 password, the H0 prehash seeds and its scratch
+    // block on the heap. All three are its own locals, unreachable from here.
     generator.generateBytes(password, derived)
     return derived
 }

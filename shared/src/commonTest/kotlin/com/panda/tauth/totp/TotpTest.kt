@@ -155,6 +155,38 @@ class TotpTest {
     }
 
     @Test
+    fun `a code on a period boundary has its whole period left`() {
+        // RFC 6238 Appendix B: T is 0000000000000002 from 60 seconds, so the period runs 60 to 89.
+        assertEquals(30, Totp.secondsRemaining(60, Totp.PERIOD_DEFAULT))
+    }
+
+    @Test
+    fun `a code in the last second of its period has one second left`() {
+        assertEquals(1, Totp.secondsRemaining(59, Totp.PERIOD_DEFAULT))
+    }
+
+    @Test
+    fun `the seconds left follow the period they are counted against`() {
+        assertEquals(1, Totp.secondsRemaining(59, 60))
+    }
+
+    @Test
+    fun `an hourly period leaves an hour on its boundary`() {
+        assertEquals(3600, Totp.secondsRemaining(3600, 3600))
+    }
+
+    @Test
+    fun `the seconds left before the epoch count towards the epoch`() {
+        // The period holding -1 ends at 0, which is one second away.
+        assertEquals(1, Totp.secondsRemaining(-1, Totp.PERIOD_DEFAULT))
+    }
+
+    @Test
+    fun `a period of zero has no seconds to count`() {
+        assertFailsWith<IllegalArgumentException> { Totp.secondsRemaining(0, 0) }
+    }
+
+    @Test
     fun `a period of zero is rejected`() {
         assertFailsWith<IllegalArgumentException> { Totp.counterAt(0, 0) }
     }

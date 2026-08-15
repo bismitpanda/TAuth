@@ -13,9 +13,8 @@ class SecureBytes private constructor(private val bytes: ByteArray) : AutoClosea
 
     val isDestroyed: Boolean get() = destroyed
 
-    // The only route to the bytes: a destroy() waits for the block instead of zeroing the array the
-    // block is working on. Nothing stops a block from keeping the array past its own return, and a
-    // block that does holds bytes a later destroy() zeroes under it.
+    // The only route to the bytes: a destroy() waits for the block instead of zeroing the array under
+    // it. A block that keeps the array past its own return holds bytes a later destroy() zeroes.
     fun <T> lendOrNull(block: (ByteArray) -> T): T? = exclusively(guard) {
         if (destroyed) null else block(bytes)
     }

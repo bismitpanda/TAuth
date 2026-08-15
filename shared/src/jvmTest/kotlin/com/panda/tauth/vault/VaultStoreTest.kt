@@ -92,9 +92,7 @@ private open class DelegatingChannel(protected val delegate: FileChannel) : File
 }
 
 // A channel on a file another process has locked: tryLock reports the refusal by returning null.
-// Two channels inside this JVM cannot stand in for that — an overlapping lock in one process raises
-// OverlappingFileLockException, and two VaultStores queue on the process lock long before either
-// reaches the file lock at all.
+// Two channels inside this JVM cannot stand in for that — an overlapping lock raises instead.
 private class LockHeldElsewhere(delegate: FileChannel) : DelegatingChannel(delegate) {
     override fun tryLock(position: Long, size: Long, shared: Boolean): FileLock? = null
 }
@@ -201,9 +199,8 @@ class VaultStoreTest {
 
     @Test
     fun `the vault directory is reachable by the owner alone`() {
-        // A directory another local user can traverse discloses the vault's size and the time of
-        // its last write; one they can traverse and write to lets them unlink or replace it,
-        // however tight the file's own mode is.
+        // A directory another local user can traverse discloses the vault's size and the time of its
+        // last write; one they can also write to lets them unlink or replace it.
         store.write(vaultBytes())
         assertEquals(DIRECTORY_OWNER_ONLY_MODE, Files.getPosixFilePermissions(paths.directory))
     }
@@ -273,10 +270,8 @@ class VaultStoreTest {
         assertContentEquals(bytes, Files.readAllBytes(paths.tempFile))
     }
 
-    // Takes every permission off the vault directory and answers whether the look is refused from
-    // here. A caller the kernel exempts — root, or a holder of CAP_DAC_OVERRIDE — reads straight
-    // through mode 000, which leaves the cases that use this with no refusal to be about, so they
-    // say so and stop rather than reporting on a premise the machine has voided.
+    // Takes every permission off the vault directory and answers whether the look is refused here.
+    // A caller the kernel exempts reads through mode 000, leaving those cases nothing to be about.
     private fun deniedOrSkip(): Boolean {
         if (!posixOrSkip()) return false
         Files.setPosixFilePermissions(paths.directory, PosixFilePermissions.fromString("---------"))
@@ -315,9 +310,8 @@ class VaultStoreTest {
         assertIs<VaultError.Io>(store.read().errorOrNull)
     }
 
-    // A NUL is the one byte no supported platform allows in a path, so Path.of raises
-    // InvalidPathException — unchecked, and raised while resolving, before any try block the
-    // callers own. Built rather than written as a literal, which no editor renders.
+    // A NUL is the one byte no supported platform allows in a path, so Path.of raises the unchecked
+    // InvalidPathException while resolving, before any try block the callers own.
     private fun unnameable(): VaultStore {
         val location = "/tmp/ta" + Char(0) + "uth"
         return VaultStore(VaultPaths(OperatingSystem.LINUX, { location }, "/tmp"))
@@ -473,8 +467,7 @@ class VaultStoreTest {
     fun `a vault read through a descriptor on an oversized file is refused`() {
         store.write(vaultBytes())
         // Sparse, so the test costs no disk: only the size the descriptor reports matters. Past
-        // Integer.MAX_VALUE it does not survive the conversion to the Int the allocation takes, so
-        // what makes this a refusal is the ceiling checked ahead of that conversion.
+        // Integer.MAX_VALUE the refusal comes from the ceiling checked ahead of the Int conversion.
         val oversized = directory.resolve("oversized")
         RandomAccessFile(oversized.toFile(), "rw").use { it.setLength(Int.MAX_VALUE + 1L) }
         val readingOversized = VaultStore(paths, ChannelOver(oversized))

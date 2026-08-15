@@ -40,9 +40,8 @@ private val LOGGER = System.getLogger("com.panda.tauth.vault.VaultStore")
 // file it creates.
 private val WRITE_NEW = setOf(StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
 
-// The lock file outlives a run, so its open has to accept an existing file. NOFOLLOW_LINKS is what
-// keeps that from opening — and creating, when the link dangles — whatever a link put in its place
-// points at.
+// The lock file outlives a run, so its open accepts an existing file. NOFOLLOW_LINKS keeps a link
+// left at that name from opening — and creating, when it dangles — whatever it points at.
 private val LOCK_OPEN = setOf<OpenOption>(
     StandardOpenOption.CREATE,
     StandardOpenOption.WRITE,
@@ -51,20 +50,20 @@ private val LOCK_OPEN = setOf<OpenOption>(
 
 private val READ_ONLY = setOf<OpenOption>(StandardOpenOption.READ)
 
-class VaultStore internal constructor(private val paths: VaultPaths, private val files: FileAccess) {
+class VaultStore internal constructor(private val paths: VaultPaths, private val files: FileAccess) : VaultFile {
     constructor(paths: VaultPaths = VaultPaths()) : this(paths, SystemFileAccess)
 
     // A location that cannot be looked into holds a vault; one that cannot be named or resolved does not.
-    fun exists(): Boolean = try {
+    override fun exists(): Boolean = try {
         paths.isResolved && !Files.notExists(paths.vaultFile)
     } catch (e: InvalidPathException) {
         LOGGER.log(System.Logger.Level.WARNING, "vault location is not a valid path", e)
         false
     }
 
-    fun read(): Outcome<ByteArray, VaultError> = guarded { readFile(paths.vaultFile) }
+    override fun read(): Outcome<ByteArray, VaultError> = guarded { readFile(paths.vaultFile) }
 
-    fun write(bytes: ByteArray): Outcome<Unit, VaultError> = guarded {
+    override fun write(bytes: ByteArray): Outcome<Unit, VaultError> = guarded {
         withLocks {
             try {
                 writeTemp(bytes)
@@ -130,10 +129,8 @@ class VaultStore internal constructor(private val paths: VaultPaths, private val
         Outcome.Failure(VaultError.Io(e))
     }
 
-    // The size and the bytes come from one open descriptor, so the file that is measured is the file
-    // that is read. The ceiling is checked before the buffer is allocated, because an allocation the
-    // size of a hostile file raises OutOfMemoryError: an Error that no catch converts and no Outcome
-    // carries.
+    // The size and the bytes come from one descriptor, so the file measured is the file read. The
+    // ceiling precedes the allocation, which at a hostile size raises an Error no Outcome carries.
     private fun readWithinLimit(channel: FileChannel): Outcome<ByteArray, VaultError> {
         val size = channel.size()
         if (size > MAX_VAULT_BYTES) {
@@ -146,9 +143,8 @@ class VaultStore internal constructor(private val paths: VaultPaths, private val
         return Outcome.Success(buffer.array().copyOf(buffer.position()))
     }
 
-    // On POSIX the owner-only mode is a creation attribute, so the file never exists readable, and
-    // it is read back before any ciphertext is written. Off POSIX the file is created with no mode
-    // of its own and what restricts it is the inheritable entry on the directory.
+    // On POSIX the owner-only mode is a creation attribute, so the file never exists readable. Off
+    // POSIX what restricts it is the inheritable entry on the directory.
     private fun writeTemp(bytes: ByteArray) {
         Files.deleteIfExists(paths.tempFile)
         files.openChannel(paths.tempFile, WRITE_NEW, *ownerOnlyAttributes()).use {
@@ -247,9 +243,8 @@ class VaultStore internal constructor(private val paths: VaultPaths, private val
         }
     }
 
-    // A creation attribute on createDirectories reaches every parent it creates, and those parents
-    // are the data root shared with every other application. createDirectory refuses a name that
-    // already exists, a dangling link included, so nothing is created through one.
+    // A creation attribute on createDirectories would reach the data root shared with every other
+    // application. createDirectory refuses an existing name, a dangling link included.
     private fun createLeafDirectory() {
         paths.directory.parent?.let { Files.createDirectories(it) }
         if (isPosix()) {

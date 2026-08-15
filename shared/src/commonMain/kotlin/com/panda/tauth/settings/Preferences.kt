@@ -53,11 +53,8 @@ data class WindowGeometry(
     }
 }
 
-// Held in plaintext beside the vault and read before any password is entered, so anything running as
-// the user can rewrite it. Nothing here governs when the vault locks; those settings travel inside
-// the encrypted body as SecurityPolicy. A value read from the file is coerced into range rather than
-// refused, because refusing one would leave the application unable to open on a file an attacker
-// controls.
+// Plaintext and read before any password, so anything running as the user can rewrite it. Nothing
+// here governs when the vault locks; a value out of range is coerced rather than refused.
 @Serializable
 data class Preferences(
     val theme: Theme = Theme.SYSTEM,
@@ -92,9 +89,8 @@ internal object WindowGeometrySerializer : KSerializer<WindowGeometry> {
     override fun deserialize(decoder: Decoder): WindowGeometry = decoder.decodeSerializableValue(delegate).clamped()
 }
 
-// A size out of range is clamped to the nearest usable one. A position is kept only when both
-// coordinates are present and land where a display could be, and dropped whole otherwise: half a
-// position places nothing, and one far outside every display would open the window off screen.
+// A size out of range is clamped. A position is kept only when both coordinates are present and land
+// where a display could be, and dropped whole otherwise.
 private fun WindowGeometry.clamped(): WindowGeometry {
     val coordinates = -WindowGeometry.MAX_COORDINATE..WindowGeometry.MAX_COORDINATE
     val hasPosition = x != null && y != null && x in coordinates && y in coordinates

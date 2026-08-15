@@ -184,9 +184,8 @@ class VaultCodecTest {
 
     @Test
     fun `a header longer than the reader slices is corrupt though the file holds it`() {
-        // 64 KiB is the bound the reader puts on the header length. The checksum matches, the body
-        // is sealed under this very header and the length is well inside the file, so the bound is
-        // the only thing between an unbounded slice and a successful open.
+        // 64 KiB is the bound the reader puts on the header length. The checksum matches and the
+        // length fits the file, so the bound is the only thing between a slice and a successful open.
         val bytes = opened(newVault()) { vault ->
             seal(vault, { body -> paddedHeaderJson(vault.header.copy(body = body)) }, EMPTY_BODY)
         }
@@ -397,8 +396,7 @@ class VaultCodecTest {
     @Test
     fun `rotating the key rewraps under a nonce the old wrap never used`() {
         // Rotation keeps the password and its salt, so the KEK is the one that wrapped the previous
-        // key. A repeated nonce under that KEK is keystream reuse, which hands an attacker the XOR
-        // of the two keys it wrapped.
+        // key. A repeated nonce under it is keystream reuse, handing over the XOR of the two keys.
         val original = newVault()
         val rotated = VaultCodec.rotateDek(original, password())
         assertIs<Outcome.Success<ByteArray>>(rotated)
@@ -628,9 +626,8 @@ class VaultCodecTest {
 
     @Test
     fun `a body whose version is not a number is corrupt rather than a matching version`() {
-        // The version is read on its own ahead of the body it stands for. A `v` that read cannot
-        // take is left to the decode behind it, which reports it as damage; the read itself must
-        // not carry its parse failure out of a function whose failures are returned values.
+        // A `v` the version read cannot take is left to the decode behind it, which reports it as
+        // damage; the read itself must not carry its parse failure out as a throw.
         val bytes = opened(newVault()) { rewriteBody(it, """{"v":"one","entries":[]}""") }
         assertIs<VaultError.Corrupt>(VaultCodec.open(bytes, password()).errorOrNull)
     }
@@ -653,9 +650,8 @@ class VaultCodecTest {
 
     @Test
     fun `a header carrying its version as a quoted digit reads as that version`() {
-        // The parser takes a quoted integer for the number the format specifies, on every numeric
-        // field. The version the reader acts on is the same either way, so a header written this
-        // way is read rather than refused.
+        // The parser takes a quoted integer for the number the format specifies, so the version the
+        // reader acts on is the same either way and the header is read rather than refused.
         val bytes = opened(newVault()) { vault ->
             seal(vault, { body -> quotedVersionHeaderJson(vault.header, body) }, EMPTY_BODY)
         }
@@ -768,8 +764,7 @@ private fun containsSubsequence(haystack: ByteArray, needle: ByteArray): Boolean
     }
 
 // Builds a file the model would refuse to produce, using the codec's own prefix builder so the byte
-// layout is never asserted against a second copy of itself. The header JSON is passed as text, so an
-// extra key survives into the file instead of being dropped by a re-serialisation.
+// layout is never asserted against a second copy of itself. The header JSON is passed as text.
 private fun seal(vault: OpenVault, headerJson: (BodyBlock) -> String, bodyJson: String): ByteArray {
     val nonce = secureRandomBytes(12)
     val prefix = VaultCodec.prefixOf(headerJson(BodyBlock(base64Encode(nonce))).encodeToByteArray())

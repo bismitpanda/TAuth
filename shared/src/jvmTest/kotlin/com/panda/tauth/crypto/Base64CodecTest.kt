@@ -61,9 +61,8 @@ class Base64CodecTest {
 
     @Test
     fun `encodes the two characters that separate the alphabets`() {
-        // RFC 4648 §4 ends the alphabet with + and /, where §5's URL-safe variant puts - and _. The
-        // header is read by whatever wrote it, so the two must not be confused; these three bytes
-        // are the shortest input that produces both.
+        // RFC 4648 §4 ends the alphabet with + and /, where §5's URL-safe variant puts - and _.
+        // These three bytes are the shortest input that produces both.
         assertEquals("++/+", base64Encode(byteArrayOf(0xFB.toByte(), 0xEF.toByte(), 0xFE.toByte())))
     }
 

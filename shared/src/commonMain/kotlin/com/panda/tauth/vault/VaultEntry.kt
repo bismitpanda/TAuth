@@ -58,9 +58,8 @@ private fun VaultEntry.validateFields(): String? = when {
     // through as readily as any other escape.
     !accountName.isWellFormed() -> "account name must be well-formed text"
 
-    // Absence has one spelling. An empty issuer does not survive a URI: it exports either as a
-    // label beginning with the separator, which no parse accepts, or as an `issuer=` that reads
-    // back as no issuer at all.
+    // Absence has one spelling: an empty issuer exports either as a label beginning with the
+    // separator, which no parse accepts, or as an `issuer=` that reads back as no issuer.
     issuer != null && issuer.isEmpty() -> "issuer must be absent rather than empty"
 
     issuer != null && !issuer.isWellFormed() -> "issuer must be well-formed text"

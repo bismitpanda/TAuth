@@ -91,8 +91,7 @@ internal object SuspendingClearDelay : ClearDelay {
 }
 
 // The delay arrives per call rather than from a policy the service holds: the policy lives in the
-// unlocked vault body, a copy can only happen while unlocked, and a stored copy would answer with
-// the value it was given rather than the value in force.
+// unlocked vault body, and a stored copy would answer with a stale value.
 class ClipboardService internal constructor(
     private val scope: CoroutineScope,
     private val clipboard: SystemClipboard,
@@ -104,9 +103,8 @@ class ClipboardService internal constructor(
     // clear and a copy cannot interleave over one clipboard.
     private val lock = ReentrantLock()
 
-    // The one string TAuth put on the clipboard. A copied otpauth:// URI is a complete credential
-    // and a JVM String cannot be wiped, so the reference is dropped the moment the clipboard stops
-    // holding it and the comparison it exists for can no longer succeed.
+    // The one string TAuth put on the clipboard. A copied URI is a complete credential in a String
+    // nothing can wipe, so the reference is dropped the moment the clipboard stops holding it.
     private var placed: String? = null
 
     private var pending: Job? = null
@@ -139,9 +137,8 @@ class ClipboardService internal constructor(
 
     fun clearIfHoldsOwnValue(): Outcome<ClipboardClear, ClipboardError> = lock.withLock {
         val result = clearNow()
-        // A clipboard that could not be read here is contended rather than broken, and the pending
-        // job is the only retry left once the vault is locked: it is dropped only when the clipboard
-        // is known to hold nothing of TAuth's.
+        // A clipboard that could not be read is contended rather than broken, so the pending job —
+        // the only retry left once the vault is locked — is dropped only on a known-clear clipboard.
         if (result is Outcome.Success) {
             pending?.cancel()
             pending = null
@@ -162,9 +159,8 @@ class ClipboardService internal constructor(
         }
     }
 
-    // Only the exact string TAuth placed is removed, so the timer never destroys what the user
-    // copied in the meantime. The comparison is not constant-time and does not need to be: whoever
-    // can measure it can read the clipboard directly.
+    // Only the exact string TAuth placed is removed, so the timer never destroys what the user copied
+    // in the meantime. The comparison need not be constant-time: whoever can measure it can read it.
     private fun clearNow(): Outcome<ClipboardClear, ClipboardError> {
         val ours = placed ?: return Outcome.Success(ClipboardClear.NOTHING_PLACED)
         val current = when (val read = clipboard.readText()) {

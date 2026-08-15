@@ -5,10 +5,8 @@ import kotlin.test.Test
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-// The packaged launcher starts the class named by `compose.desktop.application.mainClass`
-// and resolves that name only at startup. The test task passes the declaration itself in
-// `tauth.mainClass`, so these tests span the packaging configuration and the compiled
-// class: a rename on either side that misses the other is a failure here.
+// The packaged launcher resolves `compose.desktop.application.mainClass` only at startup. The test
+// task passes it in `tauth.mainClass`, so a rename that misses either side is a failure here.
 class MainEntryPointTest {
 
     @Test

@@ -4,9 +4,8 @@ import com.panda.tauth.settings.Preferences
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-// Tray availability and the two tray preferences are three booleans, so every configuration is a
-// case below rather than a sample of them. Each expected lifecycle is written out member by member,
-// so nothing here is satisfied by the expression that produced it.
+// Three booleans, so every configuration is a case below rather than a sample. Each expected
+// lifecycle is written out member by member rather than through the expression that produced it.
 private fun lifecycleOf(isTraySupported: Boolean, minimiseToTray: Boolean, startMinimised: Boolean): WindowLifecycle =
     WindowLifecycle.of(
         isTraySupported,
