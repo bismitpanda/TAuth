@@ -16,14 +16,16 @@ import com.panda.tauth.session.LockReason
 import com.panda.tauth.session.SessionState
 import com.panda.tauth.session.UnlockedEntry
 import com.panda.tauth.session.VaultSession
-import com.panda.tauth.settings.Preferences
-import com.panda.tauth.settings.SortOrder
+import com.panda.tauth.settings.PreferencesState
 import com.panda.tauth.totp.OtpAuthUri
 import com.panda.tauth.totp.TotpCode
 import com.panda.tauth.ui.create.CreateVaultScreen
 import com.panda.tauth.ui.edit.AddAccountScreen
 import com.panda.tauth.ui.edit.EditAccountScreen
 import com.panda.tauth.ui.list.AccountListScreen
+import com.panda.tauth.ui.settings.SettingsScreen
+import com.panda.tauth.ui.settings.SettingsWork
+import com.panda.tauth.ui.settings.ShellSettings
 import com.panda.tauth.ui.unlock.UnlockScreen
 import com.panda.tauth.vault.EntryEdit
 import com.panda.tauth.vault.VaultEntry
@@ -40,6 +42,8 @@ private sealed interface Route {
     data object Accounts : Route
 
     data object Add : Route
+
+    data object Settings : Route
 
     data class Edit(val id: String) : Route
 }
@@ -82,8 +86,10 @@ fun TAuthApp(
     session: VaultSession,
     ticker: CodeTicker,
     clipboard: ClipboardCopy,
+    preferences: PreferencesState,
     modifier: Modifier = Modifier,
-    preferences: Preferences = Preferences(),
+    shell: ShellSettings = ShellSettings(),
+    isSingleInstanceUnprotected: Boolean = false,
     clock: Clock = Clock.System,
 ) {
     val scope = rememberCoroutineScope()
@@ -93,25 +99,34 @@ fun TAuthApp(
     var codes by remember { mutableStateOf(emptyMap<String, TotpCode>()) }
     var nowSeconds by remember { mutableStateOf(clock.now().epochSeconds) }
     var route by remember { mutableStateOf<Route>(Route.Accounts) }
-    var sortOrder by remember { mutableStateOf(preferences.sortOrder) }
     val attempt = remember { PasswordAttempt() }
+    val settings = remember { SettingsWork() }
     // A reorder or a delete fails on the list; a save fails on the destination that asked for it.
     // One slot for both would report a refused delete on the add screen, about a write never tried.
     var listError by remember { mutableStateOf<VaultError?>(null) }
     var entryError by remember { mutableStateOf<VaultError?>(null) }
     var isEntryBusy by remember { mutableStateOf(false) }
 
-    val isUnlocked = state is SessionState.Unlocked
+    // A vault the user has to open again is what empties the graph. A running derivation is not one:
+    // the route it was started from is the route it returns to.
+    val isClosed = state is SessionState.Locked || state is SessionState.NoVault
 
-    // The ticker ends with the lock that zeroes the keys behind it, so a new one is collected for
-    // each unlock rather than a single collection outliving the vault it was started over.
-    LaunchedEffect(isUnlocked) {
-        if (!isUnlocked) {
+    // The policy is published with the unlocked state and is unreadable without it, so the screen
+    // that started a rewrite goes on drawing the one the session published before it.
+    LaunchedEffect(state) {
+        (state as? SessionState.Unlocked)?.let { settings.adopt(it.policy) }
+        if (isClosed) {
             route = Route.Accounts
             listError = null
             entryError = null
-            return@LaunchedEffect
+            settings.clearError()
         }
+    }
+
+    // The ticker ends with the lock that zeroes the keys behind it, so a new one is collected for
+    // each unlock rather than a single collection outliving the vault it was started over.
+    LaunchedEffect(state is SessionState.Unlocked) {
+        if (state !is SessionState.Unlocked) return@LaunchedEffect
         ticker.codes(visible).collect { tick ->
             codes = tick
             nowSeconds = clock.now().epochSeconds
@@ -121,50 +136,60 @@ fun TAuthApp(
     val create: (CharArray) -> Unit = { attempt.run(scope, it, isCreate = true, session::create) }
     val unlock: (CharArray) -> Unit = { attempt.run(scope, it, isCreate = false, session::unlock) }
 
-    when (val current = state) {
-        is SessionState.NoVault -> CreateVaultScreen(create, modifier, error = attempt.error)
+    WithSingleInstanceNotice(isSingleInstanceUnprotected, modifier) { screenModifier ->
+        when (val current = state) {
+            is SessionState.NoVault -> CreateVaultScreen(create, screenModifier, error = attempt.error)
 
-        is SessionState.Locked ->
-            UnlockScreen(unlock, modifier, error = attempt.error, lastReason = current.lastReason)
+            is SessionState.Locked ->
+                UnlockScreen(unlock, screenModifier, error = attempt.error, lastReason = current.lastReason)
 
-        // A derivation is running and the state alone does not say which one asked for it, so the
-        // screen that took the password is the screen that reports its progress.
-        is SessionState.Unlocking ->
-            if (attempt.isCreating) {
-                CreateVaultScreen(create, modifier, isBusy = true)
-            } else {
-                UnlockScreen(unlock, modifier, isBusy = true)
+            // A derivation is running and the state alone does not say which one asked for it, so the
+            // screen that took the password is the screen that reports its progress. The settings
+            // route is reached only from an open vault, which is what makes it the asker here.
+            is SessionState.Unlocking -> when {
+                route is Route.Settings ->
+                    SettingsDestination(session, settings, preferences, shell, scope, screenModifier) {
+                        route = Route.Accounts
+                    }
+
+                attempt.isCreating -> CreateVaultScreen(create, screenModifier, isBusy = true)
+
+                else -> UnlockScreen(unlock, screenModifier, isBusy = true)
             }
 
-        is SessionState.Unlocked -> UnlockedGraph(
-            session = session,
-            state = current,
-            route = route,
-            codes = codes,
-            nowSeconds = nowSeconds,
-            sortOrder = sortOrder,
-            clipboard = clipboard,
-            isEntryBusy = isEntryBusy,
-            listError = listError,
-            entryError = entryError,
-            modifier = modifier,
-            onRoute = {
-                // A destination opens on nothing the previous one left behind.
-                entryError = null
-                route = it
-            },
-            onSortOrderChange = { sortOrder = it },
-            onVisibleChange = { visible.value = it },
-            onListWork = { work -> scope.launch { listError = (work() as? Outcome.Failure)?.error } },
-            onEntryWork = { work ->
-                scope.launch {
-                    isEntryBusy = true
-                    entryError = (work() as? Outcome.Failure)?.error
-                    isEntryBusy = false
-                }
-            },
-            clock = clock,
-        )
+            is SessionState.Unlocked -> UnlockedGraph(
+                session = session,
+                state = current,
+                route = route,
+                codes = codes,
+                nowSeconds = nowSeconds,
+                preferences = preferences,
+                settings = settings,
+                shell = shell,
+                clipboard = clipboard,
+                isEntryBusy = isEntryBusy,
+                listError = listError,
+                entryError = entryError,
+                modifier = screenModifier,
+                scope = scope,
+                onRoute = {
+                    // A destination opens on nothing the previous one left behind.
+                    entryError = null
+                    settings.clearError()
+                    route = it
+                },
+                onVisibleChange = { visible.value = it },
+                onListWork = { work -> scope.launch { listError = (work() as? Outcome.Failure)?.error } },
+                onEntryWork = { work ->
+                    scope.launch {
+                        isEntryBusy = true
+                        entryError = (work() as? Outcome.Failure)?.error
+                        isEntryBusy = false
+                    }
+                },
+                clock = clock,
+            )
+        }
     }
 }
 
@@ -176,14 +201,16 @@ private fun UnlockedGraph(
     route: Route,
     codes: Map<String, TotpCode>,
     nowSeconds: Long,
-    sortOrder: SortOrder,
+    preferences: PreferencesState,
+    settings: SettingsWork,
+    shell: ShellSettings,
     clipboard: ClipboardCopy,
     isEntryBusy: Boolean,
     listError: VaultError?,
     entryError: VaultError?,
     modifier: Modifier,
+    scope: CoroutineScope,
     onRoute: (Route) -> Unit,
-    onSortOrderChange: (SortOrder) -> Unit,
     onVisibleChange: (Set<String>) -> Unit,
     onListWork: (suspend () -> Outcome<*, VaultError>) -> Unit,
     onEntryWork: (suspend () -> Outcome<*, VaultError>) -> Unit,
@@ -194,11 +221,13 @@ private fun UnlockedGraph(
             entries = state.entries,
             codes = codes,
             modifier = modifier,
-            sortOrder = sortOrder,
+            sortOrder = preferences.value.sortOrder,
             clipboardClearSeconds = state.policy.clipboardClearSeconds,
             clipboard = clipboard,
             error = listError,
-            onSortOrderChange = onSortOrderChange,
+            // The ordering outlives the window it was chosen in, so it goes to the file rather than
+            // into state the next launch starts without.
+            onSortOrderChange = { order -> scope.launch { preferences.update { it.copy(sortOrder = order) } } },
             onVisibleChange = onVisibleChange,
             onGenerate = { id -> session.generateHotpCode(id) },
             onDiscloseUri = { id, password -> session.discloseUri(id, password) },
@@ -206,8 +235,14 @@ private fun UnlockedGraph(
             onDelete = { id -> onListWork { session.deleteEntry(id) } },
             onEdit = { id -> onRoute(Route.Edit(id)) },
             onAdd = { onRoute(Route.Add) },
+            onSettings = { onRoute(Route.Settings) },
             onLock = { session.lock(LockReason.Manual) },
         )
+
+        is Route.Settings ->
+            SettingsDestination(session, settings, preferences, shell, scope, modifier) {
+                onRoute(Route.Accounts)
+            }
 
         is Route.Add -> AddAccountScreen(
             onSave = { uri -> onEntryWork { addAndReturn(session, uri, clock, onRoute) } },
@@ -236,6 +271,43 @@ private fun UnlockedGraph(
             }
         }
     }
+}
+
+// The destination is drawn from two states: an open vault, and the derivation a rewrite started here
+// runs under. Both draw the same controls over the policy the session last published.
+@Composable
+private fun SettingsDestination(
+    session: VaultSession,
+    settings: SettingsWork,
+    preferences: PreferencesState,
+    shell: ShellSettings,
+    scope: CoroutineScope,
+    modifier: Modifier,
+    onBack: () -> Unit,
+) {
+    SettingsScreen(
+        policy = settings.policy,
+        preferences = preferences.value,
+        modifier = modifier,
+        shell = shell,
+        isBusy = settings.isBusy,
+        error = settings.error,
+        exportError = settings.exportError,
+        onPolicyChange = { policy -> settings.run(scope) { session.setPolicy(policy) } },
+        // A refused preference write is reported where the file is written. What this slot carries is
+        // what the vault refused, which is a different thing.
+        onThemeChange = { theme -> scope.launch { preferences.update { it.copy(theme = theme) } } },
+        onSortOrderChange = { order -> scope.launch { preferences.update { it.copy(sortOrder = order) } } },
+        onMinimiseToTrayChange = { isOn -> scope.launch { preferences.update { it.copy(minimiseToTray = isOn) } } },
+        onStartMinimisedChange = { isOn -> scope.launch { preferences.update { it.copy(startMinimised = isOn) } } },
+        onChangePassword = { current, next ->
+            settings.run(scope, current, next) { session.changePassword(current, next) }
+        },
+        onRotate = { password -> settings.run(scope, password) { session.rotateDek(password) } },
+        // What leaves is the ciphertext the file already holds, so the shell places it without a gate.
+        onExport = { settings.export(scope, session::exportEncrypted, shell.onExport) },
+        onBack = onBack,
+    )
 }
 
 private suspend fun addAndReturn(

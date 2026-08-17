@@ -4,14 +4,18 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import com.panda.tauth.ui.theme.LocalSpacing
@@ -40,6 +44,31 @@ fun FormField(
             singleLine = true,
             textStyle = MaterialTheme.typography.bodyLarge,
         )
+    }
+}
+
+// The whole row toggles, and the box reports the state rather than taking the click, so the label
+// and the box are one target and one node.
+@Composable
+fun ToggleRow(
+    label: String,
+    isChecked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    tag: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    val spacing = LocalSpacing.current
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag(tag)
+            .toggleable(value = isChecked, enabled = enabled, role = Role.Checkbox, onValueChange = onCheckedChange),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(spacing.small),
+    ) {
+        Checkbox(checked = isChecked, onCheckedChange = null, enabled = enabled)
+        Text(label, style = MaterialTheme.typography.bodyMedium)
     }
 }
 

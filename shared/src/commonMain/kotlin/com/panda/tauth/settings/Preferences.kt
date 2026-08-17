@@ -91,7 +91,7 @@ internal object WindowGeometrySerializer : KSerializer<WindowGeometry> {
 
 // A size out of range is clamped. A position is kept only when both coordinates are present and land
 // where a display could be, and dropped whole otherwise.
-private fun WindowGeometry.clamped(): WindowGeometry {
+fun WindowGeometry.clamped(): WindowGeometry {
     val coordinates = -WindowGeometry.MAX_COORDINATE..WindowGeometry.MAX_COORDINATE
     val hasPosition = x != null && y != null && x in coordinates && y in coordinates
     return copy(

@@ -47,6 +47,7 @@ internal const val TITLE = "Accounts"
 internal const val SEARCH_TAG = "account-search"
 internal const val SEARCH_PLACEHOLDER = "Search"
 internal const val ADD_LABEL = "Add account"
+internal const val SETTINGS_LABEL = "Settings"
 internal const val LOCK_LABEL = "Lock"
 
 internal const val SORT_MANUAL_LABEL = "Manual order"
@@ -104,6 +105,7 @@ fun AccountListScreen(
     onDelete: (String) -> Unit = {},
     onEdit: (String) -> Unit = {},
     onAdd: () -> Unit = {},
+    onSettings: () -> Unit = {},
     onLock: () -> Unit = {},
 ) {
     val spacing = LocalSpacing.current
@@ -151,6 +153,7 @@ fun AccountListScreen(
             onQueryChange = { query = it },
             onSortOrderChange = onSortOrderChange,
             onAdd = onAdd,
+            onSettings = onSettings,
             onLock = onLock,
         )
         ListError(error)
@@ -247,6 +250,7 @@ private fun Header(
     onQueryChange: (String) -> Unit,
     onSortOrderChange: (SortOrder) -> Unit,
     onAdd: () -> Unit,
+    onSettings: () -> Unit,
     onLock: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -255,6 +259,7 @@ private fun Header(
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(spacing.small)) {
             Text(TITLE, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
             Button(onClick = onAdd) { Text(ADD_LABEL) }
+            Button(onClick = onSettings) { Text(SETTINGS_LABEL) }
             Button(onClick = onLock) { Text(LOCK_LABEL) }
         }
         SearchField(query = query, onQueryChange = onQueryChange)

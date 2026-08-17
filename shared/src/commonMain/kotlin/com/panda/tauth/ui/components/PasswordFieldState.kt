@@ -109,6 +109,19 @@ class PasswordFieldState(initialCapacity: Int = INITIAL_CAPACITY) {
     // outlives the KDF call is a copy of the password.
     fun copyValue(): CharArray = chars.copyOf(length)
 
+    // Compared as CharArrays: routing either side through a String would leave a copy of the password
+    // nothing can zero. Neither side is a stored secret, so the early exit is no oracle.
+    fun matches(other: PasswordFieldState): Boolean {
+        val left = copyValue()
+        val right = other.copyValue()
+        return try {
+            left.contentEquals(right)
+        } finally {
+            left.fill(Char.MIN_VALUE)
+            right.fill(Char.MIN_VALUE)
+        }
+    }
+
     // The text the field is given. Revealed, the characters go into a String that nothing can wipe;
     // masked, only the mask character does.
     internal fun renderText(isRevealed: Boolean, mask: Char): String =

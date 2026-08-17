@@ -22,6 +22,7 @@ import java.nio.file.OpenOption
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import java.nio.file.attribute.BasicFileAttributes
+import java.nio.file.attribute.PosixFileAttributeView
 import java.nio.file.attribute.PosixFilePermissions
 import kotlin.concurrent.thread
 
@@ -55,7 +56,9 @@ private const val HANDSHAKE_TIMEOUT_MILLIS = 2_000
 
 private const val LISTENER_THREAD_NAME = "tauth-single-instance"
 
-private const val POSIX_ATTRIBUTE_VIEW = "posix"
+// The count a primary starts at, and the baseline the window layer raises from: a launch reads the
+// two against each other, so one moving without the other raises a window nobody asked for.
+internal const val NO_SHOW_REQUESTS = 0L
 
 private val DIRECTORY_OWNER_ONLY = PosixFilePermissions.fromString("rwx------")
 
@@ -87,7 +90,7 @@ sealed interface InstanceRole {
         private val handshakeTimeoutMillis: Int,
     ) : InstanceRole,
         AutoCloseable {
-        private val _showRequests = MutableStateFlow(0L)
+        private val _showRequests = MutableStateFlow(NO_SHOW_REQUESTS)
 
         // Loopback carries no owner check, so a request is anything on this machine and not evidence
         // the user is present: a scheduled relock survives it. A count, so two launches are two.
@@ -289,8 +292,22 @@ class SingleInstance internal constructor(
         }
     }
 
-    private fun isPosix(): Boolean =
-        paths.directory.fileSystem.supportedFileAttributeViews().contains(POSIX_ATTRIBUTE_VIEW)
+    // The answer is the mount the directory lands on rather than the default provider's, which
+    // reports posix support for a removable filesystem that carries no modes at all.
+    private fun isPosix(): Boolean = try {
+        Files.getFileStore(existingAncestor()).supportsFileAttributeView(PosixFileAttributeView::class.java)
+    } catch (e: IOException) {
+        LOGGER.log(System.Logger.Level.DEBUG, "cannot determine the file store; assuming no posix support", e)
+        false
+    }
+
+    private fun existingAncestor(): Path {
+        var candidate: Path? = paths.directory.toAbsolutePath()
+        while (candidate != null && !Files.exists(candidate)) {
+            candidate = candidate.parent
+        }
+        return candidate ?: paths.directory.toAbsolutePath()
+    }
 
     private fun takeRoleOrHandOff(): InstanceRole {
         lockFile.tryHold(paths.instanceLockFile)?.let { return listenOn(it) }

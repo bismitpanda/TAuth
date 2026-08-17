@@ -3,7 +3,10 @@ package com.panda.tauth.ui
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -16,7 +19,16 @@ import com.panda.tauth.Outcome
 import com.panda.tauth.session.CodeTicker
 import com.panda.tauth.session.LockReason
 import com.panda.tauth.session.SessionClipboard
+import com.panda.tauth.session.SessionState
 import com.panda.tauth.session.VaultSession
+import com.panda.tauth.settings.SecurityPolicy
+import com.panda.tauth.settings.SortOrder
+import com.panda.tauth.settings.Theme
+import com.panda.tauth.ui.settings.CONFIRM_PASSWORD_TAG
+import com.panda.tauth.ui.settings.CURRENT_PASSWORD_TAG
+import com.panda.tauth.ui.settings.NEW_PASSWORD_TAG
+import com.panda.tauth.ui.settings.SETTINGS_HEADER
+import com.panda.tauth.ui.settings.ShellSettings
 import com.panda.tauth.ui.theme.TauthTheme
 import com.panda.tauth.valueOrNull
 import com.panda.tauth.vault.TEST_SECRET
@@ -29,8 +41,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import org.junit.Rule
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.test.AfterTest
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -71,6 +86,22 @@ private const val PASTED_ACCOUNT = "carol"
 private const val RENAMED_ACCOUNT = "erin"
 
 private const val WAIT_MILLIS = 30_000L
+private const val WAIT_SECONDS = 30L
+
+// The screens' own wording, repeated here as literals so a changed label fails the test that names it
+// rather than following it.
+private const val SETTINGS_BUTTON = "Settings"
+private const val BACK_LABEL = "Back to accounts"
+private const val CHANGE_PASSWORD_BUTTON = "Change master password"
+private const val EXPORT_BUTTON = "Export an encrypted copy"
+private const val THEME_DARK_BUTTON = "Dark"
+private const val SORT_ISSUER_BUTTON = "Issuer A–Z"
+private const val SORT_RECENT_BUTTON = "Recently added"
+private const val WRONG_PASSWORD_MESSAGE = "That password did not open the vault, so nothing was changed."
+private const val READ_FAILED_MESSAGE = "No copy was made: there is no vault file at this location."
+
+private const val NEW_PASSWORD = "a rather different passphrase"
+private const val WRONG_PASSWORD = "correct horse battery stapld"
 
 // One derivation for the whole class rather than one per test: Argon2id is priced to be slow.
 private val VAULT by lazy {
@@ -78,17 +109,39 @@ private val VAULT by lazy {
     checkNotNull(VaultCodec.create(PASSWORD.toCharArray(), body).valueOrNull)
 }
 
+// Every field off its default, so a settings control drawn from anywhere other than this body
+// disagrees with it in every field rather than in none.
+private val STORED_POLICY = SecurityPolicy(
+    idleTimeoutMinutes = 1,
+    lockOnMinimise = false,
+    lockOnFocusLoss = true,
+    hideGraceSeconds = 30,
+    clipboardClearSeconds = 10,
+)
+
+private val POLICY_VAULT by lazy {
+    val body = VaultBody(policy = STORED_POLICY, entries = listOf(totpEntry().copy(secret = TEST_SECRET)))
+    checkNotNull(VaultCodec.create(PASSWORD.toCharArray(), body).valueOrNull)
+}
+
 // The write refuses the way it does when another process holds the vault's lock file, which leaves
 // the previous vault whole on disk.
 private val WRITE_REFUSED = VaultError.LockedByAnotherProcess("/nowhere/vault.tauth.lock")
 
-private class MemoryVaultFile(var contents: ByteArray?, private val isWritable: Boolean = true) : VaultFile {
+private class MemoryVaultFile(
+    var contents: ByteArray?,
+    private val isWritable: Boolean = true,
+    // Runs on the worker the vault operation is on, so a test can hold a write open and read the
+    // screen while the session is mid-derivation.
+    private val beforeWrite: () -> Unit = {},
+) : VaultFile {
     override fun exists(): Boolean = contents != null
 
     override fun read(): Outcome<ByteArray, VaultError> =
         contents?.let { Outcome.Success(it) } ?: Outcome.Failure(VaultError.NoVaultFile)
 
     override fun write(bytes: ByteArray): Outcome<Unit, VaultError> {
+        beforeWrite()
         if (!isWritable) return Outcome.Failure(WRITE_REFUSED)
         contents = bytes
         return Outcome.Success(Unit)
@@ -305,10 +358,270 @@ class TAuthAppTest {
         compose.onNodeWithText(WRITE_REFUSED_MESSAGE).assertDoesNotExist()
     }
 
+    // The settings destination sits inside the unlocked graph and nothing else here opens it.
+    @Test
+    fun `the settings destination opens from the account list`() {
+        show(MemoryVaultFile(POLICY_VAULT))
+        unlock()
+        waitForText(LIST_TITLE)
+
+        compose.onNodeWithText(SETTINGS_BUTTON).performClick()
+
+        waitForText(SETTINGS_HEADER)
+    }
+
+    @Test
+    fun `leaving settings returns to the account list`() {
+        show(MemoryVaultFile(POLICY_VAULT))
+        unlock()
+        openSettings()
+
+        tapSetting(BACK_LABEL)
+
+        waitForText(LIST_TITLE)
+    }
+
+    // The policy lives in the encrypted body, so the control can only be showing what the unlock
+    // published.
+    @Test
+    fun `the idle timeout the vault carries is the one the control shows`() {
+        show(MemoryVaultFile(POLICY_VAULT))
+        unlock()
+        openSettings()
+
+        compose.onNodeWithText("1 min").assertIsSelected()
+    }
+
+    @Test
+    fun `an idle timeout chosen in settings reaches the vault file`() {
+        val file = MemoryVaultFile(POLICY_VAULT)
+        val session = show(file)
+        unlock()
+        openSettings()
+
+        tapSetting("15 min")
+        waitForPolicy(session) { it.idleTimeoutMinutes == 15 }
+
+        assertEquals(15, storedPolicy(file).idleTimeoutMinutes)
+    }
+
+    @Test
+    fun `a clipboard delay chosen in settings reaches the vault file`() {
+        val file = MemoryVaultFile(POLICY_VAULT)
+        val session = show(file)
+        unlock()
+        openSettings()
+
+        tapSetting("60 s")
+        waitForPolicy(session) { it.clipboardClearSeconds == 60 }
+
+        assertEquals(60, storedPolicy(file).clipboardClearSeconds)
+    }
+
+    // The one field the choice named moved, and the file carries the rest as the vault stored them.
+    @Test
+    fun `an idle timeout chosen in settings leaves the rest of the stored policy`() {
+        val file = MemoryVaultFile(POLICY_VAULT)
+        val session = show(file)
+        unlock()
+        openSettings()
+
+        tapSetting("15 min")
+        waitForPolicy(session) { it.idleTimeoutMinutes == 15 }
+
+        assertEquals(
+            SecurityPolicy(
+                idleTimeoutMinutes = 15,
+                lockOnMinimise = false,
+                lockOnFocusLoss = true,
+                hideGraceSeconds = 30,
+                clipboardClearSeconds = 10,
+            ),
+            storedPolicy(file),
+        )
+    }
+
+    @Test
+    fun `a refused policy write is reported on the settings screen`() {
+        show(MemoryVaultFile(POLICY_VAULT, isWritable = false))
+        unlock()
+        openSettings()
+
+        tapSetting("15 min")
+
+        waitForText(WRITE_REFUSED_MESSAGE)
+    }
+
+    @Test
+    fun `a refused policy write leaves the control where it stood`() {
+        show(MemoryVaultFile(POLICY_VAULT, isWritable = false))
+        unlock()
+        openSettings()
+
+        tapSetting("15 min")
+        waitForText(WRITE_REFUSED_MESSAGE)
+
+        compose.onNodeWithText("1 min").assertIsSelected()
+    }
+
+    // The derivation a password change runs costs as much as an unlock, and routing away from the
+    // control the user pressed would take them off it for that long.
+    @Test
+    fun `a derivation started from settings leaves the settings screen standing`() {
+        val write = CountDownLatch(1)
+        val session = show(MemoryVaultFile(POLICY_VAULT, beforeWrite = { write.await(WAIT_SECONDS, TimeUnit.SECONDS) }))
+        unlock()
+        openSettings()
+
+        try {
+            typeNewPassword()
+            tapSetting(CHANGE_PASSWORD_BUTTON)
+            compose.waitUntil(WAIT_MILLIS) { session.state.value is SessionState.Unlocking }
+
+            compose.onNodeWithText(SETTINGS_HEADER).performScrollTo().assertIsDisplayed()
+        } finally {
+            write.countDown()
+        }
+    }
+
+    @Test
+    fun `a wrong current password is reported on the settings screen`() {
+        show(MemoryVaultFile(POLICY_VAULT))
+        unlock()
+        openSettings()
+
+        typeNewPassword(current = WRONG_PASSWORD)
+        tapSetting(CHANGE_PASSWORD_BUTTON)
+
+        waitForText(WRONG_PASSWORD_MESSAGE)
+    }
+
+    @Test
+    fun `a password change made in settings leaves the file opening under the new password`() {
+        val file = MemoryVaultFile(POLICY_VAULT)
+        show(file)
+        unlock()
+        openSettings()
+
+        typeNewPassword()
+        tapSetting(CHANGE_PASSWORD_BUTTON)
+        compose.waitUntil(WAIT_MILLIS) { !POLICY_VAULT.contentEquals(checkNotNull(file.contents)) }
+
+        assertEquals(listOf("alice"), storedNames(file, NEW_PASSWORD))
+    }
+
+    @Test
+    fun `the ordering the preference document holds is the one the list opens with`() {
+        val preferences = RecordingPreferences(
+            preferences(
+                theme = Theme.DARK,
+                sortOrder = SortOrder.RECENTLY_ADDED,
+                startMinimised = true,
+                minimiseToTray = false,
+            ),
+        )
+        show(MemoryVaultFile(VAULT), preferences)
+        unlock()
+        waitForText(LIST_TITLE)
+
+        compose.onNodeWithText(SORT_RECENT_BUTTON).assertIsSelected()
+    }
+
+    @Test
+    fun `an ordering chosen on the list reaches the preference document`() {
+        val preferences = RecordingPreferences()
+        show(MemoryVaultFile(VAULT), preferences)
+        unlock()
+        waitForText(LIST_TITLE)
+
+        compose.onNodeWithText(SORT_ISSUER_BUTTON).performClick()
+
+        compose.waitUntil(WAIT_MILLIS) { preferences.last != null }
+        assertEquals(SortOrder.ISSUER, preferences.last?.sortOrder)
+    }
+
+    @Test
+    fun `a theme chosen in settings reaches the preference document`() {
+        val preferences = RecordingPreferences()
+        show(MemoryVaultFile(POLICY_VAULT), preferences)
+        unlock()
+        openSettings()
+
+        tapSetting(THEME_DARK_BUTTON)
+
+        compose.waitUntil(WAIT_MILLIS) { preferences.last != null }
+        assertEquals(Theme.DARK, preferences.last?.theme)
+    }
+
+    // An export reads the vault and hands the bytes on. A read that fails reaches the screen as a
+    // read, on the one settings path that writes nothing to the vault.
+    @Test
+    fun `an export whose vault read fails is reported as a read`() {
+        val file = MemoryVaultFile(POLICY_VAULT)
+        show(file)
+        unlock()
+        openSettings()
+
+        file.contents = null
+        tapSetting(EXPORT_BUTTON)
+
+        waitForText(READ_FAILED_MESSAGE)
+    }
+
+    @Test
+    fun `an export hands the shell the vault the file holds`() {
+        var exported: ByteArray? = null
+        val shell = ShellSettings(onExport = { bytes ->
+            exported = bytes
+            Outcome.Success(Unit)
+        })
+        show(MemoryVaultFile(POLICY_VAULT), shell = shell)
+        unlock()
+        openSettings()
+
+        tapSetting(EXPORT_BUTTON)
+
+        compose.waitUntil(WAIT_MILLIS) { exported != null }
+        assertContentEquals(POLICY_VAULT, exported)
+    }
+
     private fun unlock() {
         compose.onNode(hasSetTextAction()).performTextInput(PASSWORD)
         compose.onNodeWithText("Unlock").performClick()
     }
+
+    private fun openSettings() {
+        waitForText(LIST_TITLE)
+        compose.onNodeWithText(SETTINGS_BUTTON).performClick()
+        waitForText(SETTINGS_HEADER)
+    }
+
+    private fun typeNewPassword(current: String = PASSWORD) {
+        typeSetting(CURRENT_PASSWORD_TAG, current)
+        typeSetting(NEW_PASSWORD_TAG, NEW_PASSWORD)
+        typeSetting(CONFIRM_PASSWORD_TAG, NEW_PASSWORD)
+    }
+
+    // The settings screen scrolls, and a control below the fold takes a click that lands nowhere
+    // unless it is brought into view first.
+    private fun tapSetting(text: String) = compose.onNodeWithText(text).performScrollTo().performClick()
+
+    private fun typeSetting(tag: String, text: String) =
+        compose.onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag(tag)))
+            .performScrollTo()
+            .performTextInput(text)
+
+    private fun waitForPolicy(session: VaultSession, matches: (SecurityPolicy) -> Boolean) {
+        compose.waitUntil(WAIT_MILLIS) {
+            (session.state.value as? SessionState.Unlocked)?.policy?.let(matches) == true
+        }
+    }
+
+    // Read back through the codec rather than off the screen, so what is asserted is what the file
+    // holds and not what the session published.
+    private fun storedPolicy(file: MemoryVaultFile): SecurityPolicy =
+        checkNotNull(VaultCodec.open(checkNotNull(file.contents), PASSWORD.toCharArray()).valueOrNull)
+            .use { open -> open.body.policy }
 
     // The create screen carries two password fields; the second is the confirmation.
     private fun acknowledgeAndCreate() {
@@ -320,8 +633,8 @@ class TAuthAppTest {
 
     // Read back through the codec rather than off the screen, so what is asserted is what the file
     // holds and not what the session published.
-    private fun storedNames(file: MemoryVaultFile): List<String> =
-        checkNotNull(VaultCodec.open(checkNotNull(file.contents), PASSWORD.toCharArray()).valueOrNull)
+    private fun storedNames(file: MemoryVaultFile, password: String = PASSWORD): List<String> =
+        checkNotNull(VaultCodec.open(checkNotNull(file.contents), password.toCharArray()).valueOrNull)
             .use { open -> open.body.entries.sortedBy { it.orderIndex }.map { it.accountName } }
 
     private fun waitForText(text: String) {
@@ -330,7 +643,11 @@ class TAuthAppTest {
         }
     }
 
-    private fun show(file: MemoryVaultFile): VaultSession {
+    private fun show(
+        file: MemoryVaultFile,
+        preferences: RecordingPreferences = RecordingPreferences(),
+        shell: ShellSettings = ShellSettings(),
+    ): VaultSession {
         val session = VaultSession(file, SessionClipboard {}, scope)
         compose.setContent {
             TauthTheme {
@@ -338,7 +655,9 @@ class TAuthAppTest {
                     session = session,
                     ticker = CodeTicker(session, FIXED_CLOCK),
                     clipboard = { _, _ -> CopyResult.COPIED },
+                    preferences = preferences.state,
                     modifier = Modifier.fillMaxSize(),
+                    shell = shell,
                     clock = FIXED_CLOCK,
                 )
             }

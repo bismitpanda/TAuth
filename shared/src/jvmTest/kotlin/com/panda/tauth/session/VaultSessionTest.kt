@@ -291,6 +291,29 @@ class VaultSessionTest {
         assertEquals(SessionState.Locked(LockReason.Exit), session.state.value)
     }
 
+    // A signal reaching the runtime after a hide, an idle timeout or the tray's Lock has already
+    // locked runs the exit hook over a session that is locked.
+    @Test
+    fun `a second lock leaves the session locked for the later reason`() {
+        val session = unlocked()
+        session.lock(LockReason.HiddenToTray)
+
+        session.lock(LockReason.Exit)
+
+        assertEquals(SessionState.Locked(LockReason.Exit), session.state.value)
+    }
+
+    @Test
+    fun `a second lock leaves the key zeroed`() {
+        val session = unlocked()
+        val dek = checkNotNull(session.useDek { it })
+        session.lock(LockReason.HiddenToTray)
+
+        session.lock(LockReason.Exit)
+
+        assertContentEquals(ZEROED_KEY, dek)
+    }
+
     @Test
     fun `a lock leaves a session that has no vault where it is`() {
         val session = sessionOver(null)

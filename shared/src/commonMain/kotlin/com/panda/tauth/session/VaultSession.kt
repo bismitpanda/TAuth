@@ -111,6 +111,29 @@ class VaultSession internal constructor(
         adopt(opened, attempt)
     }
 
+    // The current password is checked by a derivation inside the codec rather than against anything
+    // the session holds, so a wrong one leaves the file, the key material and the state where it is.
+    suspend fun changePassword(currentPassword: CharArray, newPassword: CharArray): Outcome<Unit, VaultError> =
+        rewritten(newPassword) { bytes -> VaultCodec.changePassword(bytes, currentPassword, newPassword) }
+
+    // A rotation replaces the key the body is encrypted under, which a password change leaves in
+    // place and a leaked one therefore survives.
+    suspend fun rotateDek(password: CharArray): Outcome<Unit, VaultError> =
+        rewritten(password) { bytes -> VaultCodec.rotateDek(bytes, password) }
+
+    // The vault takes the policy only once the file has, so a refused write leaves the stored policy
+    // and the published one in agreement.
+    suspend fun setPolicy(policy: SecurityPolicy): Outcome<Unit, VaultError> = onOpenVault { open ->
+        commit(open, open.body.copy(policy = policy), Unit)
+    }
+
+    // A copy of the vault file, for the caller to place where it likes. What leaves is the ciphertext
+    // the file already holds, so it carries no disclosure gate.
+    suspend fun exportEncrypted(): Outcome<ByteArray, VaultError> = withContext(Dispatchers.IO) {
+        // Behind the lock the session's writes take, so the copy is of the file its state describes.
+        vaultWork.withLock { file.read() }
+    }
+
     // Installs nothing: neither outcome replaces the data key, touches a decoded secret, bumps the
     // epoch or moves the published state, so a wrong answer at the gate is not a lock.
     suspend fun verifyPassword(password: CharArray): Outcome<Unit, VaultError> = vaultWork.withLock {
@@ -243,6 +266,24 @@ class VaultSession internal constructor(
 
     // Neither the key nor an entry's secret appears in any rendering of a session.
     override fun toString(): String = "VaultSession(state=${_state.value::class.simpleName})"
+
+    // A rewrite produces a new header, and the header an open vault holds is the associated data of
+    // every write made through it, so the session adopts the vault reopened from the bytes written.
+    private suspend fun rewritten(
+        password: CharArray,
+        rewrite: (ByteArray) -> Outcome<ByteArray, VaultError>,
+    ): Outcome<Unit, VaultError> = vaultWork.withLock {
+        // Without this a settings action would open a locked vault, which is the unlock screen's job.
+        if (exclusively(guard) { vault } == null) return@withLock Outcome.Failure(VaultError.VaultClosed)
+        val attempt = beginDerivation()
+        val opened = withContext(Dispatchers.Default) {
+            file.read()
+                .flatMap(rewrite)
+                .flatMap { bytes -> file.write(bytes).map { bytes } }
+                .flatMap { bytes -> VaultCodec.open(bytes, password) }
+        }
+        adopt(opened, attempt)
+    }
 
     // Runs whole under the guard, so a lock arriving during an operation waits for it rather than
     // zeroing the key the seal is running under.

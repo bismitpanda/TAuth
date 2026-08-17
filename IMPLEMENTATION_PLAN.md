@@ -115,6 +115,7 @@ shared/src/commonMain/kotlin/com/panda/tauth/
     CommonPasswords.kt        the embedded list a score is checked against
   settings/
     Preferences.kt            plaintext model, readable before unlock
+    PreferencesState.kt       the one owner of that document, and the one path a change takes
     SecurityPolicy.kt         encrypted model, carried in the vault body
 
 shared/src/jvmMain/kotlin/com/panda/tauth/
@@ -135,8 +136,10 @@ shared/src/commonMain/kotlin/com/panda/tauth/ui/
   TAuthApp.kt                 root composable, routes on session state, and the password attempt
                               the create and unlock screens hand their characters to
   ClipboardCopy.kt            the copy a screen asks the shell for, and what it answered
+  SingleInstanceNotice.kt     what a window with no single-instance service says above its screen
   theme/                      Material 3 colour scheme and typography, the spacing scale screens
-                              lay out with, and the colours Material has no role for
+                              lay out with, the colours Material has no role for, and which of
+                              the two schemes a stored theme preference asks for
   create/CreateVaultScreen.kt
   unlock/UnlockScreen.kt
   list/AccountListScreen.kt
@@ -148,6 +151,10 @@ shared/src/commonMain/kotlin/com/panda/tauth/ui/
   edit/EditAccountScreen.kt
   edit/EntryPreview.kt        the resolved account both add paths converge on
   settings/SettingsScreen.kt
+  settings/ExportError.kt             why a copy of the vault was not placed where it was asked for
+  settings/SettingsWork.kt            what a settings action is doing, what it reported, and the
+                                      policy the screen draws while a rewrite runs
+  settings/ShellSettings.kt           what the shell knows and no screen can ask for itself
   components/PasswordField.kt         masked field over the holder beside it
   components/PasswordFieldState.kt    the CharArray a master password is edited in
   components/FormControls.kt          labelled text field and one-of-many choice
@@ -157,9 +164,21 @@ desktopApp/src/main/kotlin/com/panda/tauth/
   Main.kt                     application scope, window, tray, lifecycle
   TrayAvailability.kt         whether this desktop has a tray
   WindowLifecycle.kt          close and startup behaviour that follows
-  TrayHost.kt                 tray construction
+  TAuthTray.kt                tray construction
+  TAuthIcon.kt                the drawing the tray and the title bar carry
+  ShellWindow.kt              where the window opens, and the geometry a window state records
+  WindowClose.kt              what a close request does, and the order an exit does it in
+  WindowGeometryRecorder.kt   the wait a geometry settles through before it reaches the file
+  RelockTriggers.kt           what the window layer observes, and the report it makes of it
+  IdleWatch.kt                the wait an interval passes through without pointer or key input
+  ExitLock.kt                 the lock a shutdown reaches through the runtime
   SingleInstance.kt           lock file + local socket
+  InstanceStartup.kt          which claimed roles open a window and which one ends there
+  WindowRaise.kt              the raise each show request makes, and the input that ends it
   ClipboardService.kt         copy with timed clear
+  VaultExport.kt              where an exported copy goes, and the mode it is created with
+  FileManagerReveal.kt        which call this desktop answers for showing a file in its manager
+  AboutBuild.kt               the version a packaged build reports, and the licence it carries
   QrDecoder.kt                ZXing image decode
   QrEncoder.kt                ZXing BitMatrix generation and PNG export
 ```
@@ -616,6 +635,8 @@ Triggers arriving while a derivation is running are held and replayed once the b
 
 A `lock` landing while a derivation runs takes precedence over it. The unlock destroys the key it derived rather than installing it, leaves the state the lock set, and returns `VaultError.VaultClosed`: the vault the user closed stays closed, and opening it is another password entry.
 
+A password change and a DEK rotation (§7.1) reach that point having already written the file, since the vault they reopen is the one they have just committed. A lock landing there leaves the rewrite standing and only the session shut, so the vault that stays closed is the rewritten one and the password that opens it is the new one. `VaultClosed` therefore says the session closed, not that the change was refused.
+
 ### 8.3 Lock triggers
 
 | Trigger | Source | Default |
@@ -632,6 +653,8 @@ Every configurable trigger reads from the `SecurityPolicy` in the unlocked vault
 Focus loss defaults to off: copying a code and switching to a browser is the application's most common interaction, and locking on focus loss makes every such action cost a full Argon2id re-derivation.
 
 Hiding to the tray carries no switch, only the grace period below. It is what §1 means by the vault being unlocked while the window is on screen, and nothing else would catch a window that stayed hidden: the idle timeout runs while the window is visible, so a hidden window that did not lock would hold the key until the process ended.
+
+The exit trigger is a JVM shutdown hook, which covers a normal exit, `SIGINT` and `SIGTERM`, and the in-app quit paths that lock before they call it. `SIGKILL`, a power loss and a JVM crash run no hook at all, and a process ended that way leaves the key wherever the operating system leaves its pages and the clipboard holding whatever was last copied. The hook can also run after the toolkit is down, so its zeroing lands where its clipboard clear may not.
 
 A configurable grace period delays the hide-triggered and minimise-triggered lock. Default is 0 seconds, meaning immediate. Options are 0 / 30 s / 2 min. The grace timer is cancelled if the window becomes visible again before it fires. The timer runs as a cancellable coroutine on the application scope, not as a `java.util.Timer`, so that shutdown cancels it deterministically.
 
@@ -675,7 +698,7 @@ A single window. Routing is driven by `SessionState`, not by a navigation librar
 
 - `NoVault` → create-vault screen
 - `Locked` → unlock screen
-- `Unlocking` → whichever of the two took the password, showing its progress: a creation runs through this state as an unlock does, and the state alone does not say which asked for it
+- `Unlocking` → the screen that asked for the password, showing its progress: a creation, an unlock and a settings action that rewrites the vault all run through this state, and the state alone does not say which asked for it. A derivation started from settings leaves the settings screen standing, since routing away from it would take the user off the control they used for the length of an Argon2id derivation
 - `Unlocked` → account list, with add / edit / settings presented as full-screen destinations within the unlocked graph
 
 ### 9.2 Create vault
@@ -698,7 +721,7 @@ A scrollable list. A TOTP row shows issuer, account name, the current code group
 
 An HOTP row shows issuer, account name, the current counter value, and a generate control in place of the countdown. It displays no code until the user asks for one, because displaying one consumes a counter value (§5.6). After generation the code stays on screen with a copy affordance until the row is collapsed, the list is left, or the vault locks; the generate control is disabled for a short interval afterwards so a double-tap does not silently burn two counter values. A failed vault write leaves the counter unchanged and shows no code.
 
-Above the list: a search field filtering on issuer and account name, case-insensitively and on substring match; a sort control (manual order, issuer A–Z, recently added); a lock button; and an add button.
+Above the list: a search field filtering on issuer and account name, case-insensitively and on substring match; a sort control (manual order, issuer A–Z, recently added); a lock button; a settings button, which is where the destination of §9.8 is entered; and an add button.
 
 Manual reordering by drag. `orderIndex` is renumbered and the vault is written on drop.
 
@@ -764,6 +787,8 @@ The distinction is stated once in the screen's header rather than repeated per c
 
 **Encrypted export** produces a copy of the vault file. It is the recommended backup and requires no additional confirmation.
 
+The copy carries the whole vault, so it is created the way §6.6 creates the vault itself: `0600` as a creation attribute, read back before any ciphertext is written, and the write made into the channel the creation opened rather than back through the name it was created under. A destination the user picks is a directory another local user may be able to write to, which is where the difference between those and a `chmod` after the write is the whole file. Where the destination filesystem carries no POSIX modes, an owner-only access control entry is set on the empty file instead, and a filesystem offering neither refuses the export rather than writing it.
+
 **Plaintext export** produces a JSON file or a list of `otpauth://` URIs, carrying the secret disclosure gate stated at the head of §9 and a dialog stating that the output is unencrypted. The file is written with `0600` permissions. This is the migration path to other authenticators and is the reason plaintext export exists at all. HOTP entries export with their current counter, which is a point-in-time snapshot: codes generated in TAuth after the export move the vault ahead of the exported file.
 
 **Import** accepts a plaintext export or a newline-separated list of `otpauth://` URIs, shows a preview with per-entry validity, and detects duplicates by `(issuer, accountName, secret)`, offering skip or add-anyway per duplicate.
@@ -775,16 +800,23 @@ The distinction is stated once in the screen's header rather than repeated per c
 ### 10.1 Structure
 
 ```kotlin
-fun main() = application {
+// The role is claimed outside the composition, so a launch that hands its request over reaches
+// neither the window below nor the session and the vault behind it (§10.3).
+fun main() = startUnlessSuperseded(SingleInstance().claim(), ::runTAuth)
+
+private fun runTAuth(role: InstanceRole) = application {
     val session = remember { VaultSession(...) }
-    val prefs = remember { PreferencesStore.load() }        // plaintext, pre-unlock
-    val lifecycle = remember { WindowLifecycle.of(isSystemTraySupported(), prefs) }
-    val windowState = rememberWindowState(isMinimized = lifecycle.startup == StartupWindow.ICONIFIED)
-    var visible by remember { mutableStateOf(lifecycle.startup != StartupWindow.HIDDEN_TO_TRAY) }
+    val opening = remember { store.load() }                 // plaintext, pre-unlock
+    val prefs = remember { PreferencesState(opening, store::save) }
+    val hasTray = remember { isSystemTraySupported() }
+    val startup = remember { WindowLifecycle.of(hasTray, opening) }
+    val lifecycle = WindowLifecycle.of(hasTray, prefs.value)
+    val windowState = rememberWindowState(isMinimized = startup.startup == StartupWindow.ICONIFIED)
+    var visible by remember { mutableStateOf(startup.startup != StartupWindow.HIDDEN_TO_TRAY) }
 
     if (lifecycle.isTrayShown) {
         Tray(
-            icon = TrayIcon,
+            icon = TAuthIcon,
             tooltip = "TAuth",
             state = rememberTrayState(),
             onAction = { visible = true },
@@ -807,35 +839,49 @@ fun main() = application {
         visible = visible,
         state = windowState,
         title = "TAuth",
-        icon = AppIcon,
+        icon = TAuthIcon,
     ) {
-        TAuthApp(session, prefs)
+        TAuthApp(session, prefs, shell)
     }
 }
 ```
+
+The preference document has a single owner. `PreferencesState` holds it, and every writer — the settings screen, the account list's sort control, the window geometry recorder — changes it through `update`, which derives the next document from the value the holder carries and then writes that. A writer copying its own field onto the document as the file held it at launch puts back every other field chosen since, and the geometry recorder writes without being asked, so it would do that on every move of the window.
+
+Two things read that document at different times. The window opens where the document stood at launch, and the state it is given is remembered against that alone, so a preference changed later does not move a window the user has placed. What a close request does, and whether a tray icon stands, read the live value, so a tray preference changed in settings takes effect without a restart.
+
+`shell` carries what §9.8's Data and About groups report and no screen in `:shared` can ask for itself: the vault file's location and a reveal action, the packaged version and licence, where an exported copy is written, and whether the tray settings are offered — which it takes from `WindowLifecycle` rather than asking the toolkit a second time, so the window and the screen answer that question the same way.
 
 `WindowLifecycle.of` takes tray availability and the two tray preferences and answers what a close request does, where the window opens, whether a tray icon exists and whether the tray settings are offered. The window leaves the screen only where a tray icon can bring it back, so the answer turns on `isTraySupported && minimiseToTray` rather than on availability alone: a desktop with no tray and a user who turned the tray off both take the fallback of §10.2. Whether the settings are offered turns on availability alone, since those settings are the controls that set the preferences.
 
 Minimising is the platform's own on every desktop and is not one of those answers. Hiding the window is the close request's alone, which is what leaves `WindowState.isMinimized` an observable thing for the minimise trigger of §8.3 to fire on and for `SecurityPolicy` to govern.
 
+The window opens at the geometry §6.1 holds, clamped to the bounds the model enforces, and a position that is unset is left to the platform to choose. A move or a resize is written back once it settles, so a drag reaches the file as one write rather than as every position it passed through. A minimised, maximised or full screen window records nothing: the extent it reports is that state's rather than the one it returns to, and the geometry standing in the file is the one the window will come back to.
+
 `isSystemTraySupported()` is `java.awt.SystemTray.isSupported()`. `isTraySupported` is a **global** property in `androidx.compose.ui.window`, not an `ApplicationScope` extension, and delegates to the same call. `Tray` is an `ApplicationScope` extension taking `(icon: Painter, state: TrayState, tooltip: String, onAction: () -> Unit, menu: @Composable MenuScope.() -> Unit)`. Both are confirmed present in Compose Multiplatform 1.11.1 (§15).
 
-Relock is driven by observing visibility and minimisation rather than by wiring each call site:
+Relock is driven by observing visibility, minimisation and focus rather than by wiring each call site:
 
 ```kotlin
 LaunchedEffect(Unit) {
-    snapshotFlow { visible to windowState.isMinimized }
-        .collect { (isVisible, isMinimised) ->
+    snapshotFlow { WindowPresence(visible, windowState.isMinimized, windowInfo.isWindowFocused, shownBy) }
+        .collect { presence ->
             when {
-                !isVisible -> session.scheduleLock(LockReason.HiddenToTray)
-                isMinimised -> session.scheduleLock(LockReason.Minimised)
-                else -> session.cancelScheduledLock()
+                !presence.isVisible -> session.scheduleLock(LockReason.HiddenToTray)
+                presence.isMinimised -> session.scheduleLock(LockReason.Minimised)
+                presence.shownBy == ShowSource.SHOW_REQUEST -> Unit
+                else -> {
+                    session.cancelScheduledLock()
+                    if (!presence.isFocused) session.scheduleLock(LockReason.FocusLost)
+                }
             }
         }
 }
 ```
 
 The window layer reports what happened and does not decide what it means; §8.2 states what the session does with it. The policy therefore never has to be passed through composables or read while the vault is closed.
+
+A window standing on the screen is back whether or not the window manager gave it the focus, so the cancel turns on visibility and the focus loss is reported alongside it as a trigger of its own. A restore the desktop leaves unfocused would otherwise keep the relock its hide scheduled and fire it in front of the user. Focus reads from `LocalWindowInfo`, which is the window's own composition, so the collector runs inside the window rather than beside it.
 
 A window another process raised is the exception the collector has to carry: it becomes visible without the user having come back to it, so a relock scheduled before it went up survives the transition rather than being cancelled by it (§10.3).
 
@@ -849,7 +895,7 @@ Ubuntu ships `ubuntu-appindicators` enabled by default, so the AWT tray works th
 
 `dev.nucleusframework:composenativetray` talks to StatusNotifierItem over D-Bus directly, handles the GNOME double-left-click convention, and bundles a `SingleInstanceManager`. It is the fallback if the AWT tray proves inadequate on target distributions (§16.8).
 
-**macOS.** The tray icon appears in the menu bar. The icon must be a monochrome template-style image sized for the menu bar (22×22 logical), legible on both light and dark backgrounds. A colour icon renders poorly. TAuth keeps its Dock icon. A pure menu-bar application with no Dock icon is achievable with `LSUIElement`:
+**macOS.** The tray icon appears in the menu bar, sized for it at 22×22 logical points. `java.awt.TrayIcon` takes a plain `Image` and carries no template flag, so the menu bar draws the image as given rather than tinting it to the current appearance; a monochrome glyph therefore keeps one colour across a light and a dark menu bar and disappears into one of them. The icon carries the background it reads against, which costs the appearance-matched look a template image would have had. TAuth keeps its Dock icon. A pure menu-bar application with no Dock icon is achievable with `LSUIElement`:
 
 ```kotlin
 macOS {
@@ -870,7 +916,7 @@ Neither this nor the equivalent `-Dapple.awt.UIElement=true` JVM argument is use
 
 Two TAuth processes writing one vault lose an update, and a tray application relaunched from the Start menu or Spotlight should raise the existing window rather than start a second process.
 
-Implementation: at startup, attempt an exclusive `FileLock` on `<vaultDir>/instance.lock`. On success, bind a `ServerSocket` on `127.0.0.1:0`, write the chosen port into the lock file's sibling `instance.port`, and listen for a `SHOW` command. On failure to acquire the lock, read the port, connect, send `SHOW`, and wait for the running instance's acknowledgement; the launch that receives it exits with status 0. The running instance makes its window visible and requests focus, and reports that raise as a show request rather than as the user returning to the window: the relock collector of §10.1 cancels a pending relock only for the user's return, so a window raised by `SHOW` comes up with a scheduled relock still standing.
+Implementation: the role is claimed before the composition starts, so a launch that hands its request over constructs no window, no session and no `VaultStore`, and ends by returning from `main`. The claim attempts an exclusive `FileLock` on `<vaultDir>/instance.lock`. On success, bind a `ServerSocket` on `127.0.0.1:0`, write the chosen port into the lock file's sibling `instance.port`, and listen for a `SHOW` command. On failure to acquire the lock, read the port, connect, send `SHOW`, and wait for the running instance's acknowledgement; the launch that receives it exits with status 0. The running instance makes its window visible and requests focus, and reports that raise as a show request rather than as the user returning to the window: the relock collector of §10.1 cancels a pending relock only for the user's return, so a window raised by `SHOW` comes up with a scheduled relock still standing.
 
 The exit turns on the acknowledgement rather than on the send, because a port a crashed instance recorded can have been taken since by an unrelated program: a launch that exited on the send alone would raise nothing and report nothing. The running instance records the request before it answers, so an acknowledged request is a request that will be acted on.
 
@@ -879,6 +925,8 @@ A launch that becomes primary replaces `instance.port`, which covers whatever a 
 A launch that can neither take the lock nor reach a running instance opens its window without single-instance service and says so on screen, since exiting silently would leave the application unstartable for as long as whatever holds the lock does. That state costs a vault: two live instances each hold their own decrypted body, and a save rewrites the whole file, so the later save drops whatever the other wrote. `VaultStore`'s lock spans one `write()` and refuses only writes that overlap it, and `read()` takes no lock at all, so nothing reports the loss. Closing it needs the write to be a compare-and-swap against the file it read, which is not in this design.
 
 A `SHOW` arrives over loopback, which carries no owner check, so it can come from any process on the machine and from a different OS user. That is why the raise it causes is not the user's return: a show request that cancelled a pending relock would let anything on the machine hold an unlocked window open on screen.
+
+What ends a raise is the first pointer or key event after it, read from the same toolkit stream the idle trigger of §8.3 watches. The window is raised until someone is at the machine, and only that arrival puts the presence of §10.1 back to the user's, so a relock the raise came up under fires as scheduled if nobody comes. Focus is not that evidence, since the raise asks for the focus itself. Neither are `MOUSE_ENTERED` and `MOUSE_EXITED`: a window mapped, raised or moved under a stationary pointer enters and leaves it, which reports the window arriving rather than a person, and taking those would end every raise on the raise. Real movement arrives as `MOUSE_MOVED`, so nothing a person does is lost. The exclusion holds for the idle trigger for the same reason.
 
 ---
 
@@ -918,6 +966,8 @@ sealed interface VaultError {
 Every error maps to a specific user-facing message. `WrongPassword` and `IntegrityFailure` in particular must never share a message: one means "try again", the other means "this file has been modified or damaged". `WrongPassword` says the password did not work and claims nothing about the file, which §6.7 explains. `NoSuchEntry` and `Corrupt` are separated for the same reason: an entry deleted between a click and the operation it started is not a damaged vault.
 
 `InvalidEntry` covers every value an operation refuses to store: the entry model's rules where the model is the one refusing, and rules an operation holds of its own — an id already in the vault, a counter with no successor — where it is. The detail states the rule and never the value, because it reaches log output and the screen.
+
+The hierarchy spans every operation, so a signature over it admits cases its operation cannot produce and a `when` over it carries branches nothing can reach. M4b (§14) narrows each signature to the cases its operation reports, which is what makes every branch of a message mapping reachable and therefore testable.
 
 ---
 
@@ -997,9 +1047,21 @@ The Argon2 cost test states the parameters as literals on the reference side, ne
 
 **Preferences** — `preferences.json` absent, empty, malformed or holding unknown keys all yield usable defaults rather than a startup failure, since the file is attacker-writable and the application must open regardless. No security-relevant field is read from it.
 
+**Settings** — the screen is read against a policy and a preference document with every field off its default, so a control drawing anything of its own disagrees with the fixture in every field rather than in none. Each of the five policy controls opens on the value the policy carries and hands over one whole policy, asserted against a literal, so the field chosen and the four left alone are one assertion. A policy the caller does not move leaves the control where it stood, which is the screen holding no state of its own and is what makes a refused vault write show as a refusal rather than as a change. Each preference control opens on the stored value and hands over what was chosen. The tray controls are disabled and explained where no tray is available and enabled where one is. The header's statement is asserted as a literal written out in the test, and the notes on re-encryption, export, the missing tray and the About group are each asserted to repeat none of it, which is §9.8's "stated once". A password change is held back until a current password is typed, while the two new ones differ, and while the new one is short; the two arrays it hands over are the characters that were typed; a re-encryption hands over its own. A running derivation holds the timeout choices, the locking switches and the export.
+
+An export reports in a slot of its own, since neither half of one is a vault write: a destination that cannot restrict the copy, a destination that could not be written and a vault that could not be read each produce their own message, and the three read cases asserted name a read rather than a write. Each slot is asserted empty for a failure belonging to the other.
+
+Three of the five policy controls — the minimise lock, the focus-loss lock and the grace period — are asserted at the screen's callback and no further; only the idle timeout and the clipboard delay are followed to the vault file. `SettingsWork` zeroing the password arrays it was handed shares no test. Two of the messages a refused settings write reports are asserted, and three of the messages a refused export reports; the rest of both mappings shares no test.
+
+**Preference ownership** — the holder publishes a change and writes the whole document, leaving the fields the change did not name; a later change carries the field an earlier one set, which is the single-owner rule stated in §10.1 and the one case a write derived from a launch-time snapshot fails. A refused write reports the failure and leaves the change published, since it costs the next launch the setting rather than this one. The shell's half is crossed with the geometry recorder: a geometry reaching the file carries a theme and an ordering chosen since the window opened, and a preference reaching the file carries the geometry recorded before it.
+
 **HOTP counter** — generating a code persists the incremented counter before returning it; a write failure leaves the stored counter unchanged and yields no code; a counter surviving a lock/unlock cycle; two successive generations produce consecutive counter values and different codes.
 
 **Password change** — the vault opens under the new password and fails under the old; the DEK is unchanged, verified by comparing decrypted body bytes.
+
+**Settings operations** — the session's side of the actions §9.8 drives, read back through the codec rather than off the session. A password change leaves the file opening under the new password and refusing the old, the session unlocked over the same entries under the policy the body carries, and every decoded key lending the bytes its base32 stands for; a wrong current password writes nothing and leaves the published state, the data key and the decoded keys where they were; a change against a locked vault reports `VaultClosed` and writes nothing. A rotation replaces the key the body is encrypted under while the password, the entries and the policy stand, and an entry still yields the published code its counter names, which is a rotation not disturbing the secrets. An entry written after either rewrite reaches the file the new password opens, and the one written after a rotation is sealed under the rotated key: a session holding the vault it had before the rewrite writes a body against a header the file no longer carries, which reverts the change rather than reporting anything. A policy change reaches the file and the published state, a lock scheduled after it waits the grace period the new policy names, and a refused write leaves the stored and the published policy in agreement and reports the write's own error. An export hands back the bytes on disk: the copy opens under the vault's own password, carries an entry added before it, opens under the new password after a change, comes out of a locked session, writes nothing, and reports `NoVaultFile` against no file. The policy fixtures differ from the defaults and from each other in every field, so a policy the session reports from anywhere other than the body it wrote disagrees in every field rather than in none.
+
+Four things on those paths have no test. A lock landing mid-rewrite leaves the file rewritten and the operation reporting `VaultClosed`; two settings operations in flight at once serialise on the session's own lock; an export takes its copy behind that lock, which no assertion can separate from one taken beside it; and the zeroing of the KEK a rewrite derives is asserted in the codec's suite rather than through the session.
 
 **QR round trip** — for every entry configuration in the URI test matrix, encode the entry to an `otpauth://` URI, render it through `QRCodeWriter`, decode the resulting `BitMatrix` through `MultiFormatReader`, and assert the decoded payload equals the original URI byte for byte. This covers character-set handling for non-ASCII issuer and account names, which is where URI-to-QR round trips most often fail. A second case asserts the symbol version stays at or below 10 for a 160-bit secret with a 64-character label, since larger symbols become hard to scan at the dialog's minimum size.
 
@@ -1017,6 +1079,10 @@ The Argon2 cost test states the parameters as literals on the reference side, ne
 
 Tray behaviour requires manual verification on GNOME (with and without a tray extension), KDE Plasma, Windows 11, and macOS.
 
+The relock triggers of §8.3 are verified on a running window, since the collector reads state a headless test cannot produce: hiding to the tray, minimising, restoring onto a desktop that gives the window no focus, and leaving the window untouched for the idle interval, each against a grace period of 0 and of 30 seconds. What this catches and no unit test can is a window whose composition stops reporting when it leaves the screen, which would leave a hidden window unlocked.
+
+The raise of §10.3 is verified by launching TAuth a second time while the first is running: against a window hidden to the tray, against one minimised, and against one standing behind another window, with the pointer left where it rests each time. The window comes forward in all three and the second launch ends on its own, and a window raised with nobody at the machine locks when its relock falls due. What this catches and no unit test can is a raise the desktop does not carry out and a raise the toolkit reports back as the user's own input.
+
 Cross-platform vault portability is verified by creating a vault on one OS, copying it to the other two, and unlocking with the password on each.
 
 The show-QR dialog is verified by scanning its output with at least three unrelated authenticators — Google Authenticator, Aegis or Raivo, and one desktop scanner — at the dialog's minimum size and on both a light and a dark system theme. Automated round-trip tests confirm the payload; only a real scanner confirms the rendering.
@@ -1031,15 +1097,21 @@ Argon2id timing is measured on the lowest-specification target machine to confir
 
 **M2 — Vault format.** `crypto` expect/actual set, `VaultHeader`, `VaultBody`, `VaultEntry`, `SecurityPolicy` as a field of the body, `VaultCodec`, `VaultStore`, `VaultPaths`, `VaultError`, and the tests from §13.1 and §13.2. No UI. Deliverable: create, write, read and round-trip a vault from tests. The store's POSIX branch is exercised here; its access-control-list branch is verified with the packaged artifacts in M5.
 
-**M3a — Shell infrastructure.** `Preferences` and `PreferencesStore`, `ClipboardService`, the single-instance mechanism of §10.3, and tray availability with the fallback §10.2 describes. Deliverable: a preference file that survives a restart, a clipboard that clears only the string it placed, a lock file and loopback listener that answer whether another instance holds the vault, and a correct answer to whether this desktop has a tray. The application takes no instance role until M4 wires it, so until then two launches each open the vault and the later save drops whatever the other wrote, with nothing reporting the loss (§10.3).
+**M3a — Shell infrastructure.** `Preferences` and `PreferencesStore`, `ClipboardService`, the single-instance mechanism of §10.3, and tray availability with the fallback §10.2 describes. Deliverable: a preference file that survives a restart, a clipboard that clears only the string it placed, a lock file and loopback listener that answer whether another instance holds the vault, and a correct answer to whether this desktop has a tray. The role a launch takes from that mechanism is claimed by the shell of M4.
 
 **M3 — Session and unlocked UI.** `VaultSession` including `scheduleLock` and `cancelScheduledLock`, `SessionState`, `LockReason`, the code ticker, create-vault screen, unlock screen, account list with live TOTP codes and generate-on-request HOTP rows, the HOTP persist-before-display path, add-account by URI and manual entry, edit including counter, delete, and the secret disclosure gate stated at the head of §9, built as a component rather than at its one call site. Deliverable: a usable authenticator. Delete has no recovery path until export arrives in M4.
 
 **M4 — Tray, lifecycle and settings.** Tray construction and menu, hide-to-tray, the relock triggers of §8.3, grace period, idle timeout, the lifecycle behaviour `SecurityPolicy` governs, the single-instance role taken at startup so that a second launch raises the first window and exits, and the settings screen of §9.8 including change master password, re-encrypt, and encrypted export. The raise half reads the window visibility this milestone introduces, and §10.3 requires it to raise without counting as user presence.
 
+**M4b — Errors narrowed to the operation that reports them.** `VaultError` is one hierarchy over every operation, so a signature returning it admits cases the operation cannot produce: a read admits `VaultFileExists`, an entry operation admits `UnsupportedVersion`. A screen mapping it therefore carries fourteen branches of which a handful are reachable, the compiler enforces only that a branch exists, and nothing holds a branch's sentence to the operation it describes — which is how a message comes to name the wrong file or the wrong verb.
+
+Each case declares the operations it belongs to, so a read and a write each get a sealed view over the cases they can produce, and `VaultStore`, `VaultCodec` and `VaultSession` return the view that fits. §4's rule that distinct failures get distinct types, applied to the operation rather than only to the cause. The cases keep their names and their payloads; what changes is which of them a signature admits.
+
+The message mappings of §9 follow: each `when` shrinks to the cases its screen's operation can reach, every branch is then a branch a test can drive, and a sentence naming a read cannot be reached by a write. Deliverable: no mapping carries an unreachable branch, and each reachable one is asserted.
+
 **M5 — QR, plaintext export, packaging.** ZXing image decode for import and `QRCodeWriter` for the show-QR dialog (§9.7), plaintext export, import with duplicate detection, DMG/MSI/DEB configuration, icons for all three platforms, and verification of the packaged artifacts on each OS.
 
-M1 and M2 have no dependency on Compose and are fully testable headless. M3a touches neither the session nor the vault, so it is buildable and testable ahead of M3; every relock trigger in M4 resolves to a call on the session M3 builds, and every M5 item is an entry point added to a screen M3 or M4 already has.
+M1 and M2 have no dependency on Compose and are fully testable headless. M3a touches neither the session nor the vault, so it is buildable and testable ahead of M3; every relock trigger in M4 resolves to a call on the session M3 builds, and every M5 item is an entry point added to a screen M3 or M4 already has. M4b sits between them because it edits every signature that reports a failure and every mapping that renders one: taken after M5 it would touch the QR dialog, plaintext export and import as well, and taken before M4 it would have no settings screen to narrow.
 
 ---
 

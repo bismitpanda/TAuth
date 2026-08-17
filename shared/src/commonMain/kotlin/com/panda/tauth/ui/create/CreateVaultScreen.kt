@@ -208,16 +208,3 @@ private fun PasswordFieldState.scored(): PasswordStrength {
         value.fill(Char.MIN_VALUE)
     }
 }
-
-// Compared as CharArrays: routing either through a String would leave a copy of the password nothing
-// can zero. Neither side is a stored secret, so the early exit is no oracle.
-private fun PasswordFieldState.matches(other: PasswordFieldState): Boolean {
-    val left = copyValue()
-    val right = other.copyValue()
-    return try {
-        left.contentEquals(right)
-    } finally {
-        left.fill(Char.MIN_VALUE)
-        right.fill(Char.MIN_VALUE)
-    }
-}
