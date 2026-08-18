@@ -32,6 +32,8 @@ import com.panda.tauth.ui.list.SORT_MANUAL_LABEL
 import com.panda.tauth.ui.list.SORT_RECENT_LABEL
 import com.panda.tauth.ui.theme.LocalSpacing
 import com.panda.tauth.vault.VaultError
+import com.panda.tauth.vault.VaultReadError
+import com.panda.tauth.vault.VaultRewriteError
 
 internal const val SETTINGS_TITLE = "Settings"
 internal const val SETTINGS_BACK_LABEL = "Back to accounts"
@@ -161,7 +163,7 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
     shell: ShellSettings = ShellSettings(),
     isBusy: Boolean = false,
-    error: VaultError? = null,
+    error: VaultRewriteError? = null,
     exportError: ExportError? = null,
     onPolicyChange: (SecurityPolicy) -> Unit = {},
     onThemeChange: (Theme) -> Unit = {},
@@ -485,28 +487,17 @@ private fun messageFor(error: ExportError): String = when (error) {
     is ExportError.Io -> "The copy could not be written to that location. The vault is unchanged."
 }
 
-// No else branch: a VaultError case added elsewhere has to be given a message here before this
-// compiles again. Every branch is about a read, which is all an export asks of the vault.
-private fun readProblem(error: VaultError): String = when (error) {
+// No else branch, over the cases a read reports: reading the vault is all an export asks of it, so a
+// case joining that view has to be given a message here before this compiles again.
+private fun readProblem(error: VaultReadError): String = when (error) {
     is VaultError.NoVaultFile -> "there is no vault file at this location."
-
-    is VaultError.IntegrityFailure, is VaultError.Corrupt -> "the vault file is damaged."
-
-    is VaultError.LockedByAnotherProcess -> "another TAuth process is holding the vault file."
-
-    is VaultError.TooLarge -> "the vault is larger than the file format allows."
-
-    is VaultError.UnsupportedVersion -> "the vault file is in a format this version of TAuth does not read."
-
-    is VaultError.Io, is VaultError.VaultClosed, is VaultError.WrongPassword, is VaultError.NoSuchEntry,
-    is VaultError.InvalidEntry, is VaultError.InvalidSecret, is VaultError.MalformedUri,
-    is VaultError.VaultFileExists,
-    -> "the vault file could not be read."
+    is VaultError.Corrupt -> "the vault file is damaged."
+    is VaultError.Io -> "the vault file could not be read."
 }
 
-// No else branch: a VaultError case added elsewhere has to be given a message here before this
-// compiles again.
-private fun messageFor(error: VaultError): String = when (error) {
+// No else branch, over the cases a rewrite of the whole file reports: a case joining that view has to
+// be given a message here before this compiles again.
+private fun messageFor(error: VaultRewriteError): String = when (error) {
     // Kept apart from the damage cases below: this one means retype, those mean the file.
     is VaultError.WrongPassword -> "That password did not open the vault, so nothing was changed."
 
@@ -514,17 +505,16 @@ private fun messageFor(error: VaultError): String = when (error) {
 
     is VaultError.LockedByAnotherProcess -> "Another TAuth process is holding the vault file."
 
-    is VaultError.Io -> "The vault file could not be written."
+    // A rewrite reads the file and writes it back, so naming one half of that would be wrong about
+    // the change having landed whenever the other half is the half that failed.
+    is VaultError.Io -> "The vault file could not be read or written."
 
     is VaultError.TooLarge -> "The vault is larger than the file format allows."
 
-    is VaultError.IntegrityFailure, is VaultError.Corrupt -> "The vault file is damaged and was not written."
+    is VaultError.IntegrityFailure, is VaultError.Corrupt, is VaultError.InvalidSecret ->
+        "The vault file is damaged."
 
     is VaultError.UnsupportedVersion -> "The vault file is in a format this version of TAuth does not read."
 
     is VaultError.NoVaultFile -> "There is no vault file at this location."
-
-    is VaultError.InvalidSecret, is VaultError.MalformedUri, is VaultError.VaultFileExists,
-    is VaultError.InvalidEntry, is VaultError.NoSuchEntry,
-    -> "The change could not be saved."
 }

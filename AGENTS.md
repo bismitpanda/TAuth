@@ -43,7 +43,7 @@ Prefer `:shared:jvmTest` over `build` while iterating. The vault format and OTP 
 
 The points most often got wrong here:
 
-- **Errors are return values.** `VaultError` is a sealed interface, never thrown, never an `Exception` subclass. Fallible operations return `Outcome<T, VaultError>`. Exceptions from the JDK are caught where they arise and converted at once.
+- **Errors are return values.** `VaultError` is a sealed interface, never thrown, never an `Exception` subclass. Fallible operations return `Outcome<T, E>`, with `E` the view of that hierarchy holding the cases the operation reports (`IMPLEMENTATION_PLAN.md` §12). Exceptions from the JDK are caught where they arise and converted at once.
 - **Comments are minimal** — but every security invariant gets one. Nonce freshness, AAD binding, key zeroing and the no-`String`-for-secrets rule are not self-evident and break silently.
 - **Trailing commas, 120 columns, Kotlin official style.** Run `formatKotlin` rather than hand-formatting.
 

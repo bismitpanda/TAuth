@@ -24,6 +24,7 @@ import com.panda.tauth.settings.SortOrder
 import com.panda.tauth.settings.Theme
 import com.panda.tauth.ui.theme.TauthTheme
 import com.panda.tauth.vault.VaultError
+import com.panda.tauth.vault.VaultRewriteError
 import org.junit.Rule
 import java.io.IOException
 import kotlin.test.Test
@@ -568,6 +569,95 @@ class SettingsScreenTest {
             .assertIsDisplayed()
     }
 
+    // The remaining branches of the mapping this screen holds, which is every case a rewrite of the
+    // whole file reports.
+    @Test
+    fun `a lock during the change is reported without claiming where it stands`() {
+        show(error = VaultError.VaultClosed)
+
+        compose.onNodeWithText("The vault locked during the change. Unlock to see where it stands.")
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun `a vault held by another process shows its own message`() {
+        show(error = VaultError.LockedByAnotherProcess("vault.lock"))
+
+        compose.onNodeWithText("Another TAuth process is holding the vault file.")
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    // A rewrite reads and writes, so the sentence names neither half on its own.
+    @Test
+    fun `a failed read or write says it could be either`() {
+        show(error = VaultError.Io(IOException("no such device")))
+
+        compose.onNodeWithText("The vault file could not be read or written.").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun `a vault past the size the writer will produce shows its own message`() {
+        show(error = VaultError.TooLarge(size = 2, limit = 1))
+
+        compose.onNodeWithText("The vault is larger than the file format allows.")
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun `a structure that does not parse shows the damaged-file message`() {
+        show(error = VaultError.Corrupt("header checksum does not match the header"))
+
+        compose.onNodeWithText("The vault file is damaged.").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun `a failed tag shows the damaged-file message`() {
+        show(error = VaultError.IntegrityFailure)
+
+        compose.onNodeWithText("The vault file is damaged.").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun `a secret that will not decode shows the damaged-file message`() {
+        show(error = VaultError.InvalidSecret("invalid base32 character"))
+
+        compose.onNodeWithText("The vault file is damaged.").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun `a version the reader does not know shows its own message`() {
+        show(error = VaultError.UnsupportedVersion(found = 2, supported = 1))
+
+        compose.onNodeWithText("The vault file is in a format this version of TAuth does not read.")
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun `a vault file that is not there shows its own message`() {
+        show(error = VaultError.NoVaultFile)
+
+        compose.onNodeWithText("There is no vault file at this location.").performScrollTo().assertIsDisplayed()
+    }
+
+    // One means retype and the other means the file, and neither may stand in for the other.
+    @Test
+    fun `a damaged file does not show the password message`() {
+        show(error = VaultError.Corrupt("header checksum does not match the header"))
+
+        compose.onNodeWithText("That password did not open the vault, so nothing was changed.").assertDoesNotExist()
+    }
+
+    @Test
+    fun `a wrong password does not show the damaged-file message`() {
+        show(error = VaultError.WrongPassword)
+
+        compose.onNodeWithText("The vault file is damaged.").assertDoesNotExist()
+    }
+
     @Test
     fun `a re-encryption is held back until a password is typed`() {
         show()
@@ -648,7 +738,7 @@ class SettingsScreenTest {
         preferences: Preferences = STORED_PREFERENCES,
         shell: ShellSettings = shellSettings(canConfigureTray = true),
         isBusy: Boolean = false,
-        error: VaultError? = null,
+        error: VaultRewriteError? = null,
         exportError: ExportError? = null,
     ) {
         compose.setContent {

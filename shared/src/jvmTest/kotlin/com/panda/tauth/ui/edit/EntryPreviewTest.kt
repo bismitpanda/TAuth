@@ -8,6 +8,7 @@ import com.panda.tauth.Outcome
 import com.panda.tauth.totp.OtpAuthUri
 import com.panda.tauth.ui.SEED_BASE32
 import com.panda.tauth.ui.theme.TauthTheme
+import com.panda.tauth.vault.DraftError
 import com.panda.tauth.vault.VaultError
 import org.junit.Rule
 import kotlin.test.Test
@@ -15,8 +16,8 @@ import kotlin.test.Test
 // The preview's own wording, repeated here as literals so a changed message fails the test that names
 // it rather than following it.
 private const val MALFORMED_MESSAGE = "That is not an account this reads: not an otpauth URI."
-private const val DAMAGED_MESSAGE = "The vault file is damaged."
-private const val WRONG_PASSWORD_MESSAGE = "That password did not open the vault."
+private const val SECRET_MESSAGE = "The secret is not usable: invalid base32 character."
+private const val DETAILS_MESSAGE = "These details do not make an account: digits must be 6..8."
 
 private const val TOTP_URI = "otpauth://totp/GitHub:alice?secret=$SEED_BASE32&issuer=GitHub"
 
@@ -45,37 +46,21 @@ class EntryPreviewTest {
         compose.onNodeWithText(MALFORMED_MESSAGE).assertIsDisplayed()
     }
 
-    // A damaged file and a password that did not work mean different things, and no mapping in the
-    // application may let one stand in for the other, this screen included.
     @Test
-    fun `a damaged file shows the damaged-file message`() {
-        show(Outcome.Failure(VaultError.IntegrityFailure))
+    fun `a secret that is not usable says so about the secret`() {
+        show(Outcome.Failure(VaultError.InvalidSecret("invalid base32 character")))
 
-        compose.onNodeWithText(DAMAGED_MESSAGE).assertIsDisplayed()
+        compose.onNodeWithText(SECRET_MESSAGE).assertIsDisplayed()
     }
 
     @Test
-    fun `a damaged file does not show the password message`() {
-        show(Outcome.Failure(VaultError.IntegrityFailure))
+    fun `details that do not make an account say so with the rule they broke`() {
+        show(Outcome.Failure(VaultError.InvalidEntry("digits must be 6..8")))
 
-        compose.onNodeWithText(WRONG_PASSWORD_MESSAGE).assertDoesNotExist()
+        compose.onNodeWithText(DETAILS_MESSAGE).assertIsDisplayed()
     }
 
-    @Test
-    fun `a wrong password shows the password message`() {
-        show(Outcome.Failure(VaultError.WrongPassword))
-
-        compose.onNodeWithText(WRONG_PASSWORD_MESSAGE).assertIsDisplayed()
-    }
-
-    @Test
-    fun `a wrong password does not show the damaged-file message`() {
-        show(Outcome.Failure(VaultError.WrongPassword))
-
-        compose.onNodeWithText(DAMAGED_MESSAGE).assertDoesNotExist()
-    }
-
-    private fun show(resolved: Outcome<OtpAuthUri, VaultError>?) {
+    private fun show(resolved: Outcome<OtpAuthUri, DraftError>?) {
         compose.setContent {
             TauthTheme { EntryPreview(resolved = resolved, epochSeconds = 0) }
         }

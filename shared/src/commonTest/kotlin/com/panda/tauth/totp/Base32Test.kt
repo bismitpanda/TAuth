@@ -173,6 +173,12 @@ class Base32Test {
     }
 
     @Test
+    fun `a decode refusal is typed at the only case a decode reports`() {
+        val refusal: VaultError.InvalidSecret = checkNotNull(Base32.decode("MZX").errorOrNull)
+        assertEquals("truncated base32 group", refusal.detail)
+    }
+
+    @Test
     fun `an invalid character does not appear in the error detail`() {
         val error = Base32.decode("SECRET1")
         assertIs<Outcome.Failure<VaultError.InvalidSecret>>(error)

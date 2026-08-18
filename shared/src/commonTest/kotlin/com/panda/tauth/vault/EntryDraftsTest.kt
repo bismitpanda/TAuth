@@ -153,6 +153,27 @@ class EntryDraftsTest {
     }
 
     @Test
+    fun `an add form refusal is typed at the only case resolving one reports`() {
+        val refusal: VaultError.InvalidEntry = checkNotNull(TOTP_DRAFT.copy(period = "").resolved().errorOrNull)
+
+        assertEquals("the period must be a whole number of seconds", refusal.detail)
+    }
+
+    @Test
+    fun `a secret check refusal is typed at the only case the check reports`() {
+        val refusal: VaultError.InvalidSecret = checkNotNull(TOTP_DRAFT.copy(secret = "not base32!").secretProblem())
+
+        assertEquals("invalid base32 character", refusal.detail)
+    }
+
+    @Test
+    fun `an edit form refusal is typed at the only case resolving one reports`() {
+        val refusal: VaultError.InvalidEntry = checkNotNull(TOTP_EDIT.resolved(OtpType.HOTP).errorOrNull)
+
+        assertEquals("the counter must be a whole number", refusal.detail)
+    }
+
+    @Test
     fun `an edit form carries the account name that was typed`() {
         assertEquals("erin", TOTP_EDIT.copy(accountName = "erin").resolved(OtpType.TOTP).valueOrNull?.accountName)
     }

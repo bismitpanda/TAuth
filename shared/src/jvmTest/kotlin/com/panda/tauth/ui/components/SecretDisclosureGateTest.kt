@@ -17,6 +17,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import com.panda.tauth.ui.theme.TauthTheme
+import com.panda.tauth.vault.DiscloseError
 import com.panda.tauth.vault.VaultError
 import org.junit.Rule
 import kotlin.test.Test
@@ -218,12 +219,12 @@ class SecretDisclosureGateTest {
         compose.runOnIdle { assertNull(captured) }
     }
 
-    private fun show(isBusy: Boolean = false, error: VaultError? = null) {
+    private fun show(isBusy: Boolean = false, error: DiscloseError? = null) {
         compose.setContent { TauthTheme { gate(isBusy = isBusy, error = error) } }
     }
 
     @androidx.compose.runtime.Composable
-    private fun gate(isBusy: Boolean = false, error: VaultError? = null) {
+    private fun gate(isBusy: Boolean = false, error: DiscloseError? = null) {
         SecretDisclosureGate(
             statement = STATEMENT,
             onConfirm = { captured = it },

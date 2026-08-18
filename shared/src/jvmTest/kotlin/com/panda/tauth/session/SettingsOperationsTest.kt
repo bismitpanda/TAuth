@@ -9,6 +9,8 @@ import com.panda.tauth.vault.VaultCodec
 import com.panda.tauth.vault.VaultEntry
 import com.panda.tauth.vault.VaultError
 import com.panda.tauth.vault.VaultFile
+import com.panda.tauth.vault.VaultReadError
+import com.panda.tauth.vault.VaultWriteError
 import com.panda.tauth.vault.hotpEntry
 import com.panda.tauth.vault.totpEntry
 import kotlinx.coroutines.CompletableDeferred
@@ -78,15 +80,15 @@ private val WRITE_REFUSED = VaultError.LockedByAnotherProcess("/nowhere/vault.ta
 
 private class SettingsVaultFile(var contents: ByteArray?) : VaultFile {
     var writes = 0
-    var refusal: VaultError? = null
+    var refusal: VaultWriteError? = null
     var onWrite: ((ByteArray) -> Unit)? = null
 
     override fun exists(): Boolean = contents != null
 
-    override fun read(): Outcome<ByteArray, VaultError> =
+    override fun read(): Outcome<ByteArray, VaultReadError> =
         contents?.let { Outcome.Success(it) } ?: Outcome.Failure(VaultError.NoVaultFile)
 
-    override fun write(bytes: ByteArray): Outcome<Unit, VaultError> {
+    override fun write(bytes: ByteArray): Outcome<Unit, VaultWriteError> {
         writes++
         onWrite?.invoke(bytes)
         refusal?.let { return Outcome.Failure(it) }

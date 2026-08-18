@@ -16,6 +16,7 @@ import com.panda.tauth.totp.OtpType
 import com.panda.tauth.totp.groupedCode
 import com.panda.tauth.totp.previewCode
 import com.panda.tauth.ui.theme.LocalSpacing
+import com.panda.tauth.vault.DraftError
 import com.panda.tauth.vault.VaultError
 
 internal const val PREVIEW_TAG = "entry-preview"
@@ -30,7 +31,7 @@ internal const val PERIOD_SUFFIX = "-second period"
 // without writing anything, so confirming an hotp account spends no counter value.
 @Composable
 internal fun EntryPreview(
-    resolved: Outcome<OtpAuthUri, VaultError>?,
+    resolved: Outcome<OtpAuthUri, DraftError>?,
     epochSeconds: Long,
     modifier: Modifier = Modifier,
 ) {
@@ -81,23 +82,10 @@ private fun Resolved(uri: OtpAuthUri, epochSeconds: Long) {
     }
 }
 
-// No else branch: a VaultError case added elsewhere has to be given a sentence here before this
-// compiles again.
-internal fun draftProblemFor(error: VaultError): String = when (error) {
+// No else branch, over the cases resolving a draft reports: a case joining that view has to be given a
+// sentence here before this compiles again.
+internal fun draftProblemFor(error: DraftError): String = when (error) {
     is VaultError.MalformedUri -> "That is not an account this reads: ${error.detail}."
-
     is VaultError.InvalidSecret -> "The secret is not usable: ${error.detail}."
-
     is VaultError.InvalidEntry -> "These details do not make an account: ${error.detail}."
-
-    // A damaged file and a password that did not work never share a message, whichever mapping they
-    // reach. Neither can arrive here, and the rule holds regardless.
-    is VaultError.IntegrityFailure, is VaultError.Corrupt -> "The vault file is damaged."
-
-    is VaultError.WrongPassword -> "That password did not open the vault."
-
-    is VaultError.NoVaultFile, is VaultError.VaultFileExists, is VaultError.UnsupportedVersion,
-    is VaultError.NoSuchEntry, is VaultError.VaultClosed, is VaultError.TooLarge, is VaultError.Io,
-    is VaultError.LockedByAnotherProcess,
-    -> "These details do not make an account."
 }

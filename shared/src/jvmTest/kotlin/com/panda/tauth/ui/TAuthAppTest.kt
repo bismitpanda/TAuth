@@ -36,6 +36,8 @@ import com.panda.tauth.vault.VaultBody
 import com.panda.tauth.vault.VaultCodec
 import com.panda.tauth.vault.VaultError
 import com.panda.tauth.vault.VaultFile
+import com.panda.tauth.vault.VaultReadError
+import com.panda.tauth.vault.VaultWriteError
 import com.panda.tauth.vault.totpEntry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -137,10 +139,10 @@ private class MemoryVaultFile(
 ) : VaultFile {
     override fun exists(): Boolean = contents != null
 
-    override fun read(): Outcome<ByteArray, VaultError> =
+    override fun read(): Outcome<ByteArray, VaultReadError> =
         contents?.let { Outcome.Success(it) } ?: Outcome.Failure(VaultError.NoVaultFile)
 
-    override fun write(bytes: ByteArray): Outcome<Unit, VaultError> {
+    override fun write(bytes: ByteArray): Outcome<Unit, VaultWriteError> {
         beforeWrite()
         if (!isWritable) return Outcome.Failure(WRITE_REFUSED)
         contents = bytes

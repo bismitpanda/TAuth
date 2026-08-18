@@ -27,6 +27,8 @@ import com.panda.tauth.totp.OtpType
 import com.panda.tauth.ui.components.ChoiceRow
 import com.panda.tauth.ui.components.FormField
 import com.panda.tauth.ui.theme.LocalSpacing
+import com.panda.tauth.vault.DraftError
+import com.panda.tauth.vault.EntryAddError
 import com.panda.tauth.vault.EntryDraft
 import com.panda.tauth.vault.VaultError
 import com.panda.tauth.vault.resolved
@@ -74,14 +76,14 @@ fun AddAccountScreen(
     epochSeconds: Long,
     modifier: Modifier = Modifier,
     isBusy: Boolean = false,
-    error: VaultError? = null,
+    error: EntryAddError? = null,
 ) {
     val spacing = LocalSpacing.current
     var path by remember { mutableStateOf(AddPath.PASTE) }
     var pasted by remember { mutableStateOf("") }
     var draft by remember { mutableStateOf(EntryDraft()) }
 
-    val resolved: Outcome<OtpAuthUri, VaultError>? = when (path) {
+    val resolved: Outcome<OtpAuthUri, DraftError>? = when (path) {
         AddPath.PASTE -> if (pasted.isBlank()) null else OtpAuthUri.parse(pasted)
         AddPath.MANUAL -> if (draft.secret.isEmpty() && draft.accountName.isEmpty()) null else draft.resolved()
     }
@@ -230,28 +232,14 @@ private fun AdvancedFields(
     }
 }
 
-// No else branch: a VaultError case added elsewhere has to be given a message here before this
-// compiles again.
-private fun messageFor(error: VaultError): String = when (error) {
+// No else branch, over the cases storing a new entry reports: a case joining that view has to be given
+// a message here before this compiles again.
+private fun messageFor(error: EntryAddError): String = when (error) {
     is VaultError.InvalidEntry -> "The account could not be saved: ${error.detail}."
-
     is VaultError.InvalidSecret -> "The secret could not be stored: ${error.detail}."
-
     is VaultError.VaultClosed -> "The vault locked before the account was saved."
-
     is VaultError.LockedByAnotherProcess -> "Another TAuth process is holding the vault file."
-
     is VaultError.Io -> "The vault file could not be written."
-
     is VaultError.TooLarge -> "The vault is larger than the file format allows."
-
-    is VaultError.IntegrityFailure, is VaultError.Corrupt -> "The vault file is damaged and was not written."
-
     is VaultError.UnsupportedVersion -> "The vault file is in a format this version of TAuth does not read."
-
-    is VaultError.NoVaultFile -> "There is no vault file at this location."
-
-    is VaultError.MalformedUri, is VaultError.NoSuchEntry, is VaultError.VaultFileExists,
-    is VaultError.WrongPassword,
-    -> "The account could not be saved."
 }

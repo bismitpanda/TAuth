@@ -41,6 +41,8 @@ import com.panda.tauth.ui.CopyResult
 import com.panda.tauth.ui.components.DisclosureState
 import com.panda.tauth.ui.components.SecretDisclosureGate
 import com.panda.tauth.ui.theme.LocalSpacing
+import com.panda.tauth.vault.DiscloseError
+import com.panda.tauth.vault.EntryChangeError
 import com.panda.tauth.vault.VaultError
 
 internal const val TITLE = "Accounts"
@@ -94,11 +96,11 @@ fun AccountListScreen(
     sortOrder: SortOrder = SortOrder.MANUAL,
     clipboardClearSeconds: Int = 0,
     clipboard: ClipboardCopy = ClipboardCopy { _, _ -> CopyResult.REFUSED },
-    error: VaultError? = null,
+    error: EntryChangeError? = null,
     onSortOrderChange: (SortOrder) -> Unit = {},
     onVisibleChange: (Set<String>) -> Unit = {},
-    onGenerate: suspend (String) -> Outcome<String, VaultError> = { Outcome.Failure(VaultError.VaultClosed) },
-    onDiscloseUri: suspend (String, CharArray) -> Outcome<String, VaultError> = { _, _ ->
+    onGenerate: suspend (String) -> Outcome<String, EntryChangeError> = { Outcome.Failure(VaultError.VaultClosed) },
+    onDiscloseUri: suspend (String, CharArray) -> Outcome<String, DiscloseError> = { _, _ ->
         Outcome.Failure(VaultError.VaultClosed)
     },
     onMove: (String, Int) -> Unit = { _, _ -> },
@@ -113,7 +115,7 @@ fun AccountListScreen(
     val listState = rememberLazyListState()
     // Generated codes end with this composition, so a lock takes them off the screen with it.
     val rows = remember { RowState() }
-    val gate = remember { DisclosureState<UnlockedEntry>() }
+    val gate = remember { DisclosureState<UnlockedEntry, DiscloseError>() }
 
     var query by remember { mutableStateOf("") }
     var pendingDelete by remember { mutableStateOf<UnlockedEntry?>(null) }
@@ -288,7 +290,7 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit, modifier
 }
 
 @Composable
-private fun ListError(error: VaultError?, modifier: Modifier = Modifier) {
+private fun ListError(error: EntryChangeError?, modifier: Modifier = Modifier) {
     error?.let {
         Text(
             messageFor(it),
@@ -342,30 +344,16 @@ private fun DeleteConfirmation(
     )
 }
 
-// No else branch: a VaultError case added elsewhere has to be given a message here before this
-// compiles again.
-private fun messageFor(error: VaultError): String = when (error) {
+// No else branch, over the cases a change to an entry reports: a case joining that view has to be
+// given a message here before this compiles again.
+private fun messageFor(error: EntryChangeError): String = when (error) {
     is VaultError.NoSuchEntry -> "That account is no longer in the vault."
-
     is VaultError.InvalidEntry -> "The change was refused: ${error.detail}."
-
     is VaultError.VaultClosed -> "The vault locked before the change was saved."
-
     is VaultError.LockedByAnotherProcess -> "Another TAuth process is holding the vault file."
-
     is VaultError.Io -> "The vault file could not be written."
-
     is VaultError.TooLarge -> "The vault is larger than the file format allows."
-
-    is VaultError.IntegrityFailure, is VaultError.Corrupt -> "The vault file is damaged and was not written."
-
     is VaultError.UnsupportedVersion -> "The vault file is in a format this version of TAuth does not read."
-
-    is VaultError.NoVaultFile -> "There is no vault file at this location."
-
-    is VaultError.InvalidSecret, is VaultError.MalformedUri, is VaultError.VaultFileExists,
-    is VaultError.WrongPassword,
-    -> "The change could not be saved."
 }
 
 private fun dragModifier(

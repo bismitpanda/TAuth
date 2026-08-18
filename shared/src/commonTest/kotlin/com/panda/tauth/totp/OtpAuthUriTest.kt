@@ -2,6 +2,7 @@ package com.panda.tauth.totp
 
 import com.panda.tauth.Outcome
 import com.panda.tauth.errorOrNull
+import com.panda.tauth.vault.UriParseError
 import com.panda.tauth.vault.VaultError
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -27,7 +28,14 @@ private fun parsed(uri: String): OtpAuthUri {
     return outcome.value
 }
 
-private fun errorOf(uri: String): VaultError? = OtpAuthUri.parse(uri).errorOrNull
+private fun errorOf(uri: String): UriParseError? = OtpAuthUri.parse(uri).errorOrNull
+
+// A `when` with no else over the view a parse declares, so widening that signature stops this file
+// compiling.
+private fun uriCase(error: UriParseError): String = when (error) {
+    is VaultError.MalformedUri -> "shape"
+    is VaultError.InvalidSecret -> "secret"
+}
 
 private fun roundTrip(original: OtpAuthUri) {
     assertEquals(original, parsed(original.build()))
@@ -520,5 +528,15 @@ class OtpAuthUriTest {
                 counter = ULong.MAX_VALUE,
             ),
         )
+    }
+
+    @Test
+    fun `a string that is not an otpauth URI reports through the view a parse declares`() {
+        assertEquals("shape", uriCase(checkNotNull(errorOf("https://example.com/totp/alice"))))
+    }
+
+    @Test
+    fun `a URI carrying no secret reports through the view a parse declares`() {
+        assertEquals("secret", uriCase(checkNotNull(errorOf("otpauth://totp/alice"))))
     }
 }

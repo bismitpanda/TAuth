@@ -26,7 +26,7 @@ private fun password() = PASSWORD.toCharArray()
 private fun newVault(body: VaultBody = VaultBody()) = written(VaultCodec.create(password(), body))
 
 // The writer refuses a file the reader would not take, so a test that wants bytes says so once.
-private fun written(outcome: Outcome<ByteArray, VaultError>): ByteArray {
+private fun written(outcome: Outcome<ByteArray, VaultEncodeError>): ByteArray {
     assertIs<Outcome.Success<ByteArray>>(outcome)
     return outcome.value
 }
@@ -625,6 +625,37 @@ class VaultCodecTest {
     }
 
     @Test
+    fun `a create reports through the view assembling a file declares`() {
+        val refused = VaultCodec.create(password(), VaultBody(v = BODY_VERSION + 1))
+        assertEquals("version", assembleCase(checkNotNull(refused.errorOrNull)))
+    }
+
+    @Test
+    fun `an encode reports through the view an encode declares`() {
+        val closed = opened(newVault()) { it }
+        assertEquals("closed", encodeCase(checkNotNull(VaultCodec.encode(closed, closed.body).errorOrNull)))
+    }
+
+    @Test
+    fun `an open reports through the view an open declares`() {
+        val refused = VaultCodec.open(newVault(), "not the password".toCharArray())
+        assertEquals("password", openCase(checkNotNull(refused.errorOrNull)))
+    }
+
+    @Test
+    fun `a password check reports through the view a check declares`() {
+        val header = opened(newVault()) { it.header }
+        val refused = VaultCodec.verify(header, "not the password".toCharArray())
+        assertEquals("password", checkCase(checkNotNull(refused.errorOrNull)))
+    }
+
+    @Test
+    fun `a rewrite reports through the view reopening and writing back declares`() {
+        val refused = VaultCodec.changePassword(newVault(), "not the password".toCharArray(), password())
+        assertEquals("password", reencodeCase(checkNotNull(refused.errorOrNull)))
+    }
+
+    @Test
     fun `a body whose version is not a number is corrupt rather than a matching version`() {
         // A `v` the version read cannot take is left to the decode behind it, which reports it as
         // damage; the read itself must not carry its parse failure out as a throw.
@@ -746,6 +777,40 @@ private fun plainHeader(): VaultHeader = VaultHeader(
 // The header is a public data class, so a caller can hand the writer one open() would never return.
 private fun handMadeVault(header: VaultHeader): OpenVault =
     OpenVault(VaultBody(), header, SecureBytes.adopt(ByteArray(AEAD_KEY_BYTES)))
+
+// One classifier per narrowed signature, each a `when` with no else over the view that signature
+// declares, so widening one back to VaultError stops this file compiling.
+private fun assembleCase(error: VaultAssembleError): String = when (error) {
+    is VaultError.UnsupportedVersion -> "version"
+    is VaultError.TooLarge -> "size"
+}
+
+private fun encodeCase(error: VaultEncodeError): String = when (error) {
+    is VaultError.UnsupportedVersion -> "version"
+    is VaultError.TooLarge -> "size"
+    is VaultError.VaultClosed -> "closed"
+}
+
+private fun openCase(error: VaultOpenError): String = when (error) {
+    is VaultError.WrongPassword -> "password"
+    is VaultError.IntegrityFailure -> "tag"
+    is VaultError.Corrupt -> "damaged"
+    is VaultError.UnsupportedVersion -> "version"
+}
+
+private fun checkCase(error: PasswordCheckError): String = when (error) {
+    is VaultError.WrongPassword -> "password"
+    is VaultError.Corrupt -> "damaged"
+}
+
+private fun reencodeCase(error: VaultReencodeError): String = when (error) {
+    is VaultError.WrongPassword -> "password"
+    is VaultError.IntegrityFailure -> "tag"
+    is VaultError.Corrupt -> "damaged"
+    is VaultError.UnsupportedVersion -> "version"
+    is VaultError.TooLarge -> "size"
+    is VaultError.VaultClosed -> "closed"
+}
 
 // A vault id long enough that the header JSON around it passes the length the reader will slice.
 private fun oversizedHeaderVault(): OpenVault = handMadeVault(

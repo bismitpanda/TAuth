@@ -41,11 +41,12 @@ data class EntryEditDraft(
 
 // The secret on its own. The URI model refuses the account name before it reaches the secret, so a
 // form checked only through that would answer a base32 mistake with a complaint about another field.
-fun EntryDraft.secretProblem(): VaultError? = if (secret.isEmpty()) null else Base32.validateSecret(secret)
+fun EntryDraft.secretProblem(): VaultError.InvalidSecret? =
+    if (secret.isEmpty()) null else Base32.validateSecret(secret)
 
 // A paste and a filled-in form arrive at the same OtpAuthUri, so both are previewed and saved by one
 // path. Every rule beyond the parsing here is the URI model's own and is reported as it refuses.
-fun EntryDraft.resolved(): Outcome<OtpAuthUri, VaultError> {
+fun EntryDraft.resolved(): Outcome<OtpAuthUri, VaultError.InvalidEntry> {
     val digitCount = digits.toAsciiIntOrNull()
         ?: return Outcome.Failure(VaultError.InvalidEntry(DIGITS_RULE))
     val resolved = when (val factor = movingFactor(type, period, counter)) {
@@ -74,7 +75,7 @@ fun EntryDraft.resolved(): Outcome<OtpAuthUri, VaultError> {
 
 // The type decides which moving factor the edit carries, and it is the entry's rather than the
 // form's: an edit cannot change it.
-fun EntryEditDraft.resolved(type: OtpType): Outcome<EntryEdit, VaultError> {
+fun EntryEditDraft.resolved(type: OtpType): Outcome<EntryEdit, VaultError.InvalidEntry> {
     val digitCount = digits.toAsciiIntOrNull()
         ?: return Outcome.Failure(VaultError.InvalidEntry(DIGITS_RULE))
     val resolved = when (val factor = movingFactor(type, period, counter)) {
@@ -99,12 +100,13 @@ private const val COUNTER_RULE = "the counter must be a whole number"
 
 private class Factor(val period: Int?, val counter: ULong?)
 
-private fun movingFactor(type: OtpType, period: String, counter: String): Outcome<Factor, VaultError> = when (type) {
-    OtpType.TOTP -> period.toAsciiIntOrNull()
-        ?.let { Outcome.Success(Factor(it, null)) }
-        ?: Outcome.Failure(VaultError.InvalidEntry(PERIOD_RULE))
+private fun movingFactor(type: OtpType, period: String, counter: String): Outcome<Factor, VaultError.InvalidEntry> =
+    when (type) {
+        OtpType.TOTP -> period.toAsciiIntOrNull()
+            ?.let { Outcome.Success(Factor(it, null)) }
+            ?: Outcome.Failure(VaultError.InvalidEntry(PERIOD_RULE))
 
-    OtpType.HOTP -> counter.toAsciiULongOrNull()
-        ?.let { Outcome.Success(Factor(null, it)) }
-        ?: Outcome.Failure(VaultError.InvalidEntry(COUNTER_RULE))
-}
+        OtpType.HOTP -> counter.toAsciiULongOrNull()
+            ?.let { Outcome.Success(Factor(null, it)) }
+            ?: Outcome.Failure(VaultError.InvalidEntry(COUNTER_RULE))
+    }

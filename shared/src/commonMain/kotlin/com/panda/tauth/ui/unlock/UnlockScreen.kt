@@ -22,6 +22,7 @@ import com.panda.tauth.ui.components.PasswordField
 import com.panda.tauth.ui.components.PasswordFieldState
 import com.panda.tauth.ui.theme.LocalSpacing
 import com.panda.tauth.vault.VaultError
+import com.panda.tauth.vault.VaultUnlockError
 
 private const val TITLE = "Unlock your vault"
 private const val PASSWORD_LABEL = "Master password"
@@ -38,7 +39,7 @@ fun UnlockScreen(
     onUnlock: (CharArray) -> Unit,
     modifier: Modifier = Modifier,
     isBusy: Boolean = false,
-    error: VaultError? = null,
+    error: VaultUnlockError? = null,
     lastReason: LockReason? = null,
 ) {
     val password = remember { PasswordFieldState() }
@@ -115,9 +116,9 @@ private fun subtitleFor(reason: LockReason): String? = when (reason) {
     LockReason.FocusLost -> "The vault locked when the window lost focus."
 }
 
-// No else branch: a VaultError case added elsewhere has to be given a message here before this
-// compiles again.
-private fun messageFor(error: VaultError): String = when (error) {
+// No else branch, over the cases an unlock reports: a case joining that view has to be given a message
+// here before this compiles again.
+private fun messageFor(error: VaultUnlockError): String = when (error) {
     // Kept apart from the damage cases below: this one means retype, those mean the file.
     is VaultError.WrongPassword -> "That password did not open the vault."
 
@@ -130,17 +131,9 @@ private fun messageFor(error: VaultError): String = when (error) {
 
     is VaultError.UnsupportedVersion -> "The vault file is in a format this version of TAuth does not read."
 
-    is VaultError.LockedByAnotherProcess -> "Another TAuth process is holding the vault file."
-
     is VaultError.Io -> "The vault file could not be read."
-
-    is VaultError.TooLarge -> "The vault is larger than the file format allows."
 
     // A lock overtook the derivation. The vault the user closed stays closed, and this says so
     // rather than reporting a failure they did not cause.
     is VaultError.VaultClosed -> "The vault locked while your password was being checked."
-
-    is VaultError.VaultFileExists, is VaultError.MalformedUri, is VaultError.InvalidEntry,
-    is VaultError.NoSuchEntry,
-    -> "The vault could not be opened."
 }

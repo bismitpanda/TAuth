@@ -9,6 +9,8 @@ import com.panda.tauth.vault.VaultBody
 import com.panda.tauth.vault.VaultCodec
 import com.panda.tauth.vault.VaultError
 import com.panda.tauth.vault.VaultFile
+import com.panda.tauth.vault.VaultReadError
+import com.panda.tauth.vault.VaultWriteError
 import com.panda.tauth.vault.hotpEntry
 import com.panda.tauth.vault.totpEntry
 import kotlinx.coroutines.CompletableDeferred
@@ -66,10 +68,10 @@ private val TICKER_VAULT by lazy {
 private class ByteVaultFile(private var bytes: ByteArray?) : VaultFile {
     override fun exists(): Boolean = bytes != null
 
-    override fun read(): Outcome<ByteArray, VaultError> =
+    override fun read(): Outcome<ByteArray, VaultReadError> =
         bytes?.let { Outcome.Success(it) } ?: Outcome.Failure(VaultError.NoVaultFile)
 
-    override fun write(bytes: ByteArray): Outcome<Unit, VaultError> {
+    override fun write(bytes: ByteArray): Outcome<Unit, VaultWriteError> {
         this.bytes = bytes
         return Outcome.Success(Unit)
     }

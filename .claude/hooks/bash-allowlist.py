@@ -22,12 +22,14 @@ GIT_READ = frozenset(
     {
         "git diff",
         "git diff --stat",
+        "git diff --cached",
+        "git diff --cached --stat",
         "git status --short",
     }
 )
 
 ALLOWED = {
-    "tauth-implementer": GRADLE,
+    "tauth-implementer": GRADLE | GIT_READ,
     "tauth-verifier": GRADLE | GIT_READ,
 }
 

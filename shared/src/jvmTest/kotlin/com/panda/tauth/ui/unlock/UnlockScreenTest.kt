@@ -20,6 +20,7 @@ import androidx.compose.ui.test.performTextInput
 import com.panda.tauth.session.LockReason
 import com.panda.tauth.ui.theme.TauthTheme
 import com.panda.tauth.vault.VaultError
+import com.panda.tauth.vault.VaultUnlockError
 import org.junit.Rule
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -195,24 +196,10 @@ class UnlockScreenTest {
     }
 
     @Test
-    fun `a vault held by another process shows its own message`() {
-        show(error = VaultError.LockedByAnotherProcess("vault.tauth"))
-
-        compose.onNodeWithText("Another TAuth process is holding the vault file.").assertIsDisplayed()
-    }
-
-    @Test
     fun `a failed read shows the read message`() {
         show(error = VaultError.Io(RuntimeException("disk gone")))
 
         compose.onNodeWithText("The vault file could not be read.").assertIsDisplayed()
-    }
-
-    @Test
-    fun `a vault past the size ceiling shows its own message`() {
-        show(error = VaultError.TooLarge(size = 2, limit = 1))
-
-        compose.onNodeWithText("The vault is larger than the file format allows.").assertIsDisplayed()
     }
 
     @Test
@@ -313,7 +300,7 @@ class UnlockScreenTest {
         compose.onNodeWithTag(UNLOCK_SUBTITLE_TAG).assertDoesNotExist()
     }
 
-    private fun show(isBusy: Boolean = false, error: VaultError? = null, lastReason: LockReason? = null) {
+    private fun show(isBusy: Boolean = false, error: VaultUnlockError? = null, lastReason: LockReason? = null) {
         compose.setContent {
             TauthTheme {
                 UnlockScreen(

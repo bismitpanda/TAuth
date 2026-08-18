@@ -3,6 +3,7 @@ package com.panda.tauth.totp
 import com.panda.tauth.Outcome
 import com.panda.tauth.flatMap
 import com.panda.tauth.map
+import com.panda.tauth.vault.UriParseError
 import com.panda.tauth.vault.VaultError
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -110,7 +111,7 @@ data class OtpAuthUri(
         // label is entitled to hold.
         private const val WRAPPING_WHITESPACE = " \t\r\n"
 
-        fun parse(input: String): Outcome<OtpAuthUri, VaultError> {
+        fun parse(input: String): Outcome<OtpAuthUri, UriParseError> {
             // A paste carries the wrapping of the window it came from; only these four characters
             // are shed, and only at the ends.
             val trimmed = input.trim { it in WRAPPING_WHITESPACE }
@@ -126,7 +127,7 @@ data class OtpAuthUri(
             }
         }
 
-        private fun parseLabel(rawLabel: String): Outcome<Label, VaultError> {
+        private fun parseLabel(rawLabel: String): Outcome<Label, VaultError.MalformedUri> {
             val label = percentDecode(rawLabel)
                 ?: return Outcome.Failure(VaultError.MalformedUri("malformed percent-encoding in the label"))
             // Decoding precedes the split, so %3A separates just as a literal colon does.
@@ -150,7 +151,7 @@ data class OtpAuthUri(
             return Outcome.Success(Label(issuer, accountName))
         }
 
-        private fun parseQuery(query: String): Outcome<Map<String, String>, VaultError> {
+        private fun parseQuery(query: String): Outcome<Map<String, String>, VaultError.MalformedUri> {
             // A producer writes %20 into a value, so raw whitespace here came from a wrapped paste
             // and would be kept faithfully, storing an issuer nobody typed.
             if (query.any { it in WRAPPING_WHITESPACE }) {
@@ -168,14 +169,14 @@ data class OtpAuthUri(
             return Outcome.Success(params)
         }
 
-        private fun malformedParameter(): Outcome<Map<String, String>, VaultError> =
+        private fun malformedParameter(): Outcome<Map<String, String>, VaultError.MalformedUri> =
             Outcome.Failure(VaultError.MalformedUri("malformed percent-encoding in a parameter"))
 
         private fun assemble(
             type: OtpType,
             label: Label,
             params: Map<String, String>,
-        ): Outcome<OtpAuthUri, VaultError> = parseSecret(params).flatMap { secret ->
+        ): Outcome<OtpAuthUri, UriParseError> = parseSecret(params).flatMap { secret ->
             parseAlgorithm(params).flatMap { algorithm ->
                 parseDigits(params).flatMap { digits ->
                     parseMovingFactor(type, params).map { factor ->
@@ -207,21 +208,21 @@ data class OtpAuthUri(
             )
         }
 
-        private fun parseSecret(params: Map<String, String>): Outcome<String, VaultError> {
+        private fun parseSecret(params: Map<String, String>): Outcome<String, VaultError.InvalidSecret> {
             val secret = params[PARAM_SECRET]
                 ?: return Outcome.Failure(VaultError.InvalidSecret("missing secret"))
             val error = Base32.validateSecret(secret)
             return if (error == null) Outcome.Success(secret) else Outcome.Failure(error)
         }
 
-        private fun parseAlgorithm(params: Map<String, String>): Outcome<HashAlgorithm, VaultError> {
+        private fun parseAlgorithm(params: Map<String, String>): Outcome<HashAlgorithm, VaultError.MalformedUri> {
             val raw = params[PARAM_ALGORITHM] ?: return Outcome.Success(HashAlgorithm.SHA1)
             val algorithm = HashAlgorithm.parse(raw)
                 ?: return Outcome.Failure(VaultError.MalformedUri("unknown algorithm"))
             return Outcome.Success(algorithm)
         }
 
-        private fun parseDigits(params: Map<String, String>): Outcome<Int, VaultError> {
+        private fun parseDigits(params: Map<String, String>): Outcome<Int, VaultError.MalformedUri> {
             val raw = params[PARAM_DIGITS] ?: return Outcome.Success(OtpCore.DIGITS_DEFAULT)
             val digits = raw.toAsciiIntOrNull()?.takeIf { it in OtpCore.DIGITS_MIN..OtpCore.DIGITS_MAX }
                 ?: return Outcome.Failure(
@@ -230,13 +231,15 @@ data class OtpAuthUri(
             return Outcome.Success(digits)
         }
 
-        private fun parseMovingFactor(type: OtpType, params: Map<String, String>): Outcome<MovingFactor, VaultError> =
-            when (type) {
-                OtpType.TOTP -> parseTotpFactor(params)
-                OtpType.HOTP -> parseHotpFactor(params)
-            }
+        private fun parseMovingFactor(
+            type: OtpType,
+            params: Map<String, String>,
+        ): Outcome<MovingFactor, VaultError.MalformedUri> = when (type) {
+            OtpType.TOTP -> parseTotpFactor(params)
+            OtpType.HOTP -> parseHotpFactor(params)
+        }
 
-        private fun parseTotpFactor(params: Map<String, String>): Outcome<MovingFactor, VaultError> {
+        private fun parseTotpFactor(params: Map<String, String>): Outcome<MovingFactor, VaultError.MalformedUri> {
             if (PARAM_COUNTER in params) {
                 return Outcome.Failure(VaultError.MalformedUri("counter is not valid on a totp URI"))
             }
@@ -248,7 +251,7 @@ data class OtpAuthUri(
             return Outcome.Success(MovingFactor(period, null))
         }
 
-        private fun parseHotpFactor(params: Map<String, String>): Outcome<MovingFactor, VaultError> {
+        private fun parseHotpFactor(params: Map<String, String>): Outcome<MovingFactor, VaultError.MalformedUri> {
             // The counter alone has no default: a wrong starting position yields codes no server
             // accepts.
             val raw = params[PARAM_COUNTER]

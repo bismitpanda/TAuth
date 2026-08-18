@@ -25,7 +25,7 @@ object Base32 {
     // A trailing group of 1, 3 or 6 symbols cannot arise from any input, so it means truncation.
     private val WHOLE_BYTE_REMAINDERS = setOf(0, 2, 4, 5, 7)
 
-    fun decode(input: String): Outcome<ByteArray, VaultError> {
+    fun decode(input: String): Outcome<ByteArray, VaultError.InvalidSecret> {
         val symbols = StringBuilder(input.length)
         val pad = Padding()
         collect(input, symbols, pad)?.let { return Outcome.Failure(it) }
@@ -42,7 +42,7 @@ object Base32 {
 
     // ASCII only. Unicode uppercase folds U+017F onto S and U+0131 onto I, so folding before the
     // alphabet check would make two different secrets decode to one key.
-    private fun collect(input: String, symbols: StringBuilder, pad: Padding): VaultError? {
+    private fun collect(input: String, symbols: StringBuilder, pad: Padding): VaultError.InvalidSecret? {
         for (raw in input) {
             if (raw.code >= ASCII_LIMIT) return VaultError.InvalidSecret("invalid base32 character")
             if (raw in SKIPPED_WHITESPACE) continue
@@ -59,7 +59,7 @@ object Base32 {
 
     // A string that looks non-empty can carry no key, which HMAC would refuse only at code-generation
     // time. The decode is key material and is zeroed before this returns.
-    fun validateSecret(secret: String): VaultError? {
+    fun validateSecret(secret: String): VaultError.InvalidSecret? {
         val bytes = when (val decoded = decode(secret)) {
             is Outcome.Failure -> return decoded.error
             is Outcome.Success -> decoded.value

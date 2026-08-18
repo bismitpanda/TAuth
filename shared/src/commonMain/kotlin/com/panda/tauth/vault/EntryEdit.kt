@@ -19,7 +19,7 @@ data class EntryEdit(
 
 // The entry model states its rules by refusing a value, and these values come from text fields, so
 // the refusal is returned rather than left to escape as a throw.
-internal fun VaultEntry.edited(edit: EntryEdit): Outcome<VaultEntry, VaultError> = try {
+internal fun VaultEntry.edited(edit: EntryEdit): Outcome<VaultEntry, VaultError.InvalidEntry> = try {
     Outcome.Success(
         copy(
             accountName = edit.accountName,

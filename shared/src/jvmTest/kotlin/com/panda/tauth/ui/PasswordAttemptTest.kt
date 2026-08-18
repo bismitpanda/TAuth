@@ -21,7 +21,7 @@ class PasswordAttemptTest {
     // finished by the time the assertion after it runs.
     private val scope = CoroutineScope(Dispatchers.Unconfined)
 
-    private val attempt = PasswordAttempt()
+    private val attempt = PasswordAttempt<VaultError>()
 
     @AfterTest
     fun stopPendingWork() {
@@ -33,7 +33,7 @@ class PasswordAttemptTest {
     @Test
     fun `a cancellation during the derivation zeroes the password it was handed`() {
         var captured: CharArray? = null
-        attempt.run(scope, PASSWORD.toCharArray(), isCreate = false) {
+        attempt.run(scope, PASSWORD.toCharArray()) {
             captured = it
             awaitCancellation()
         }
@@ -47,7 +47,7 @@ class PasswordAttemptTest {
     fun `a refused derivation zeroes the password it was handed`() {
         val password = PASSWORD.toCharArray()
 
-        attempt.run(scope, password, isCreate = false) { Outcome.Failure(VaultError.WrongPassword) }
+        attempt.run(scope, password) { Outcome.Failure(VaultError.WrongPassword) }
 
         assertContentEquals(ZEROED, password)
     }
@@ -56,38 +56,38 @@ class PasswordAttemptTest {
     fun `an accepted derivation zeroes the password it was handed`() {
         val password = PASSWORD.toCharArray()
 
-        attempt.run(scope, password, isCreate = true) { Outcome.Success(Unit) }
+        attempt.run(scope, password) { Outcome.Success(Unit) }
 
         assertContentEquals(ZEROED, password)
     }
 
     @Test
     fun `a refused derivation reports what it refused`() {
-        attempt.run(scope, PASSWORD.toCharArray(), isCreate = false) { Outcome.Failure(VaultError.WrongPassword) }
+        attempt.run(scope, PASSWORD.toCharArray()) { Outcome.Failure(VaultError.WrongPassword) }
 
         assertEquals(VaultError.WrongPassword, attempt.error)
     }
 
     @Test
     fun `an accepted derivation reports nothing`() {
-        attempt.run(scope, PASSWORD.toCharArray(), isCreate = false) { Outcome.Success(Unit) }
+        attempt.run(scope, PASSWORD.toCharArray()) { Outcome.Success(Unit) }
 
         assertEquals(null, attempt.error)
     }
 
-    // Which screen reports the progress of a derivation turns on this, and the state alone does not
-    // say which of the two asked for it.
+    // Which screen reports the progress of a derivation turns on which attempt is running, and the
+    // session's state alone does not say which of the two asked for it.
     @Test
-    fun `a creation says so while it runs`() {
-        attempt.run(scope, PASSWORD.toCharArray(), isCreate = true) { awaitCancellation() }
+    fun `an attempt says it is running while its derivation is in flight`() {
+        attempt.run(scope, PASSWORD.toCharArray()) { awaitCancellation() }
 
-        assertEquals(true, attempt.isCreating)
+        assertEquals(true, attempt.isRunning)
     }
 
     @Test
-    fun `an unlock does not say it is creating`() {
-        attempt.run(scope, PASSWORD.toCharArray(), isCreate = false) { awaitCancellation() }
+    fun `an attempt says it is not running once its derivation has ended`() {
+        attempt.run(scope, PASSWORD.toCharArray()) { Outcome.Success(Unit) }
 
-        assertFalse(attempt.isCreating)
+        assertFalse(attempt.isRunning)
     }
 }

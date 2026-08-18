@@ -3,6 +3,10 @@
 # See STYLE_GUIDE.md for the conventions these rules enforce.
 
 complexity:
+  CyclomaticComplexMethod:
+    # A `when` over VaultError has a branch per case because it has no else branch, which is what
+    # fails the build when a case is added. A branch that is one expression is not a path to test.
+    ignoreSimpleWhenEntries: true
   LongMethod:
     # Composables and the vault write path are legitimately long and linear.
     allowedLines: 80

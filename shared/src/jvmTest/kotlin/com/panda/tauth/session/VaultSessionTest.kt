@@ -11,6 +11,8 @@ import com.panda.tauth.vault.VaultBody
 import com.panda.tauth.vault.VaultCodec
 import com.panda.tauth.vault.VaultError
 import com.panda.tauth.vault.VaultFile
+import com.panda.tauth.vault.VaultReadError
+import com.panda.tauth.vault.VaultWriteError
 import com.panda.tauth.vault.hotpEntry
 import com.panda.tauth.vault.totpEntry
 import kotlinx.coroutines.CompletableDeferred
@@ -72,12 +74,12 @@ private class FakeVaultFile : VaultFile {
 
     override fun exists(): Boolean = contents != null
 
-    override fun read(): Outcome<ByteArray, VaultError> {
+    override fun read(): Outcome<ByteArray, VaultReadError> {
         onRead?.invoke()
         return contents?.let { Outcome.Success(it) } ?: Outcome.Failure(VaultError.NoVaultFile)
     }
 
-    override fun write(bytes: ByteArray): Outcome<Unit, VaultError> {
+    override fun write(bytes: ByteArray): Outcome<Unit, VaultWriteError> {
         contents = bytes
         writes++
         return Outcome.Success(Unit)
@@ -460,6 +462,18 @@ class VaultSessionTest {
         runBlocking { session.create(PASSWORD.toCharArray()) }
 
         assertEquals(1, file.writes)
+    }
+
+    @Test
+    fun `a creation opens the file it wrote rather than the bytes it built`() {
+        val session = sessionOver(null)
+        file.onRead = {
+            file.contents = file.contents?.copyOf()?.also { it[it.lastIndex] = (it.last().toInt() xor 1).toByte() }
+        }
+
+        val outcome = runBlocking { session.create(PASSWORD.toCharArray()) }
+
+        assertIs<VaultError.IntegrityFailure>(outcome.errorOrNull)
     }
 
     @Test

@@ -7,7 +7,7 @@ import androidx.compose.runtime.setValue
 import com.panda.tauth.Outcome
 import com.panda.tauth.ui.ClipboardCopy
 import com.panda.tauth.ui.CopyResult
-import com.panda.tauth.vault.VaultError
+import com.panda.tauth.vault.EntryChangeError
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -50,7 +50,7 @@ internal class RowState {
         generated = generated - entryId
     }
 
-    fun generate(scope: CoroutineScope, entryId: String, run: suspend (String) -> Outcome<String, VaultError>) {
+    fun generate(scope: CoroutineScope, entryId: String, run: suspend (String) -> Outcome<String, EntryChangeError>) {
         // Two presses inside one frame both read the same `enabled` flag, so the refusal is here and
         // not on the control: each press past the first would spend a counter value of its own.
         if (entryId in coolingDown) return

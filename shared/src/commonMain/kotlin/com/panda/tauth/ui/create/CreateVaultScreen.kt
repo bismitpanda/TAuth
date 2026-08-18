@@ -30,6 +30,7 @@ import com.panda.tauth.password.passwordStrength
 import com.panda.tauth.ui.components.PasswordField
 import com.panda.tauth.ui.components.PasswordFieldState
 import com.panda.tauth.ui.theme.LocalSpacing
+import com.panda.tauth.vault.VaultCreateError
 import com.panda.tauth.vault.VaultError
 
 private const val TITLE = "Create your vault"
@@ -52,7 +53,7 @@ fun CreateVaultScreen(
     onCreate: (CharArray) -> Unit,
     modifier: Modifier = Modifier,
     isBusy: Boolean = false,
-    error: VaultError? = null,
+    error: VaultCreateError? = null,
 ) {
     val password = remember { PasswordFieldState() }
     val confirmation = remember { PasswordFieldState() }
@@ -172,12 +173,12 @@ private fun StrengthMeter(strength: PasswordStrength, modifier: Modifier = Modif
     }
 }
 
-// No else branch: a VaultError case added elsewhere has to be given a message here before this
-// compiles again.
-private fun messageFor(error: VaultError): String = when (error) {
+// No else branch, over the cases a creation reports: a case joining that view has to be given a message
+// here before this compiles again.
+private fun messageFor(error: VaultCreateError): String = when (error) {
     is VaultError.VaultFileExists -> "A vault already exists at this location."
 
-    is VaultError.NoVaultFile -> "The vault file was gone before it could be opened."
+    is VaultError.NoVaultFile -> "The vault file was written but was gone when it was read back."
 
     is VaultError.LockedByAnotherProcess -> "Another TAuth process is holding the vault file."
 
@@ -188,14 +189,15 @@ private fun messageFor(error: VaultError): String = when (error) {
     // Kept apart from the damage cases below: this one means the password, those mean the file.
     is VaultError.WrongPassword -> "The vault was written but the password did not open it."
 
-    is VaultError.IntegrityFailure, is VaultError.Corrupt ->
+    // A secret that will not decode is the body reading back wrong, which to the person in front of
+    // it is the same as a failed tag or a structure that does not parse.
+    is VaultError.IntegrityFailure, is VaultError.Corrupt, is VaultError.InvalidSecret ->
         "The vault file was written but reads back damaged."
 
     is VaultError.UnsupportedVersion -> "The vault file is in a format this version of TAuth does not read."
 
-    is VaultError.InvalidSecret, is VaultError.MalformedUri, is VaultError.InvalidEntry,
-    is VaultError.NoSuchEntry, is VaultError.VaultClosed,
-    -> "The vault could not be created."
+    // A lock overtook the creation. The file is written and opening it is a password entry away.
+    is VaultError.VaultClosed -> "The vault locked while it was being created."
 }
 
 // The copy the scorer reads is zeroed before the reading leaves this function: copyValue hands out

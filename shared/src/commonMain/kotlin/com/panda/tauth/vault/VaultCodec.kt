@@ -44,7 +44,7 @@ class OpenVault internal constructor(body: VaultBody, internal val header: Vault
 // Every nonce is drawn fresh from secureRandomBytes on every write, and no function in this file
 // takes one as a parameter. Reusing a nonce with one key across two plaintexts breaks GCM completely.
 object VaultCodec {
-    fun create(password: CharArray, body: VaultBody = VaultBody()): Outcome<ByteArray, VaultError> {
+    fun create(password: CharArray, body: VaultBody = VaultBody()): Outcome<ByteArray, VaultAssembleError> {
         val salt = secureRandomBytes(ARGON2_SALT_BYTES)
         return withFreshDek { dek ->
             val header = VaultHeader(
@@ -58,15 +58,15 @@ object VaultCodec {
         }
     }
 
-    fun open(bytes: ByteArray, password: CharArray): Outcome<OpenVault, VaultError> =
+    fun open(bytes: ByteArray, password: CharArray): Outcome<OpenVault, VaultOpenError> =
         readEnvelope(bytes).flatMap { envelope -> unlock(envelope, password) }
 
-    fun encode(vault: OpenVault, body: VaultBody): Outcome<ByteArray, VaultError> =
+    fun encode(vault: OpenVault, body: VaultBody): Outcome<ByteArray, VaultEncodeError> =
         vault.useDek { dek -> assemble(vault.header, body, dek) } ?: Outcome.Failure(VaultError.VaultClosed)
 
     // The salt and the wrap come from the header of the vault that is open rather than from a fresh
     // read, so this answers about the vault on screen and not about whatever now sits at the path.
-    internal fun verify(header: VaultHeader, password: CharArray): Outcome<Unit, VaultError> {
+    internal fun verify(header: VaultHeader, password: CharArray): Outcome<Unit, PasswordCheckError> {
         val fields = decodeHeaderFields(header)
             ?: return Outcome.Failure(VaultError.Corrupt("a header field is missing, malformed or the wrong size"))
         // withKek zeroes the derived key on every path out of the block, a throw included.
@@ -84,7 +84,7 @@ object VaultCodec {
         bytes: ByteArray,
         currentPassword: CharArray,
         newPassword: CharArray,
-    ): Outcome<ByteArray, VaultError> = open(bytes, currentPassword).flatMap { vault ->
+    ): Outcome<ByteArray, VaultReencodeError> = open(bytes, currentPassword).flatMap { vault ->
         vault.use {
             vault.useDek { dek ->
                 val salt = secureRandomBytes(ARGON2_SALT_BYTES)
@@ -97,7 +97,7 @@ object VaultCodec {
         }
     }
 
-    fun rotateDek(bytes: ByteArray, password: CharArray): Outcome<ByteArray, VaultError> =
+    fun rotateDek(bytes: ByteArray, password: CharArray): Outcome<ByteArray, VaultReencodeError> =
         open(bytes, password).flatMap { vault ->
             vault.use {
                 val salt = base64Decode(vault.header.salt)
@@ -142,8 +142,8 @@ object VaultCodec {
     internal inline fun adoptedOrZeroed(
         dek: ByteArray,
         header: VaultHeader,
-        block: () -> Outcome<VaultBody, VaultError>,
-    ): Outcome<OpenVault, VaultError> {
+        block: () -> Outcome<VaultBody, VaultOpenError>,
+    ): Outcome<OpenVault, VaultOpenError> {
         var adopted = false
         return try {
             block().map { body -> OpenVault(body, header, SecureBytes.adopt(dek)).also { adopted = true } }
@@ -153,7 +153,11 @@ object VaultCodec {
     }
 
     // The versions and sizes checked here are the reader's own, so no file this returns fails a read on either.
-    private fun assemble(header: VaultHeader, body: VaultBody, dek: ByteArray): Outcome<ByteArray, VaultError> {
+    private fun assemble(
+        header: VaultHeader,
+        body: VaultBody,
+        dek: ByteArray,
+    ): Outcome<ByteArray, VaultAssembleError> {
         if (header.v != HEADER_VERSION) {
             return Outcome.Failure(VaultError.UnsupportedVersion(header.v, HEADER_VERSION))
         }
@@ -191,10 +195,10 @@ object VaultCodec {
 
     private fun headerChecksum(file: ByteArray, json: ByteArray): UInt = crc32(file.copyOfRange(0, CRC_OFFSET) + json)
 
-    private fun readEnvelope(bytes: ByteArray): Outcome<Envelope, VaultError> =
+    private fun readEnvelope(bytes: ByteArray): Outcome<Envelope, VaultOpenError> =
         checkPreamble(bytes).flatMap { headerLength -> sliceEnvelope(bytes, headerLength) }
 
-    private fun checkPreamble(bytes: ByteArray): Outcome<Int, VaultError> {
+    private fun checkPreamble(bytes: ByteArray): Outcome<Int, VaultOpenError> {
         if (bytes.size < PREFIX_BYTES) {
             return Outcome.Failure(VaultError.Corrupt("file is shorter than the header prefix"))
         }
@@ -215,7 +219,7 @@ object VaultCodec {
     }
 
     // The checksum runs before any key is derived, so damage reads as damage, not as a wrong password.
-    private fun sliceEnvelope(bytes: ByteArray, headerLength: Int): Outcome<Envelope, VaultError> {
+    private fun sliceEnvelope(bytes: ByteArray, headerLength: Int): Outcome<Envelope, VaultOpenError> {
         val headerEnd = PREFIX_BYTES + headerLength
         val headerJson = bytes.copyOfRange(PREFIX_BYTES, headerEnd)
         if (headerChecksum(bytes, headerJson) != readUInt32(bytes, CRC_OFFSET)) {
@@ -246,7 +250,7 @@ object VaultCodec {
         )
     }
 
-    private fun unlock(envelope: Envelope, password: CharArray): Outcome<OpenVault, VaultError> {
+    private fun unlock(envelope: Envelope, password: CharArray): Outcome<OpenVault, VaultOpenError> {
         val header = envelope.header
         val fields = decodeHeaderFields(header)
             ?: return Outcome.Failure(VaultError.Corrupt("a header field is missing, malformed or the wrong size"))
@@ -260,7 +264,7 @@ object VaultCodec {
         }
     }
 
-    private fun decodeBody(plaintext: ByteArray): Outcome<VaultBody, VaultError> {
+    private fun decodeBody(plaintext: ByteArray): Outcome<VaultBody, VaultOpenError> {
         val json = plaintext.decodeToString()
         unsupportedVersion(json, BODY_VERSION)?.let { return Outcome.Failure(it) }
         return try {

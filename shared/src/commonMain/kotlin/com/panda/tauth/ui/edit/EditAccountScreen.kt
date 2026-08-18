@@ -28,6 +28,7 @@ import com.panda.tauth.totp.OtpType
 import com.panda.tauth.ui.components.ChoiceRow
 import com.panda.tauth.ui.components.FormField
 import com.panda.tauth.ui.theme.LocalSpacing
+import com.panda.tauth.vault.EntryChangeError
 import com.panda.tauth.vault.EntryEdit
 import com.panda.tauth.vault.EntryEditDraft
 import com.panda.tauth.vault.VaultError
@@ -65,7 +66,7 @@ fun EditAccountScreen(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
     isBusy: Boolean = false,
-    error: VaultError? = null,
+    error: EntryChangeError? = null,
 ) {
     val spacing = LocalSpacing.current
     var draft by remember(entry.id) { mutableStateOf(entry.toDraft()) }
@@ -193,28 +194,14 @@ private fun UnlockedEntry.toDraft(): EntryEditDraft = EntryEditDraft(
     counter = counter?.toString().orEmpty(),
 )
 
-// No else branch: a VaultError case added elsewhere has to be given a message here before this
-// compiles again.
-private fun problemFor(error: VaultError): String = when (error) {
+// No else branch, over the cases a change to an entry reports: a case joining that view has to be given
+// a message here before this compiles again.
+private fun problemFor(error: EntryChangeError): String = when (error) {
     is VaultError.InvalidEntry -> "The change was refused: ${error.detail}."
-
     is VaultError.NoSuchEntry -> "That account is no longer in the vault."
-
     is VaultError.VaultClosed -> "The vault locked before the change was saved."
-
     is VaultError.LockedByAnotherProcess -> "Another TAuth process is holding the vault file."
-
     is VaultError.Io -> "The vault file could not be written."
-
     is VaultError.TooLarge -> "The vault is larger than the file format allows."
-
-    is VaultError.IntegrityFailure, is VaultError.Corrupt -> "The vault file is damaged and was not written."
-
     is VaultError.UnsupportedVersion -> "The vault file is in a format this version of TAuth does not read."
-
-    is VaultError.NoVaultFile -> "There is no vault file at this location."
-
-    is VaultError.InvalidSecret, is VaultError.MalformedUri, is VaultError.VaultFileExists,
-    is VaultError.WrongPassword,
-    -> "The change could not be saved."
 }

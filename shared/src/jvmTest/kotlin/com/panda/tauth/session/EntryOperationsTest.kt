@@ -13,6 +13,8 @@ import com.panda.tauth.vault.VaultCodec
 import com.panda.tauth.vault.VaultEntry
 import com.panda.tauth.vault.VaultError
 import com.panda.tauth.vault.VaultFile
+import com.panda.tauth.vault.VaultReadError
+import com.panda.tauth.vault.VaultWriteError
 import com.panda.tauth.vault.hotpEntry
 import com.panda.tauth.vault.totpEntry
 import kotlinx.coroutines.CoroutineScope
@@ -91,7 +93,7 @@ private fun newEntry(id: String = NEW_ID) = totpEntry(id = id, accountName = "da
 // the store's atomic rename leaves behind when a write does not commit.
 private class ScriptedVaultFile(var contents: ByteArray?) : VaultFile {
     var writes = 0
-    var refusal: VaultError? = null
+    var refusal: VaultWriteError? = null
     var onWrite: ((ByteArray) -> Unit)? = null
 
     // Runs inside the read, which is the one place a test can act while a derivation is in flight.
@@ -99,12 +101,12 @@ private class ScriptedVaultFile(var contents: ByteArray?) : VaultFile {
 
     override fun exists(): Boolean = contents != null
 
-    override fun read(): Outcome<ByteArray, VaultError> {
+    override fun read(): Outcome<ByteArray, VaultReadError> {
         onRead?.invoke()
         return contents?.let { Outcome.Success(it) } ?: Outcome.Failure(VaultError.NoVaultFile)
     }
 
-    override fun write(bytes: ByteArray): Outcome<Unit, VaultError> {
+    override fun write(bytes: ByteArray): Outcome<Unit, VaultWriteError> {
         writes++
         onWrite?.invoke(bytes)
         refusal?.let { return Outcome.Failure(it) }

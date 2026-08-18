@@ -7,20 +7,21 @@ import androidx.compose.runtime.setValue
 import com.panda.tauth.Outcome
 import com.panda.tauth.settings.SecurityPolicy
 import com.panda.tauth.vault.VaultError
+import com.panda.tauth.vault.VaultReadError
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 // What a settings action is doing and what the last one reported. The policy lives in the encrypted
 // body, which is unreadable for the length of a rewrite the screen has to stay standing through.
 @Stable
-internal class SettingsWork {
+internal class SettingsWork<E : VaultError> {
     var policy: SecurityPolicy by mutableStateOf(SecurityPolicy())
         private set
 
     var isBusy: Boolean by mutableStateOf(false)
         private set
 
-    var error: VaultError? by mutableStateOf(null)
+    var error: E? by mutableStateOf(null)
         private set
 
     // Held apart from the slot above, which carries what a vault write refused. An export writes
@@ -41,7 +42,7 @@ internal class SettingsWork {
     // reads has to turn on.
     fun export(
         scope: CoroutineScope,
-        read: suspend () -> Outcome<ByteArray, VaultError>,
+        read: suspend () -> Outcome<ByteArray, VaultReadError>,
         place: suspend (ByteArray) -> Outcome<Unit, ExportError>,
     ) {
         isBusy = true
@@ -61,7 +62,7 @@ internal class SettingsWork {
 
     // The arrays are copies the password fields handed over and no holder owns them. A lock or a
     // closing window cancels this scope mid-derivation, so the zeroing sits in a finally.
-    fun run(scope: CoroutineScope, vararg passwords: CharArray, work: suspend () -> Outcome<*, VaultError>) {
+    fun run(scope: CoroutineScope, vararg passwords: CharArray, work: suspend () -> Outcome<*, E>) {
         isBusy = true
         error = null
         scope.launch {

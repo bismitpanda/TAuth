@@ -24,7 +24,7 @@ class DisclosureStateTest {
     // below have both finished by the time the assertion after them runs.
     private val scope = CoroutineScope(Dispatchers.Unconfined)
 
-    private val state = DisclosureState<String>()
+    private val state = DisclosureState<String, VaultError>()
 
     private var disclosed: String? = null
 

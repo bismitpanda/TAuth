@@ -14,6 +14,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import com.panda.tauth.ui.theme.TauthTheme
+import com.panda.tauth.vault.VaultCreateError
 import com.panda.tauth.vault.VaultError
 import org.junit.Rule
 import kotlin.test.Test
@@ -263,6 +264,52 @@ class CreateVaultScreenTest {
         compose.onNodeWithText("The vault file was written but reads back damaged.").assertIsDisplayed()
     }
 
+    // The creation writes the file and reads it back, so the file can be gone by the time it is read.
+    @Test
+    fun `a vault file gone by the read-back shows its own message`() {
+        show(error = VaultError.NoVaultFile)
+
+        compose.onNodeWithText("The vault file was written but was gone when it was read back.")
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun `a vault held by another process shows its own message`() {
+        show(error = VaultError.LockedByAnotherProcess("vault.tauth"))
+
+        compose.onNodeWithText("Another TAuth process is holding the vault file.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a vault past the size the writer will produce shows its own message`() {
+        show(error = VaultError.TooLarge(size = 2, limit = 1))
+
+        compose.onNodeWithText("The vault is larger than the file format allows.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a version the reader does not know shows its own message`() {
+        show(error = VaultError.UnsupportedVersion(found = 2, supported = 1))
+
+        compose.onNodeWithText("The vault file is in a format this version of TAuth does not read.")
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun `a lock that overtook the creation shows its own message`() {
+        show(error = VaultError.VaultClosed)
+
+        compose.onNodeWithText("The vault locked while it was being created.").assertIsDisplayed()
+    }
+
+    // A secret that will not decode reads back as damage rather than as anything about the password.
+    @Test
+    fun `a secret that does not decode shows the damaged-file message`() {
+        show(error = VaultError.InvalidSecret("invalid base32 character"))
+
+        compose.onNodeWithText("The vault file was written but reads back damaged.").assertIsDisplayed()
+    }
+
     @Test
     fun `an integrity failure does not show the password message`() {
         show(error = VaultError.IntegrityFailure)
@@ -270,7 +317,7 @@ class CreateVaultScreenTest {
         compose.onNodeWithText("The vault was written but the password did not open it.").assertDoesNotExist()
     }
 
-    private fun show(isBusy: Boolean = false, error: VaultError? = null) {
+    private fun show(isBusy: Boolean = false, error: VaultCreateError? = null) {
         compose.setContent {
             TauthTheme { CreateVaultScreen(onCreate = { captured = it }, isBusy = isBusy, error = error) }
         }

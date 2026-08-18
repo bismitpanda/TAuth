@@ -537,15 +537,29 @@ class VaultStoreTest {
         assertFalse(Files.exists(paths.tempFile))
     }
 
+    // Read through the interface rather than the store, so what the classifier holds is what a caller
+    // of VaultFile sees and not only what this implementation happens to declare.
+    @Test
+    fun `a read reports through the view a read declares`() {
+        val file: VaultFile = store
+        assertEquals("absent", readCase(checkNotNull(file.read().errorOrNull)))
+    }
+
+    @Test
+    fun `a write reports through the view a write declares`() {
+        val file: VaultFile = VaultStore(VaultPaths(OperatingSystem.LINUX, { null }, ""))
+        assertEquals("unusable", writeCase(checkNotNull(file.write(vaultBytes()).errorOrNull)))
+    }
+
     // Eight writes across two stores, every result collected so a failure cannot pass unnoticed.
-    private fun concurrentWrites(): List<Pair<ByteArray, Outcome<Unit, VaultError>>> {
+    private fun concurrentWrites(): List<Pair<ByteArray, Outcome<Unit, VaultWriteError>>> {
         val other = VaultStore(paths)
         val start = CountDownLatch(1)
         val pool = Executors.newFixedThreadPool(2)
         val submitted = (0 until 8).map { round ->
             val target = if (round % 2 == 0) store else other
             val payload = vaultBytes(VaultBody(entries = listOf(totpEntry(id = "id-$round"))))
-            payload to pool.submit<Outcome<Unit, VaultError>> {
+            payload to pool.submit<Outcome<Unit, VaultWriteError>> {
                 start.await()
                 target.write(payload)
             }
@@ -555,4 +569,17 @@ class VaultStoreTest {
         assertTrue(pool.awaitTermination(60, TimeUnit.SECONDS))
         return submitted.map { (payload, future) -> payload to future.get() }
     }
+}
+
+// A `when` with no else over the view each signature declares, so widening one back to VaultError
+// stops this file compiling.
+private fun readCase(error: VaultReadError): String = when (error) {
+    is VaultError.NoVaultFile -> "absent"
+    is VaultError.Io -> "unusable"
+    is VaultError.Corrupt -> "damaged"
+}
+
+private fun writeCase(error: VaultWriteError): String = when (error) {
+    is VaultError.Io -> "unusable"
+    is VaultError.LockedByAnotherProcess -> "held"
 }

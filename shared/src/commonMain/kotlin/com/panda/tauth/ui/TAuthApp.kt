@@ -27,9 +27,14 @@ import com.panda.tauth.ui.settings.SettingsScreen
 import com.panda.tauth.ui.settings.SettingsWork
 import com.panda.tauth.ui.settings.ShellSettings
 import com.panda.tauth.ui.unlock.UnlockScreen
+import com.panda.tauth.vault.EntryAddError
+import com.panda.tauth.vault.EntryChangeError
 import com.panda.tauth.vault.EntryEdit
+import com.panda.tauth.vault.VaultCreateError
 import com.panda.tauth.vault.VaultEntry
 import com.panda.tauth.vault.VaultError
+import com.panda.tauth.vault.VaultRewriteError
+import com.panda.tauth.vault.VaultUnlockError
 import com.panda.tauth.vault.toEntry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,23 +53,18 @@ private sealed interface Route {
     data class Edit(val id: String) : Route
 }
 
-// What a password entry is doing and what the last one reported. The array reaching `run` is a copy
-// the field made, which no holder owns and nothing else wipes.
+// What a password entry is doing and what the last one reported, one per operation because the field
+// holds that operation's cases. The array reaching `run` is a copy no holder owns and nothing wipes.
 @Stable
-internal class PasswordAttempt {
-    var isCreating: Boolean by mutableStateOf(false)
+internal class PasswordAttempt<E : VaultError> {
+    var isRunning: Boolean by mutableStateOf(false)
         private set
 
-    var error: VaultError? by mutableStateOf(null)
+    var error: E? by mutableStateOf(null)
         private set
 
-    fun run(
-        scope: CoroutineScope,
-        password: CharArray,
-        isCreate: Boolean,
-        derive: suspend (CharArray) -> Outcome<Unit, VaultError>,
-    ) {
-        isCreating = isCreate
+    fun run(scope: CoroutineScope, password: CharArray, derive: suspend (CharArray) -> Outcome<Unit, E>) {
+        isRunning = true
         error = null
         scope.launch {
             // A lock or a closing window cancels this scope mid-derivation, and a fill after the
@@ -73,7 +73,7 @@ internal class PasswordAttempt {
                 error = (derive(password) as? Outcome.Failure)?.error
             } finally {
                 password.fill(Char.MIN_VALUE)
-                isCreating = false
+                isRunning = false
             }
         }
     }
@@ -99,12 +99,16 @@ fun TAuthApp(
     var codes by remember { mutableStateOf(emptyMap<String, TotpCode>()) }
     var nowSeconds by remember { mutableStateOf(clock.now().epochSeconds) }
     var route by remember { mutableStateOf<Route>(Route.Accounts) }
-    val attempt = remember { PasswordAttempt() }
-    val settings = remember { SettingsWork() }
+    val creation = remember { PasswordAttempt<VaultCreateError>() }
+    val unlocking = remember { PasswordAttempt<VaultUnlockError>() }
+    val settings = remember { SettingsWork<VaultRewriteError>() }
     // A reorder or a delete fails on the list; a save fails on the destination that asked for it.
     // One slot for both would report a refused delete on the add screen, about a write never tried.
-    var listError by remember { mutableStateOf<VaultError?>(null) }
-    var entryError by remember { mutableStateOf<VaultError?>(null) }
+    var listError by remember { mutableStateOf<EntryChangeError?>(null) }
+    // One slot per destination: an add reports a secret that will not decode and an edit reports an
+    // account that is not there, so no one slot holds what both can report.
+    var addError by remember { mutableStateOf<EntryAddError?>(null) }
+    var editError by remember { mutableStateOf<EntryChangeError?>(null) }
     var isEntryBusy by remember { mutableStateOf(false) }
 
     // A vault the user has to open again is what empties the graph. A running derivation is not one:
@@ -118,7 +122,8 @@ fun TAuthApp(
         if (isClosed) {
             route = Route.Accounts
             listError = null
-            entryError = null
+            addError = null
+            editError = null
             settings.clearError()
         }
     }
@@ -133,15 +138,15 @@ fun TAuthApp(
         }
     }
 
-    val create: (CharArray) -> Unit = { attempt.run(scope, it, isCreate = true, session::create) }
-    val unlock: (CharArray) -> Unit = { attempt.run(scope, it, isCreate = false, session::unlock) }
+    val create: (CharArray) -> Unit = { creation.run(scope, it, session::create) }
+    val unlock: (CharArray) -> Unit = { unlocking.run(scope, it, session::unlock) }
 
     WithSingleInstanceNotice(isSingleInstanceUnprotected, modifier) { screenModifier ->
         when (val current = state) {
-            is SessionState.NoVault -> CreateVaultScreen(create, screenModifier, error = attempt.error)
+            is SessionState.NoVault -> CreateVaultScreen(create, screenModifier, error = creation.error)
 
             is SessionState.Locked ->
-                UnlockScreen(unlock, screenModifier, error = attempt.error, lastReason = current.lastReason)
+                UnlockScreen(unlock, screenModifier, error = unlocking.error, lastReason = current.lastReason)
 
             // A derivation is running and the state alone does not say which one asked for it, so the
             // screen that took the password is the screen that reports its progress. The settings
@@ -152,7 +157,7 @@ fun TAuthApp(
                         route = Route.Accounts
                     }
 
-                attempt.isCreating -> CreateVaultScreen(create, screenModifier, isBusy = true)
+                creation.isRunning -> CreateVaultScreen(create, screenModifier, isBusy = true)
 
                 else -> UnlockScreen(unlock, screenModifier, isBusy = true)
             }
@@ -169,27 +174,37 @@ fun TAuthApp(
                 clipboard = clipboard,
                 isEntryBusy = isEntryBusy,
                 listError = listError,
-                entryError = entryError,
+                addError = addError,
+                editError = editError,
                 modifier = screenModifier,
                 scope = scope,
                 onRoute = {
                     // A destination opens on nothing the previous one left behind.
-                    entryError = null
+                    addError = null
+                    editError = null
                     settings.clearError()
                     route = it
                 },
                 onVisibleChange = { visible.value = it },
                 onListWork = { work -> scope.launch { listError = (work() as? Outcome.Failure)?.error } },
-                onEntryWork = { work ->
-                    scope.launch {
-                        isEntryBusy = true
-                        entryError = (work() as? Outcome.Failure)?.error
-                        isEntryBusy = false
-                    }
-                },
+                onAddWork = scope.entryWork({ isEntryBusy = it }, { addError = it }),
+                onEditWork = scope.entryWork({ isEntryBusy = it }, { editError = it }),
                 clock = clock,
             )
         }
+    }
+}
+
+// Both destinations run their save the same way and differ only in the slot the failure lands in, which
+// is that destination's own view of what its operation reports.
+private fun <E : VaultError> CoroutineScope.entryWork(
+    onBusy: (Boolean) -> Unit,
+    onError: (E?) -> Unit,
+): (suspend () -> Outcome<*, E>) -> Unit = { work ->
+    launch {
+        onBusy(true)
+        onError((work() as? Outcome.Failure)?.error)
+        onBusy(false)
     }
 }
 
@@ -202,18 +217,20 @@ private fun UnlockedGraph(
     codes: Map<String, TotpCode>,
     nowSeconds: Long,
     preferences: PreferencesState,
-    settings: SettingsWork,
+    settings: SettingsWork<VaultRewriteError>,
     shell: ShellSettings,
     clipboard: ClipboardCopy,
     isEntryBusy: Boolean,
-    listError: VaultError?,
-    entryError: VaultError?,
+    listError: EntryChangeError?,
+    addError: EntryAddError?,
+    editError: EntryChangeError?,
     modifier: Modifier,
     scope: CoroutineScope,
     onRoute: (Route) -> Unit,
     onVisibleChange: (Set<String>) -> Unit,
-    onListWork: (suspend () -> Outcome<*, VaultError>) -> Unit,
-    onEntryWork: (suspend () -> Outcome<*, VaultError>) -> Unit,
+    onListWork: (suspend () -> Outcome<*, EntryChangeError>) -> Unit,
+    onAddWork: (suspend () -> Outcome<*, EntryAddError>) -> Unit,
+    onEditWork: (suspend () -> Outcome<*, EntryChangeError>) -> Unit,
     clock: Clock,
 ) {
     when (route) {
@@ -245,12 +262,12 @@ private fun UnlockedGraph(
             }
 
         is Route.Add -> AddAccountScreen(
-            onSave = { uri -> onEntryWork { addAndReturn(session, uri, clock, onRoute) } },
+            onSave = { uri -> onAddWork { addAndReturn(session, uri, clock, onRoute) } },
             onCancel = { onRoute(Route.Accounts) },
             epochSeconds = nowSeconds,
             modifier = modifier,
             isBusy = isEntryBusy,
-            error = entryError,
+            error = addError,
         )
 
         is Route.Edit -> {
@@ -262,11 +279,11 @@ private fun UnlockedGraph(
             } else {
                 EditAccountScreen(
                     entry = entry,
-                    onSave = { edit -> onEntryWork { editAndReturn(session, entry, edit, onRoute) } },
+                    onSave = { edit -> onEditWork { editAndReturn(session, entry, edit, onRoute) } },
                     onCancel = { onRoute(Route.Accounts) },
                     modifier = modifier,
                     isBusy = isEntryBusy,
-                    error = entryError,
+                    error = editError,
                 )
             }
         }
@@ -278,7 +295,7 @@ private fun UnlockedGraph(
 @Composable
 private fun SettingsDestination(
     session: VaultSession,
-    settings: SettingsWork,
+    settings: SettingsWork<VaultRewriteError>,
     preferences: PreferencesState,
     shell: ShellSettings,
     scope: CoroutineScope,
@@ -315,7 +332,7 @@ private suspend fun addAndReturn(
     uri: OtpAuthUri,
     clock: Clock,
     onRoute: (Route) -> Unit,
-): Outcome<Unit, VaultError> {
+): Outcome<Unit, EntryAddError> {
     val outcome = session.addEntry(uri.toEntry(VaultEntry.newId(), clock.now()))
     if (outcome is Outcome.Success) onRoute(Route.Accounts)
     return outcome
@@ -326,7 +343,7 @@ private suspend fun editAndReturn(
     entry: UnlockedEntry,
     edit: EntryEdit,
     onRoute: (Route) -> Unit,
-): Outcome<Unit, VaultError> {
+): Outcome<Unit, EntryChangeError> {
     val outcome = session.editEntry(entry.id, edit)
     if (outcome is Outcome.Success) onRoute(Route.Accounts)
     return outcome

@@ -147,4 +147,12 @@ class EntryEditTest {
 
         assertEquals("digits must be 6..8", (outcome.errorOrNull as? VaultError.InvalidEntry)?.detail)
     }
+
+    @Test
+    fun `an edit refusal is typed at the only case an edit reports`() {
+        val refused = totpEntry().edited(RENAME.copy(accountName = ""))
+        val refusal: VaultError.InvalidEntry = checkNotNull(refused.errorOrNull)
+
+        assertEquals("account name must not be empty", refusal.detail)
+    }
 }

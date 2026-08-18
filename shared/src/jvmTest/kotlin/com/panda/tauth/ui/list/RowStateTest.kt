@@ -1,6 +1,7 @@
 package com.panda.tauth.ui.list
 
 import com.panda.tauth.Outcome
+import com.panda.tauth.vault.EntryChangeError
 import com.panda.tauth.vault.VaultError
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -82,17 +83,17 @@ class RowStateTest {
         assertEquals(2, generations)
     }
 
-    private suspend fun pending(): Outcome<String, VaultError> {
+    private suspend fun pending(): Outcome<String, EntryChangeError> {
         generations++
-        return CompletableDeferred<Outcome<String, VaultError>>().await()
+        return CompletableDeferred<Outcome<String, EntryChangeError>>().await()
     }
 
-    private fun succeeded(): Outcome<String, VaultError> {
+    private fun succeeded(): Outcome<String, EntryChangeError> {
         generations++
         return Outcome.Success(CODE)
     }
 
-    private fun refused(): Outcome<String, VaultError> {
+    private fun refused(): Outcome<String, EntryChangeError> {
         generations++
         return Outcome.Failure(REFUSED)
     }

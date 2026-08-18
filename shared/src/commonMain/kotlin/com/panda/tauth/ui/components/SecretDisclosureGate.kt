@@ -23,6 +23,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import com.panda.tauth.Outcome
 import com.panda.tauth.ui.theme.LocalSpacing
+import com.panda.tauth.vault.DiscloseError
 import com.panda.tauth.vault.VaultError
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -50,7 +51,7 @@ fun SecretDisclosureGate(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     isBusy: Boolean = false,
-    error: VaultError? = null,
+    error: DiscloseError? = null,
 ) {
     val password = remember { PasswordFieldState() }
     val focusRequester = remember { FocusRequester() }
@@ -117,14 +118,14 @@ fun SecretDisclosureGate(
 }
 
 @Stable
-class DisclosureState<T> {
+class DisclosureState<T, E : VaultError> {
     var request: T? by mutableStateOf(null)
         private set
 
     var isBusy: Boolean by mutableStateOf(false)
         private set
 
-    var error: VaultError? by mutableStateOf(null)
+    var error: E? by mutableStateOf(null)
         private set
 
     // Bumped by anything that ends the gate a check belongs to. A check finding its own count stale
@@ -150,7 +151,7 @@ class DisclosureState<T> {
     fun confirm(
         scope: CoroutineScope,
         password: CharArray,
-        disclose: suspend (T, CharArray) -> Outcome<String, VaultError>,
+        disclose: suspend (T, CharArray) -> Outcome<String, E>,
         onDisclosed: (String) -> Unit,
     ) {
         val subject = request ?: run {
@@ -181,29 +182,16 @@ class DisclosureState<T> {
     }
 }
 
-// No else branch: a VaultError case added elsewhere has to be given a message here before this
-// compiles again.
-private fun messageFor(error: VaultError): String = when (error) {
-    // Kept apart from the damage cases below: this one means retype, those mean the file.
+// No else branch, over the cases a disclosure reports: a case joining that view has to be given a
+// message here before this compiles again.
+private fun messageFor(error: DiscloseError): String = when (error) {
+    // Kept apart from the damaged case below: this one means retype, that one means the file.
     is VaultError.WrongPassword -> "That password did not open the vault."
 
-    is VaultError.IntegrityFailure, is VaultError.Corrupt, is VaultError.InvalidSecret ->
-        "The vault file is damaged, so nothing can be disclosed from it."
-
-    is VaultError.NoVaultFile -> "There is no vault file at this location."
-
-    is VaultError.UnsupportedVersion -> "The vault file is in a format this version of TAuth does not read."
-
-    is VaultError.LockedByAnotherProcess -> "Another TAuth process is holding the vault file."
-
-    is VaultError.Io -> "The vault file could not be read."
-
-    is VaultError.TooLarge -> "The vault is larger than the file format allows."
+    // The check reads the header the open vault holds, so what is damaged here is that header.
+    is VaultError.Corrupt -> "The vault file is damaged, so nothing can be disclosed from it."
 
     is VaultError.VaultClosed -> "The vault locked while your password was being checked."
 
     is VaultError.NoSuchEntry -> "That account is no longer in the vault."
-
-    is VaultError.VaultFileExists, is VaultError.MalformedUri, is VaultError.InvalidEntry ->
-        "Nothing could be disclosed for that account."
 }

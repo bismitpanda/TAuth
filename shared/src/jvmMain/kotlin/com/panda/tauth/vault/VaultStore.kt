@@ -50,6 +50,8 @@ private val LOCK_OPEN = setOf<OpenOption>(
 
 private val READ_ONLY = setOf<OpenOption>(StandardOpenOption.READ)
 
+private val AS_IO: (Throwable) -> VaultError.Io = { VaultError.Io(it) }
+
 class VaultStore internal constructor(private val paths: VaultPaths, private val files: FileAccess) : VaultFile {
     constructor(paths: VaultPaths = VaultPaths()) : this(paths, SystemFileAccess)
 
@@ -61,9 +63,9 @@ class VaultStore internal constructor(private val paths: VaultPaths, private val
         false
     }
 
-    override fun read(): Outcome<ByteArray, VaultError> = guarded { readFile(paths.vaultFile) }
+    override fun read(): Outcome<ByteArray, VaultReadError> = guarded(AS_IO) { readFile(paths.vaultFile) }
 
-    override fun write(bytes: ByteArray): Outcome<Unit, VaultError> = guarded {
+    override fun write(bytes: ByteArray): Outcome<Unit, VaultWriteError> = guarded(AS_IO) {
         withLocks {
             try {
                 writeTemp(bytes)
@@ -85,7 +87,7 @@ class VaultStore internal constructor(private val paths: VaultPaths, private val
     }
 
     // Nothing can read a temp file the write did not finish, and the vault file is untouched.
-    private fun discardTemp(cause: Throwable): VaultError {
+    private fun discardTemp(cause: Throwable): VaultError.Io {
         try {
             Files.deleteIfExists(paths.tempFile)
         } catch (e: IOException) {
@@ -95,26 +97,27 @@ class VaultStore internal constructor(private val paths: VaultPaths, private val
     }
 
     // The rename did not happen, so this file holds the whole new vault and can be the only copy.
-    private fun keepTemp(cause: Throwable): VaultError {
+    private fun keepTemp(cause: Throwable): VaultError.Io {
         LOGGER.log(System.Logger.Level.WARNING, "a save that failed to commit left a vault at ${paths.tempFile}", cause)
         return VaultError.Io(cause)
     }
 
-    // A relative location would put the vault wherever the app was launched from.
-    private fun <T> guarded(block: () -> Outcome<T, VaultError>): Outcome<T, VaultError> = try {
+    // A relative location would put the vault wherever the app was launched from. The read and the
+    // write share this and report Io differently only in the view it lands in, so they pass it in.
+    private fun <T, E : VaultError> guarded(io: (Throwable) -> E, block: () -> Outcome<T, E>): Outcome<T, E> = try {
         if (paths.isResolved) {
             block()
         } else {
-            Outcome.Failure(VaultError.Io(IOException("the vault location does not resolve to an absolute path")))
+            Outcome.Failure(io(IOException("the vault location does not resolve to an absolute path")))
         }
     } catch (e: InvalidPathException) {
-        Outcome.Failure(VaultError.Io(e))
+        Outcome.Failure(io(e))
     } catch (e: IOError) {
-        Outcome.Failure(VaultError.Io(e))
+        Outcome.Failure(io(e))
     }
 
     // Only the exception that establishes absence produces NoVaultFile; failing to look is Io.
-    private fun readFile(path: Path): Outcome<ByteArray, VaultError> = try {
+    private fun readFile(path: Path): Outcome<ByteArray, VaultReadError> = try {
         // A fifo blocks the open until a writer appears and a directory fails on the first read.
         // The type is the type at the path: one swapped in after it is read is not covered.
         if (Files.readAttributes(path, BasicFileAttributes::class.java).isRegularFile) {
@@ -131,7 +134,7 @@ class VaultStore internal constructor(private val paths: VaultPaths, private val
 
     // The size and the bytes come from one descriptor, so the file measured is the file read. The
     // ceiling precedes the allocation, which at a hostile size raises an Error no Outcome carries.
-    private fun readWithinLimit(channel: FileChannel): Outcome<ByteArray, VaultError> {
+    private fun readWithinLimit(channel: FileChannel): Outcome<ByteArray, VaultReadError> {
         val size = channel.size()
         if (size > MAX_VAULT_BYTES) {
             return Outcome.Failure(VaultError.Corrupt("file is larger than a vault can be"))
@@ -183,7 +186,7 @@ class VaultStore internal constructor(private val paths: VaultPaths, private val
         }
     }
 
-    private fun <T> withLocks(block: () -> Outcome<T, VaultError>): Outcome<T, VaultError> {
+    private fun <T> withLocks(block: () -> Outcome<T, VaultWriteError>): Outcome<T, VaultWriteError> {
         PROCESS_LOCK.lock()
         return try {
             createRestrictedDirectory()

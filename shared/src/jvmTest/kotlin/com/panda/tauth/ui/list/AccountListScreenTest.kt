@@ -35,6 +35,7 @@ import com.panda.tauth.ui.components.DISCLOSURE_STATEMENT_TAG
 import com.panda.tauth.ui.hotpRow
 import com.panda.tauth.ui.theme.TauthTheme
 import com.panda.tauth.ui.totpRow
+import com.panda.tauth.vault.EntryChangeError
 import com.panda.tauth.vault.VaultError
 import org.junit.Rule
 import kotlin.test.Test
@@ -136,7 +137,7 @@ class AccountListScreenTest {
     private var adds = 0
     private var locks = 0
     private var generations = 0
-    private var generateAnswer: Outcome<String, VaultError> = Outcome.Success(HOTP_CODE)
+    private var generateAnswer: Outcome<String, EntryChangeError> = Outcome.Success(HOTP_CODE)
 
     @Test
     fun `a totp row draws the code the ticker supplied`() {
@@ -659,12 +660,64 @@ class AccountListScreenTest {
         compose.onNodeWithText(DISCLOSE).performClick()
     }
 
+    // One per branch of the mapping the list holds, which is every case a change to an entry reports.
+    @Test
+    fun `an account that is no longer there shows its own message`() {
+        show(error = VaultError.NoSuchEntry)
+
+        compose.onNodeWithText("That account is no longer in the vault.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a refused value shows the rule it broke`() {
+        show(error = VaultError.InvalidEntry("the counter is at its maximum"))
+
+        compose.onNodeWithText("The change was refused: the counter is at its maximum.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a lock before the write shows its own message`() {
+        show(error = VaultError.VaultClosed)
+
+        compose.onNodeWithText("The vault locked before the change was saved.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a vault held by another process shows its own message`() {
+        show(error = VaultError.LockedByAnotherProcess("vault.tauth.lock"))
+
+        compose.onNodeWithText("Another TAuth process is holding the vault file.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a failed write shows the write message`() {
+        show(error = VaultError.Io(RuntimeException("no space")))
+
+        compose.onNodeWithText("The vault file could not be written.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a vault past the size the writer will produce shows its own message`() {
+        show(error = VaultError.TooLarge(size = 2, limit = 1))
+
+        compose.onNodeWithText("The vault is larger than the file format allows.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a version the reader does not know shows its own message`() {
+        show(error = VaultError.UnsupportedVersion(found = 2, supported = 1))
+
+        compose.onNodeWithText("The vault file is in a format this version of TAuth does not read.")
+            .assertIsDisplayed()
+    }
+
     private fun show(
         entries: List<UnlockedEntry> = listOf(TOTP, HOTP),
         sortOrder: SortOrder = SortOrder.MANUAL,
         clearSeconds: Int = CLEAR_SECONDS,
         codes: Map<String, TotpCode> = mapOf(TOTP.id to TotpCode(TOTP_CODE, 30, 30)),
         height: Dp = Dp.Unspecified,
+        error: EntryChangeError? = null,
     ) {
         compose.setContent {
             TauthTheme {
@@ -675,6 +728,7 @@ class AccountListScreenTest {
                     sortOrder = sortOrder,
                     clipboardClearSeconds = clearSeconds,
                     clipboard = clipboard,
+                    error = error,
                     onSortOrderChange = { chosenSort = it },
                     onVisibleChange = { visible = it },
                     onGenerate = {

@@ -14,6 +14,7 @@ import com.panda.tauth.totp.HashAlgorithm
 import com.panda.tauth.ui.hotpRow
 import com.panda.tauth.ui.theme.TauthTheme
 import com.panda.tauth.ui.totpRow
+import com.panda.tauth.vault.EntryChangeError
 import com.panda.tauth.vault.EntryEdit
 import com.panda.tauth.vault.VaultError
 import org.junit.Rule
@@ -328,6 +329,38 @@ class EditAccountScreenTest {
         compose.onNodeWithText("Another TAuth process is holding the vault file.").performScrollTo().assertIsDisplayed()
     }
 
+    // The remaining branches of the mapping this screen holds, which is every case a change to an entry
+    // reports.
+    @Test
+    fun `a lock before the write is reported`() {
+        show(totpRow(), error = VaultError.VaultClosed)
+
+        compose.onNodeWithText("The vault locked before the change was saved.").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun `a failed write shows the write message`() {
+        show(totpRow(), error = VaultError.Io(RuntimeException("no space")))
+
+        compose.onNodeWithText("The vault file could not be written.").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun `a vault past the size the writer will produce shows its own message`() {
+        show(totpRow(), error = VaultError.TooLarge(size = 2, limit = 1))
+
+        compose.onNodeWithText("The vault is larger than the file format allows.").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun `a version the reader does not know shows its own message`() {
+        show(totpRow(), error = VaultError.UnsupportedVersion(found = 2, supported = 1))
+
+        compose.onNodeWithText("The vault file is in a format this version of TAuth does not read.")
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
     // The screen scrolls, and a control below the fold takes a click that lands nowhere unless it is
     // brought into view first.
     private fun tap(text: String) = compose.onNodeWithText(text).performScrollTo().performClick()
@@ -337,7 +370,7 @@ class EditAccountScreenTest {
         compose.onNodeWithTag(tag).performTextInput(text)
     }
 
-    private fun show(entry: UnlockedEntry, error: VaultError? = null) {
+    private fun show(entry: UnlockedEntry, error: EntryChangeError? = null) {
         compose.setContent {
             TauthTheme {
                 EditAccountScreen(

@@ -12,6 +12,8 @@ import com.panda.tauth.session.VaultSession
 import com.panda.tauth.ui.theme.TauthTheme
 import com.panda.tauth.vault.VaultError
 import com.panda.tauth.vault.VaultFile
+import com.panda.tauth.vault.VaultReadError
+import com.panda.tauth.vault.VaultWriteError
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -31,9 +33,11 @@ private const val CREATE_TITLE = "Create your vault"
 private object NoVaultFile : VaultFile {
     override fun exists(): Boolean = false
 
-    override fun read(): Outcome<ByteArray, VaultError> = Outcome.Failure(VaultError.NoVaultFile)
+    override fun read(): Outcome<ByteArray, VaultReadError> = Outcome.Failure(VaultError.NoVaultFile)
 
-    override fun write(bytes: ByteArray): Outcome<Unit, VaultError> = Outcome.Failure(VaultError.NoVaultFile)
+    // Every case here only renders, so this refuses rather than pretending to store what it is given.
+    override fun write(bytes: ByteArray): Outcome<Unit, VaultWriteError> =
+        Outcome.Failure(VaultError.Io(UnsupportedOperationException("this fake holds no vault")))
 }
 
 class SingleInstanceNoticeTest {

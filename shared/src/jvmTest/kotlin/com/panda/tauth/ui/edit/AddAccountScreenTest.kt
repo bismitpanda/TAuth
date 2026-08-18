@@ -17,6 +17,7 @@ import com.panda.tauth.totp.OtpAuthUri
 import com.panda.tauth.totp.OtpType
 import com.panda.tauth.ui.SEED_BASE32
 import com.panda.tauth.ui.theme.TauthTheme
+import com.panda.tauth.vault.EntryAddError
 import com.panda.tauth.vault.VaultError
 import org.junit.Rule
 import kotlin.test.Test
@@ -366,6 +367,45 @@ class AddAccountScreenTest {
         compose.onNodeWithText("The vault locked before the account was saved.").assertIsDisplayed()
     }
 
+    // The remaining branches of the mapping this screen holds, which is every case storing a new entry
+    // reports.
+    @Test
+    fun `a refused value is reported with the rule it broke`() {
+        show(error = VaultError.InvalidEntry("account name must not be empty"))
+
+        compose.onNodeWithText("The account could not be saved: account name must not be empty.")
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun `a secret that will not decode is reported against the secret`() {
+        show(error = VaultError.InvalidSecret("invalid base32 character"))
+
+        compose.onNodeWithText("The secret could not be stored: invalid base32 character.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a failed write shows the write message`() {
+        show(error = VaultError.Io(RuntimeException("no space")))
+
+        compose.onNodeWithText("The vault file could not be written.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a vault past the size the writer will produce shows its own message`() {
+        show(error = VaultError.TooLarge(size = 2, limit = 1))
+
+        compose.onNodeWithText("The vault is larger than the file format allows.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a version the reader does not know shows its own message`() {
+        show(error = VaultError.UnsupportedVersion(found = 2, supported = 1))
+
+        compose.onNodeWithText("The vault file is in a format this version of TAuth does not read.")
+            .assertIsDisplayed()
+    }
+
     private fun paste(text: String) = compose.onNodeWithTag(URI_FIELD_TAG).performTextInput(text)
 
     // The screen scrolls, and a control below the fold takes a click that lands nowhere unless it is
@@ -391,7 +431,7 @@ class AddAccountScreenTest {
         compose.onNodeWithTag(SECRET_FIELD_TAG).performScrollTo().performTextInput(SEED_BASE32)
     }
 
-    private fun show(error: VaultError? = null) {
+    private fun show(error: EntryAddError? = null) {
         compose.setContent {
             TauthTheme {
                 AddAccountScreen(
