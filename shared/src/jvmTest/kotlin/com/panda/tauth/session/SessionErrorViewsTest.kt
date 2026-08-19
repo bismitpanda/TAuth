@@ -126,7 +126,7 @@ class SessionErrorViewsTest {
         unlocked()
 
         val refusal: EntryAddError =
-            checkNotNull(runBlocking { session.addEntry(totpEntry(id = ENTRY_ID)) }.errorOrNull)
+            checkNotNull(runBlocking { session.addEntries(listOf(totpEntry(id = ENTRY_ID))) }.errorOrNull)
 
         assertIs<VaultError.InvalidEntry>(refusal)
     }

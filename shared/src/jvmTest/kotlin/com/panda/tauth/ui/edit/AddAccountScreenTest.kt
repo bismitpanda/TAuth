@@ -12,6 +12,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import com.panda.tauth.Outcome
 import com.panda.tauth.totp.HashAlgorithm
 import com.panda.tauth.totp.OtpAuthUri
 import com.panda.tauth.totp.OtpType
@@ -20,6 +21,7 @@ import com.panda.tauth.ui.theme.TauthTheme
 import com.panda.tauth.vault.EntryAddError
 import com.panda.tauth.vault.VaultError
 import org.junit.Rule
+import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -431,7 +433,98 @@ class AddAccountScreenTest {
         compose.onNodeWithTag(SECRET_FIELD_TAG).performScrollTo().performTextInput(SEED_BASE32)
     }
 
-    private fun show(error: EntryAddError? = null) {
+    // A composition with no desktop under it has nothing to read an image with, so it offers no way
+    // to try.
+    @Test
+    fun `no way to read an image is offered without one`() {
+        show()
+
+        compose.onNodeWithText("Read an image").assertDoesNotExist()
+    }
+
+    @Test
+    fun `reading an image is offered where the shell can`() {
+        show(scanning = { Outcome.Success(emptyList()) })
+
+        compose.onNodeWithText("Read an image").assertIsDisplayed()
+    }
+
+    @Test
+    fun `an account read from an image reaches the preview`() {
+        show(scanning = { Outcome.Success(listOf(TOTP_URI)) })
+
+        compose.onNodeWithText("Read an image").performClick()
+        compose.onNodeWithText("Choose an image").performClick()
+
+        compose.onNodeWithText("GitHub", substring = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun `an account read from an image is what a save hands over`() {
+        show(scanning = { Outcome.Success(listOf(TOTP_URI)) })
+
+        compose.onNodeWithText("Read an image").performClick()
+        compose.onNodeWithText("Choose an image").performClick()
+        compose.onNodeWithText(SAVE).performClick()
+
+        compose.runOnIdle { assertEquals("alice", saved?.accountName) }
+    }
+
+    @Test
+    fun `an image holding no code says so`() {
+        show(scanning = { Outcome.Success(emptyList()) })
+
+        compose.onNodeWithText("Read an image").performClick()
+        compose.onNodeWithText("Choose an image").performClick()
+
+        compose.onNodeWithTag(SCAN_PROBLEM_TAG).assertTextEquals("No QR code was found in that image.")
+    }
+
+    @Test
+    fun `a code that is not an account says so`() {
+        show(scanning = { Outcome.Success(listOf("https://example.com")) })
+
+        compose.onNodeWithText("Read an image").performClick()
+        compose.onNodeWithText("Choose an image").performClick()
+
+        compose.onNodeWithTag(SCAN_PROBLEM_TAG).assertTextEquals("That QR code is not an account TAuth can add.")
+    }
+
+    @Test
+    fun `an image that could not be read says so`() {
+        show(scanning = { Outcome.Failure(VaultError.Io(IOException("no such file"))) })
+
+        compose.onNodeWithText("Read an image").performClick()
+        compose.onNodeWithText("Choose an image").performClick()
+
+        compose.onNodeWithTag(SCAN_PROBLEM_TAG).assertTextEquals("That image could not be read.")
+    }
+
+    // §9.5's selection list: the account is named by its issuer and account name, and the choice is
+    // the user's.
+    @Test
+    fun `several accounts in an image are offered by name`() {
+        show(scanning = { Outcome.Success(listOf(TOTP_URI, HOTP_URI)) })
+
+        compose.onNodeWithText("Read an image").performClick()
+        compose.onNodeWithText("Choose an image").performClick()
+
+        compose.onNodeWithTag(scanPickTag(1)).assertTextEquals("bob")
+    }
+
+    @Test
+    fun `the account chosen from an image reaches the preview`() {
+        show(scanning = { Outcome.Success(listOf(TOTP_URI, HOTP_URI)) })
+
+        compose.onNodeWithText("Read an image").performClick()
+        compose.onNodeWithText("Choose an image").performClick()
+        compose.onNodeWithTag(scanPickTag(1)).performClick()
+        compose.onNodeWithText(SAVE).performClick()
+
+        compose.runOnIdle { assertEquals("bob", saved?.accountName) }
+    }
+
+    private fun show(error: EntryAddError? = null, scanning: QrScanning? = null) {
         compose.setContent {
             TauthTheme {
                 AddAccountScreen(
@@ -439,6 +532,7 @@ class AddAccountScreenTest {
                     onCancel = { cancels++ },
                     epochSeconds = PREVIEW_AT,
                     error = error,
+                    scanning = scanning,
                 )
             }
         }

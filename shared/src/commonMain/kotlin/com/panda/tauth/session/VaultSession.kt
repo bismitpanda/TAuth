@@ -13,6 +13,9 @@ import com.panda.tauth.vault.EntryAddError
 import com.panda.tauth.vault.EntryChangeError
 import com.panda.tauth.vault.EntryEdit
 import com.panda.tauth.vault.EntryLookupError
+import com.panda.tauth.vault.ExportFormat
+import com.panda.tauth.vault.ImportReadError
+import com.panda.tauth.vault.ImportRow
 import com.panda.tauth.vault.OpenVault
 import com.panda.tauth.vault.PasswordGateError
 import com.panda.tauth.vault.VaultAdoptError
@@ -28,6 +31,8 @@ import com.panda.tauth.vault.VaultReencodeError
 import com.panda.tauth.vault.VaultRewriteError
 import com.panda.tauth.vault.VaultUnlockError
 import com.panda.tauth.vault.edited
+import com.panda.tauth.vault.exported
+import com.panda.tauth.vault.readAccounts
 import com.panda.tauth.vault.toOtpAuthUri
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -42,6 +47,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 // The wait is a suspension rather than a timer thread, so cancelling the scope that owns it drops a
 // pending lock instead of leaving a thread to fire one at a session that has moved on.
@@ -162,6 +168,11 @@ class VaultSession internal constructor(
     suspend fun discloseUri(id: String, password: CharArray): Outcome<String, DiscloseError> =
         verifyPassword(password).flatMap { uriFor(id) }
 
+    // Every secret in the vault at once, which is the migration path §9.9 exists for. Checked first
+    // like the disclosure above, and reported through the gate's own view since it names no entry.
+    suspend fun disclosePlaintext(password: CharArray, format: ExportFormat): Outcome<String, PasswordGateError> =
+        verifyPassword(password).flatMap { plaintextFor(format) }
+
     fun lock(reason: LockReason) {
         exclusively(guard) {
             pendingLock?.cancel()
@@ -196,15 +207,19 @@ class VaultSession internal constructor(
         deferredReasons.clear()
     }
 
-    suspend fun addEntry(entry: VaultEntry): Outcome<Unit, EntryAddError> =
+    // The duplicate check reads the secrets the body holds, so it happens here rather than on a
+    // screen: what the UI is given carries no secret to compare with.
+    suspend fun readImport(text: String, now: Instant): Outcome<List<ImportRow>, ImportReadError> =
         onOpenVault(VaultError.VaultClosed) { open ->
-            if (open.body.entries.any { it.id == entry.id }) {
-                // Two entries under one id leave the map of decoded keys holding one of them, with
-                // nothing able to reach the other to zero it.
-                Outcome.Failure(VaultError.InvalidEntry("an entry with that id is already in the vault"))
-            } else {
-                add(open, entry)
-            }
+            readAccounts(text, open.body.entries, now, VaultEntry::newId)
+        }
+
+    // One write for the whole batch: fifty entries added one at a time are fifty chances to stop
+    // half way, and the file would then hold a part of what the user accepted.
+    suspend fun addEntries(entries: List<VaultEntry>): Outcome<Unit, EntryAddError> =
+        onOpenVault(VaultError.VaultClosed) { open ->
+            if (entries.isEmpty()) return@onOpenVault Outcome.Success(Unit)
+            addAll(open, entries)
         }
 
     // The secret is not among the fields an edit carries, so the key decoded for this entry is still
@@ -267,6 +282,9 @@ class VaultSession internal constructor(
 
     // The secret goes into the URI as the vault stores it: re-encoding the decoded key bytes would
     // give the same key a different spelling, losing the original's case, padding and whitespace.
+    private suspend fun plaintextFor(format: ExportFormat): Outcome<String, PasswordGateError> =
+        onOpenVault(VaultError.VaultClosed) { open -> Outcome.Success(open.body.exported(format)) }
+
     private suspend fun uriFor(id: String): Outcome<String, EntryLookupError> =
         onOpenVault(VaultError.VaultClosed) { open ->
             val entry = open.body.entries.find { it.id == id }
@@ -306,17 +324,15 @@ class VaultSession internal constructor(
 
     // Runs whole under the guard, so a lock during an operation waits rather than zeroing the key the
     // seal runs under. `closed` is passed because Kotlin cannot state VaultClosed is one of E's cases.
-    private suspend fun <T, E : VaultError> onOpenVault(
-        closed: E,
-        block: (OpenVault) -> Outcome<T, E>,
-    ): Outcome<T, E> = withContext(Dispatchers.IO) {
-        vaultWork.withLock {
-            exclusively<Outcome<T, E>>(guard) {
-                val open = vault ?: return@exclusively Outcome.Failure(closed)
-                block(open)
+    private suspend fun <T, E : VaultError> onOpenVault(closed: E, block: (OpenVault) -> Outcome<T, E>): Outcome<T, E> =
+        withContext(Dispatchers.IO) {
+            vaultWork.withLock {
+                exclusively<Outcome<T, E>>(guard) {
+                    val open = vault ?: return@exclusively Outcome.Failure(closed)
+                    block(open)
+                }
             }
         }
-    }
 
     // The file holds the new body before any of the session's own state moves, so the entries, the
     // decoded keys and the published state describe the file as it stands, failure paths included.
@@ -335,36 +351,55 @@ class VaultSession internal constructor(
         return Outcome.Success(value)
     }
 
-    private fun add(open: OpenVault, entry: VaultEntry): Outcome<Unit, EntryAddError> =
-        when (val decoded = Base32.decode(entry.secret)) {
-            is Outcome.Failure -> decoded
+    // Every secret is decoded before anything is written, so a batch carrying one that will not
+    // decode is refused whole rather than landing the accounts ahead of it.
+    private fun addAll(open: OpenVault, entries: List<VaultEntry>): Outcome<Unit, EntryAddError> {
+        val ids = entries.map { it.id }
+        if (ids.toSet().size != ids.size || open.body.entries.any { it.id in ids.toSet() }) {
+            // Two entries under one id leave the map of decoded keys holding one of them, with
+            // nothing able to reach the other to zero it.
+            return Outcome.Failure(VaultError.InvalidEntry("an entry with that id is already in the vault"))
+        }
+        val decoded = mutableMapOf<String, SecureBytes>()
+        val placed = mutableListOf<VaultEntry>()
+        for ((index, entry) in entries.withIndex()) {
+            when (val secret = Base32.decode(entry.secret)) {
+                // The keys decoded ahead of this one belong to a batch that is not going to be
+                // written, so they are zeroed here rather than waiting for the install below.
+                is Outcome.Failure -> {
+                    decoded.values.forEach { it.destroy() }
+                    return secret
+                }
 
-            is Outcome.Success -> {
-                // Every write renumbers densely from zero, so the count is the index past the end.
-                val placed = entry.copy(orderIndex = open.body.entries.size)
-                installedOrZeroed(entry.id, SecureBytes.adopt(decoded.value)) {
-                    commit(open, open.body.copy(entries = open.body.entries + placed), Unit)
+                is Outcome.Success -> {
+                    decoded[entry.id] = SecureBytes.adopt(secret.value)
+                    // Every write renumbers densely from zero, so the count is the index past the
+                    // end and the batch keeps the order it arrived in.
+                    placed += entry.copy(orderIndex = open.body.entries.size + index)
                 }
             }
         }
+        return installedOrZeroed(decoded) {
+            commit(open, open.body.copy(entries = open.body.entries + placed), Unit)
+        }
+    }
 
-    // The decoded key joins the session's holders only on the path that commits the write; every
-    // other path zeroes it. Internal so a test can watch the zeroing.
+    // The decoded keys join the session's holders only on the path that commits the write; every
+    // other path zeroes them. Internal so a test can watch the zeroing.
     internal fun <T, E : VaultError> installedOrZeroed(
-        id: String,
-        secret: SecureBytes,
+        decoded: Map<String, SecureBytes>,
         block: () -> Outcome<T, E>,
     ): Outcome<T, E> {
         var installed = false
         return try {
             block().also { outcome ->
                 if (outcome is Outcome.Success) {
-                    secrets[id] = secret
+                    secrets.putAll(decoded)
                     installed = true
                 }
             }
         } finally {
-            if (!installed) secret.destroy()
+            if (!installed) decoded.values.forEach { it.destroy() }
         }
     }
 

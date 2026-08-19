@@ -7,6 +7,7 @@ import com.panda.tauth.totp.Base32
 import com.panda.tauth.totp.HashAlgorithm
 import com.panda.tauth.valueOrNull
 import com.panda.tauth.vault.EntryEdit
+import com.panda.tauth.vault.ImportRow
 import com.panda.tauth.vault.TEST_SECRET
 import com.panda.tauth.vault.VaultBody
 import com.panda.tauth.vault.VaultCodec
@@ -16,6 +17,7 @@ import com.panda.tauth.vault.VaultFile
 import com.panda.tauth.vault.VaultReadError
 import com.panda.tauth.vault.VaultWriteError
 import com.panda.tauth.vault.hotpEntry
+import com.panda.tauth.vault.toOtpAuthUri
 import com.panda.tauth.vault.totpEntry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -27,6 +29,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.time.Instant
 
 private const val PASSWORD = "correct horse battery staple"
 
@@ -89,6 +92,12 @@ private val VAULT by lazy {
 
 private fun newEntry(id: String = NEW_ID) = totpEntry(id = id, accountName = "dave")
 
+private const val BATCH_ID = "0192f4c1-0000-7000-8000-000000000029"
+
+private val IMPORTED_AT = Instant.parse("2026-08-19T12:00:00Z")
+
+private const val IMPORTABLE_URI = "otpauth://totp/Somewhere:erin?secret=$TEST_SECRET&issuer=Somewhere"
+
 // The file the session writes through. A refused write keeps the previous contents, which is what
 // the store's atomic rename leaves behind when a write does not commit.
 private class ScriptedVaultFile(var contents: ByteArray?) : VaultFile {
@@ -131,6 +140,145 @@ class EntryOperationsTest {
         scope.cancel()
     }
 
+    // A batch is one write however many accounts it carries: fifty added one at a time are fifty
+    // chances to stop half way, and the file would then hold a part of what the user accepted.
+    @Test
+    fun `a batch of entries writes the vault once`() {
+        unlocked()
+
+        runBlocking { session.addEntries(listOf(newEntry(), newEntry(id = BATCH_ID))) }
+
+        assertEquals(1, file.writes)
+    }
+
+    @Test
+    fun `a batch of entries reaches the file whole`() {
+        unlocked()
+
+        runBlocking { session.addEntries(listOf(newEntry(), newEntry(id = BATCH_ID))) }
+
+        assertEquals(ENTRY_COUNT + 2, stored().size)
+    }
+
+    @Test
+    fun `a batch keeps the order it arrived in`() {
+        unlocked()
+
+        runBlocking { session.addEntries(listOf(newEntry(id = BATCH_ID), newEntry())) }
+
+        assertEquals(listOf(BATCH_ID, NEW_ID), stored().sortedBy { it.orderIndex }.takeLast(2).map { it.id })
+    }
+
+    @Test
+    fun `a batch lands past the entries already stored`() {
+        unlocked()
+
+        runBlocking { session.addEntries(listOf(newEntry())) }
+
+        assertEquals(ENTRY_COUNT, storedEntry(NEW_ID).orderIndex)
+    }
+
+    @Test
+    fun `every key in a batch is lendable once it is stored`() {
+        unlocked()
+
+        runBlocking { session.addEntries(listOf(newEntry(), newEntry(id = BATCH_ID))) }
+
+        assertContentEquals(SEED.encodeToByteArray(), session.withSecret(BATCH_ID) { it.copyOf() })
+    }
+
+    @Test
+    fun `an empty batch writes nothing`() {
+        unlocked()
+
+        runBlocking { session.addEntries(emptyList()) }
+
+        assertEquals(0, file.writes)
+    }
+
+    @Test
+    fun `a batch naming an id the vault already holds is refused`() {
+        unlocked()
+
+        val outcome = runBlocking { session.addEntries(listOf(newEntry(id = FIRST_ID))) }
+
+        assertIs<VaultError.InvalidEntry>(outcome.errorOrNull)
+    }
+
+    @Test
+    fun `a batch naming one id twice is refused`() {
+        unlocked()
+
+        val outcome = runBlocking { session.addEntries(listOf(newEntry(), newEntry())) }
+
+        assertIs<VaultError.InvalidEntry>(outcome.errorOrNull)
+    }
+
+    @Test
+    fun `a batch against a refused write leaves the entries as they were`() {
+        unlocked()
+        file.refusal = WRITE_REFUSED
+
+        runBlocking { session.addEntries(listOf(newEntry())) }
+
+        assertEquals(ENTRY_COUNT, stored().size)
+    }
+
+    @Test
+    fun `a batch against a refused write leaves no key behind`() {
+        unlocked()
+        file.refusal = WRITE_REFUSED
+
+        runBlocking { session.addEntries(listOf(newEntry())) }
+
+        assertNull(session.withSecret(NEW_ID) { it.copyOf() })
+    }
+
+    @Test
+    fun `a batch against a locked vault reports the vault closed`() {
+        val outcome = runBlocking { session.addEntries(listOf(newEntry())) }
+
+        assertEquals(VaultError.VaultClosed, outcome.errorOrNull)
+    }
+
+    @Test
+    fun `an import reads the accounts a file offers`() {
+        unlocked()
+
+        val outcome = runBlocking { session.readImport(IMPORTABLE_URI, IMPORTED_AT) }
+
+        assertEquals(1, checkNotNull(outcome.valueOrNull).size)
+    }
+
+    // The vault's own secrets are what a duplicate is measured against, which is why the check runs
+    // here rather than on a screen holding entries that carry none.
+    @Test
+    fun `an import marks an account the vault already holds`() {
+        unlocked()
+
+        val outcome = runBlocking { session.readImport(storedUri(), IMPORTED_AT) }
+
+        assertEquals(true, (checkNotNull(outcome.valueOrNull).single() as ImportRow.Account).isDuplicate)
+    }
+
+    @Test
+    fun `an import against a locked vault reports the vault closed`() {
+        val outcome = runBlocking { session.readImport(IMPORTABLE_URI, IMPORTED_AT) }
+
+        assertEquals(VaultError.VaultClosed, outcome.errorOrNull)
+    }
+
+    @Test
+    fun `an import reads no file of its own`() {
+        unlocked()
+
+        runBlocking { session.readImport(IMPORTABLE_URI, IMPORTED_AT) }
+
+        assertEquals(0, file.writes)
+    }
+
+    private fun storedUri(): String = storedEntry(FIRST_ID).toOtpAuthUri().build()
+
     private fun unlocked() {
         assertIs<Outcome.Success<Unit>>(runBlocking { session.unlock(PASSWORD.toCharArray()) })
     }
@@ -155,7 +303,7 @@ class EntryOperationsTest {
     fun `adding an entry writes the vault`() {
         unlocked()
 
-        runBlocking { session.addEntry(newEntry()) }
+        runBlocking { session.addEntries(listOf(newEntry())) }
 
         assertEquals(1, file.writes)
     }
@@ -164,7 +312,7 @@ class EntryOperationsTest {
     fun `an added entry reaches the file`() {
         unlocked()
 
-        runBlocking { session.addEntry(newEntry()) }
+        runBlocking { session.addEntries(listOf(newEntry())) }
 
         assertEquals("dave", storedEntry(NEW_ID).accountName)
     }
@@ -173,7 +321,7 @@ class EntryOperationsTest {
     fun `an added entry is published to the session`() {
         unlocked()
 
-        runBlocking { session.addEntry(newEntry()) }
+        runBlocking { session.addEntries(listOf(newEntry())) }
 
         assertEquals("dave", publishedEntry(NEW_ID).accountName)
     }
@@ -182,7 +330,7 @@ class EntryOperationsTest {
     fun `an added entry lands after the entries already there`() {
         unlocked()
 
-        runBlocking { session.addEntry(newEntry().copy(orderIndex = 0)) }
+        runBlocking { session.addEntries(listOf(newEntry().copy(orderIndex = 0))) }
 
         assertEquals(ENTRY_COUNT, storedEntry(NEW_ID).orderIndex)
     }
@@ -191,7 +339,7 @@ class EntryOperationsTest {
     fun `an added entry lends the key its base32 stands for`() {
         unlocked()
 
-        runBlocking { session.addEntry(newEntry()) }
+        runBlocking { session.addEntries(listOf(newEntry())) }
 
         assertContentEquals(SEED.encodeToByteArray(), session.withSecret(NEW_ID) { it.copyOf() })
     }
@@ -200,7 +348,7 @@ class EntryOperationsTest {
     fun `an entry under an id the vault already holds is refused`() {
         unlocked()
 
-        val outcome = runBlocking { session.addEntry(newEntry(id = FIRST_ID)) }
+        val outcome = runBlocking { session.addEntries(listOf(newEntry(id = FIRST_ID))) }
 
         assertIs<VaultError.InvalidEntry>(outcome.errorOrNull)
     }
@@ -209,7 +357,7 @@ class EntryOperationsTest {
     fun `a refused add writes nothing`() {
         unlocked()
 
-        runBlocking { session.addEntry(newEntry(id = FIRST_ID)) }
+        runBlocking { session.addEntries(listOf(newEntry(id = FIRST_ID))) }
 
         assertEquals(0, file.writes)
     }
@@ -219,7 +367,7 @@ class EntryOperationsTest {
         unlocked()
         file.refusal = WRITE_REFUSED
 
-        val outcome = runBlocking { session.addEntry(newEntry()) }
+        val outcome = runBlocking { session.addEntries(listOf(newEntry())) }
 
         assertEquals(WRITE_REFUSED, outcome.errorOrNull)
     }
@@ -229,7 +377,7 @@ class EntryOperationsTest {
         unlocked()
         file.refusal = WRITE_REFUSED
 
-        runBlocking { session.addEntry(newEntry()) }
+        runBlocking { session.addEntries(listOf(newEntry())) }
 
         assertEquals(ENTRY_COUNT, published().size)
     }
@@ -239,7 +387,7 @@ class EntryOperationsTest {
         unlocked()
         file.refusal = WRITE_REFUSED
 
-        runBlocking { session.addEntry(newEntry()) }
+        runBlocking { session.addEntries(listOf(newEntry())) }
 
         assertNull(session.withSecret(NEW_ID) { it.size })
     }
@@ -249,7 +397,7 @@ class EntryOperationsTest {
         unlocked()
         val key = SEED.encodeToByteArray()
 
-        session.installedOrZeroed(NEW_ID, SecureBytes.adopt(key)) { Outcome.Failure(WRITE_REFUSED) }
+        session.installedOrZeroed(mapOf(NEW_ID to SecureBytes.adopt(key))) { Outcome.Failure(WRITE_REFUSED) }
 
         assertContentEquals(ZEROED_SEED, key)
     }
@@ -258,7 +406,9 @@ class EntryOperationsTest {
     fun `a key held for a write that commits is installed`() {
         unlocked()
 
-        session.installedOrZeroed(NEW_ID, SecureBytes.adopt(SEED.encodeToByteArray())) { Outcome.Success(Unit) }
+        session.installedOrZeroed(mapOf(NEW_ID to SecureBytes.adopt(SEED.encodeToByteArray()))) {
+            Outcome.Success(Unit)
+        }
 
         assertContentEquals(SEED.encodeToByteArray(), session.withSecret(NEW_ID) { it.copyOf() })
     }
@@ -268,7 +418,7 @@ class EntryOperationsTest {
         unlocked()
         session.lock(LockReason.Manual)
 
-        val outcome = runBlocking { session.addEntry(newEntry()) }
+        val outcome = runBlocking { session.addEntries(listOf(newEntry())) }
 
         assertEquals(VaultError.VaultClosed, outcome.errorOrNull)
     }
@@ -728,7 +878,7 @@ class EntryOperationsTest {
         // Started inside the read, the one point a test can act mid-derivation. An add running
         // alongside would reach the file and then be dropped by the install of the body just read.
         file.onRead = {
-            adding = Thread { runBlocking { session.addEntry(newEntry()) } }.also { it.start() }
+            adding = Thread { runBlocking { session.addEntries(listOf(newEntry())) } }.also { it.start() }
         }
 
         runBlocking { session.unlock(PASSWORD.toCharArray()) }

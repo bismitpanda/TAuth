@@ -4,6 +4,8 @@ import com.panda.tauth.Outcome
 import com.panda.tauth.errorOrNull
 import com.panda.tauth.totp.HashAlgorithm
 import com.panda.tauth.valueOrNull
+import com.panda.tauth.vault.ExportFormat
+import com.panda.tauth.vault.PlaintextExport
 import com.panda.tauth.vault.TEST_SECRET
 import com.panda.tauth.vault.VaultBody
 import com.panda.tauth.vault.VaultCodec
@@ -12,6 +14,7 @@ import com.panda.tauth.vault.VaultFile
 import com.panda.tauth.vault.VaultReadError
 import com.panda.tauth.vault.VaultWriteError
 import com.panda.tauth.vault.hotpEntry
+import com.panda.tauth.vault.plaintextExportJson
 import com.panda.tauth.vault.totpEntry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -251,6 +254,76 @@ class SecretDisclosureTest {
 
         assertNull(state.entries.firstOrNull { TEST_SECRET in it.toString() })
     }
+
+    @Test
+    fun `the whole vault discloses as a list of uris`() {
+        unlocked()
+
+        val outcome = runBlocking { session.disclosePlaintext(PASSWORD.toCharArray(), ExportFormat.URI_LIST) }
+
+        assertEquals("$TOTP_URI\n$HOTP_URI\n", outcome.valueOrNull)
+    }
+
+    @Test
+    fun `the whole vault discloses as a document carrying every account`() {
+        unlocked()
+
+        val outcome = runBlocking { session.disclosePlaintext(PASSWORD.toCharArray(), ExportFormat.JSON) }
+
+        assertEquals(listOf(TOTP_ID, HOTP_ID), documentIn(outcome).entries.map { it.id })
+    }
+
+    // The check runs before anything is read, so a refusal is the whole answer and no secret is
+    // assembled on the way to it.
+    @Test
+    fun `a refused password discloses no accounts at all`() {
+        unlocked()
+
+        val outcome = runBlocking { session.disclosePlaintext(WRONG_PASSWORD.toCharArray(), ExportFormat.JSON) }
+
+        assertNull(outcome.valueOrNull)
+    }
+
+    @Test
+    fun `a refused password reports the password rather than the vault`() {
+        unlocked()
+
+        val outcome = runBlocking { session.disclosePlaintext(WRONG_PASSWORD.toCharArray(), ExportFormat.JSON) }
+
+        assertEquals(VaultError.WrongPassword, outcome.errorOrNull)
+    }
+
+    @Test
+    fun `a locked vault discloses no accounts`() {
+        val outcome = runBlocking { session.disclosePlaintext(PASSWORD.toCharArray(), ExportFormat.JSON) }
+
+        assertEquals(VaultError.VaultClosed, outcome.errorOrNull)
+    }
+
+    @Test
+    fun `disclosing every account writes nothing`() {
+        unlocked()
+        val before = file.writes
+
+        runBlocking { session.disclosePlaintext(PASSWORD.toCharArray(), ExportFormat.JSON) }
+
+        assertEquals(before, file.writes)
+    }
+
+    // The accounts come off the body the session already holds, so an export is not a second unlock
+    // and a file that has gone since is no obstacle to one.
+    @Test
+    fun `disclosing every account reads no file`() {
+        unlocked()
+        val before = file.reads
+
+        runBlocking { session.disclosePlaintext(PASSWORD.toCharArray(), ExportFormat.JSON) }
+
+        assertEquals(before, file.reads)
+    }
+
+    private fun documentIn(outcome: Outcome<String, *>): PlaintextExport =
+        plaintextExportJson.decodeFromString(checkNotNull(outcome.valueOrNull))
 
     private fun unlocked() {
         assertIs<Outcome.Success<Unit>>(runBlocking { session.unlock(PASSWORD.toCharArray()) })

@@ -31,6 +31,7 @@ import com.panda.tauth.ui.list.SORT_ISSUER_LABEL
 import com.panda.tauth.ui.list.SORT_MANUAL_LABEL
 import com.panda.tauth.ui.list.SORT_RECENT_LABEL
 import com.panda.tauth.ui.theme.LocalSpacing
+import com.panda.tauth.vault.ImportReadError
 import com.panda.tauth.vault.VaultError
 import com.panda.tauth.vault.VaultReadError
 import com.panda.tauth.vault.VaultRewriteError
@@ -82,6 +83,20 @@ internal const val DATA_HEADING = "Data"
 internal const val LOCATION_LABEL = "Vault file"
 internal const val REVEAL_LABEL = "Show in file manager"
 internal const val EXPORT_LABEL = "Export an encrypted copy"
+internal const val PLAINTEXT_EXPORT_LABEL = "Export accounts unencrypted"
+internal const val PLAINTEXT_EXPORT_NOTE =
+    "The unencrypted export is the way accounts move to another authenticator. Anything that can read " +
+        "the file it writes can generate the codes."
+
+internal const val SETTINGS_PLAINTEXT_PROBLEM_TAG = "settings-plaintext-problem"
+
+internal const val IMPORT_LABEL = "Import accounts"
+internal const val IMPORT_NOTE =
+    "An import reads an unencrypted export or a list of otpauth:// URIs, and shows what it found " +
+        "before anything is added."
+
+internal const val SETTINGS_IMPORT_PROBLEM_TAG = "settings-import-problem"
+
 internal const val EXPORT_NOTE =
     "The copy is the vault file itself and the master password that opens this vault opens it. " +
         "TAuth keeps no backup of its own, and a deleted account is recovered from an export or not " +
@@ -164,7 +179,9 @@ fun SettingsScreen(
     shell: ShellSettings = ShellSettings(),
     isBusy: Boolean = false,
     error: VaultRewriteError? = null,
-    exportError: ExportError? = null,
+    exportError: VaultExportError? = null,
+    plaintextError: FileWriteError? = null,
+    importError: ImportReadError? = null,
     onPolicyChange: (SecurityPolicy) -> Unit = {},
     onThemeChange: (Theme) -> Unit = {},
     onSortOrderChange: (SortOrder) -> Unit = {},
@@ -173,6 +190,8 @@ fun SettingsScreen(
     onChangePassword: (CharArray, CharArray) -> Unit = { _, _ -> },
     onRotate: (CharArray) -> Unit = {},
     onExport: () -> Unit = {},
+    onPlaintextExport: () -> Unit = {},
+    onImport: () -> Unit = {},
     onBack: () -> Unit = {},
 ) {
     val spacing = LocalSpacing.current
@@ -217,7 +236,16 @@ fun SettingsScreen(
             onMinimiseToTrayChange = onMinimiseToTrayChange,
             onStartMinimisedChange = onStartMinimisedChange,
         )
-        DataGroup(shell = shell, isEnabled = isEnabled, exportError = exportError, onExport = onExport)
+        DataGroup(
+            shell = shell,
+            isEnabled = isEnabled,
+            exportError = exportError,
+            plaintextError = plaintextError,
+            importError = importError,
+            onExport = onExport,
+            onPlaintextExport = onPlaintextExport,
+            onImport = onImport,
+        )
         AboutGroup(shell = shell)
     }
 }
@@ -434,8 +462,12 @@ private fun TrayGroup(
 private fun DataGroup(
     shell: ShellSettings,
     isEnabled: Boolean,
-    exportError: ExportError?,
+    exportError: VaultExportError?,
+    plaintextError: FileWriteError?,
+    importError: ImportReadError?,
     onExport: () -> Unit,
+    onPlaintextExport: () -> Unit,
+    onImport: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val spacing = LocalSpacing.current
@@ -449,6 +481,8 @@ private fun DataGroup(
         Row(horizontalArrangement = Arrangement.spacedBy(spacing.small)) {
             TextButton(onClick = shell.onReveal, enabled = isEnabled) { Text(REVEAL_LABEL) }
             Button(onClick = onExport, enabled = isEnabled) { Text(EXPORT_LABEL) }
+            TextButton(onClick = onPlaintextExport, enabled = isEnabled) { Text(PLAINTEXT_EXPORT_LABEL) }
+            TextButton(onClick = onImport, enabled = isEnabled) { Text(IMPORT_LABEL) }
         }
         // Beside the control that asked for the copy, since what it reports is the destination the
         // user picked rather than anything about the vault.
@@ -460,8 +494,46 @@ private fun DataGroup(
                 color = MaterialTheme.colorScheme.error,
             )
         }
+        // Its own slot: the two exports fail over different destinations and one says nothing about
+        // the other's.
+        plaintextError?.let { failure ->
+            Text(
+                plaintextMessageFor(failure),
+                modifier = Modifier.testTag(SETTINGS_PLAINTEXT_PROBLEM_TAG),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        // A read that failed has no preview to report itself on, so it reports here.
+        importError?.let { failure ->
+            Text(
+                importMessageFor(failure),
+                modifier = Modifier.testTag(SETTINGS_IMPORT_PROBLEM_TAG),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
         Text(EXPORT_NOTE, style = MaterialTheme.typography.bodySmall)
+        Text(PLAINTEXT_EXPORT_NOTE, style = MaterialTheme.typography.bodySmall)
+        Text(IMPORT_NOTE, style = MaterialTheme.typography.bodySmall)
     }
+}
+
+// No else branch, over the cases reading a file to import reports: the file is one TAuth did not
+// necessarily write, so what is damaged here is that file rather than the vault.
+private fun importMessageFor(error: ImportReadError): String = when (error) {
+    is VaultError.Corrupt -> "Nothing was imported: ${error.detail}."
+    is VaultError.Io -> "That file could not be read, so nothing was imported."
+    is VaultError.VaultClosed -> "The vault locked before the file was read, so nothing was imported."
+}
+
+// No else branch, over the cases writing a file reports: nothing about the vault reaches this, since
+// the accounts were read out of an open one.
+private fun plaintextMessageFor(error: FileWriteError): String = when (error) {
+    is ExportError.NotRestricted ->
+        "That location cannot keep the accounts to you alone, so nothing was written there."
+
+    is ExportError.Io -> "The accounts could not be written to that location."
 }
 
 @Composable
@@ -477,7 +549,7 @@ private fun AboutGroup(shell: ShellSettings, modifier: Modifier = Modifier) {
 
 // An export writes nothing to the vault, so no branch here reports one: the vault was read, and the
 // copy was going somewhere else.
-private fun messageFor(error: ExportError): String = when (error) {
+private fun messageFor(error: VaultExportError): String = when (error) {
     is ExportError.VaultUnreadable -> "No copy was made: " + readProblem(error.cause)
 
     is ExportError.NotRestricted ->

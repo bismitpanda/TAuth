@@ -189,6 +189,20 @@ class VaultErrorViewsTest {
         assertEquals(setOf("MalformedUri", "InvalidSecret", "InvalidEntry"), namesIn<DraftError>())
     }
 
+    // The file offered is one TAuth did not necessarily write, so one that is not an export is the
+    // damage `Corrupt` names. A line that will not read is a row of the preview rather than a case.
+    @Test
+    fun `reading an import reports a damaged file, one that would not be read, and a vault closed`() {
+        assertEquals(setOf("Corrupt", "Io", "VaultClosed"), namesIn<ImportReadError>())
+    }
+
+    // Reading an image names no vault: the account a code holds is not stored by being found, so a
+    // vault closed under it is not one of the cases it reports.
+    @Test
+    fun `reading an image reports the image and nothing about a vault`() {
+        assertEquals(setOf("Corrupt", "Io"), namesIn<ImageReadError>())
+    }
+
     @Test
     fun `every case belongs to at least one operation view`() {
         val covered = namesIn<VaultCreateError>() + namesIn<VaultUnlockError>() + namesIn<VaultRewriteError>() +

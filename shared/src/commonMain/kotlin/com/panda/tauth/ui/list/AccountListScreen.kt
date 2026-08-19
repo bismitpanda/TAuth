@@ -19,6 +19,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -40,10 +41,16 @@ import com.panda.tauth.ui.ClipboardCopy
 import com.panda.tauth.ui.CopyResult
 import com.panda.tauth.ui.components.DisclosureState
 import com.panda.tauth.ui.components.SecretDisclosureGate
+import com.panda.tauth.ui.qr.QrEncoding
+import com.panda.tauth.ui.qr.QrSymbol
+import com.panda.tauth.ui.qr.ShowQrDialog
+import com.panda.tauth.ui.settings.FileWriteError
 import com.panda.tauth.ui.theme.LocalSpacing
 import com.panda.tauth.vault.DiscloseError
 import com.panda.tauth.vault.EntryChangeError
 import com.panda.tauth.vault.VaultError
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 internal const val TITLE = "Accounts"
 internal const val SEARCH_TAG = "account-search"
@@ -58,7 +65,8 @@ internal const val SORT_RECENT_LABEL = "Recently added"
 
 internal const val EMPTY_HEADING = "No accounts yet"
 internal const val EMPTY_BODY =
-    "Add an account by pasting the otpauth:// URI its provider gave you, or by typing its details in by hand."
+    "Add an account by pasting the otpauth:// URI its provider gave you, by reading an image of the " +
+        "QR code it showed you, or by typing its details in by hand."
 
 internal const val DELETE_CONFIRM_LABEL = "Delete account"
 internal const val DELETE_CANCEL_LABEL = "Keep account"
@@ -75,6 +83,9 @@ private fun sortLabel(order: SortOrder): String = when (order) {
 internal fun disclosureStatement(entry: UnlockedEntry): String =
     "The complete secret for ${entry.describe()} is about to be placed on the clipboard as an otpauth:// URI."
 
+internal fun qrDisclosureStatement(entry: UnlockedEntry): String =
+    "The complete secret for ${entry.describe()} is about to be drawn on screen as a QR code."
+
 internal fun UnlockedEntry.describe(): String = issuer?.let { "$it — $accountName" } ?: accountName
 
 private class RowCallbacks(
@@ -83,6 +94,7 @@ private class RowCallbacks(
     val onHideCode: (String) -> Unit,
     val onEdit: (String) -> Unit,
     val onCopyUri: (UnlockedEntry) -> Unit,
+    val onShowQr: (UnlockedEntry) -> Unit,
     val onDelete: (UnlockedEntry) -> Unit,
     val onMove: (String, Int) -> Unit,
 )
@@ -96,9 +108,13 @@ fun AccountListScreen(
     sortOrder: SortOrder = SortOrder.MANUAL,
     clipboardClearSeconds: Int = 0,
     clipboard: ClipboardCopy = ClipboardCopy { _, _ -> CopyResult.REFUSED },
+    qrEncoding: QrEncoding = QrEncoding { null },
     error: EntryChangeError? = null,
     onSortOrderChange: (SortOrder) -> Unit = {},
     onVisibleChange: (Set<String>) -> Unit = {},
+    onIdleLockSuppressed: (Boolean) -> Unit = {},
+    // Absent where the composition has no desktop under it to write a file to.
+    onSaveQrImage: (suspend (QrSymbol) -> Outcome<Unit, FileWriteError>)? = null,
     onGenerate: suspend (String) -> Outcome<String, EntryChangeError> = { Outcome.Failure(VaultError.VaultClosed) },
     onDiscloseUri: suspend (String, CharArray) -> Outcome<String, DiscloseError> = { _, _ ->
         Outcome.Failure(VaultError.VaultClosed)
@@ -115,7 +131,10 @@ fun AccountListScreen(
     val listState = rememberLazyListState()
     // Generated codes end with this composition, so a lock takes them off the screen with it.
     val rows = remember { RowState() }
-    val gate = remember { DisclosureState<UnlockedEntry, DiscloseError>() }
+    // One gate per disclosure: the two state different destinations for the same secret, and one
+    // slot would leave a password typed for the clipboard opening the dialog instead.
+    val copyGate = remember { DisclosureState<UnlockedEntry, DiscloseError>() }
+    val qrGate = remember { DisclosureState<UnlockedEntry, DiscloseError>() }
 
     var query by remember { mutableStateOf("") }
     var pendingDelete by remember { mutableStateOf<UnlockedEntry?>(null) }
@@ -140,7 +159,8 @@ fun AccountListScreen(
         onGenerate = { id -> rows.generate(scope, id, onGenerate) },
         onHideCode = rows::hideCode,
         onEdit = onEdit,
-        onCopyUri = gate::ask,
+        onCopyUri = copyGate::ask,
+        onShowQr = qrGate::ask,
         onDelete = { entry -> pendingDelete = entry },
         onMove = onMove,
     )
@@ -186,17 +206,106 @@ fun AccountListScreen(
         )
     }
 
-    gate.request?.let { entry ->
+    Disclosures(
+        copyGate = copyGate,
+        qrGate = qrGate,
+        qrEncoding = qrEncoding,
+        scope = scope,
+        onDisclose = onDiscloseUri,
+        // Both end on the clipboard under the delay a copied code clears under, matched on the
+        // string that was placed there.
+        onCopyUri = { entry, uri -> rows.copy(scope, entry.id, URI_SUBJECT, uri, clipboard, clipboardClearSeconds) },
+        onIdleLockSuppressed = onIdleLockSuppressed,
+        onSaveImage = onSaveQrImage,
+    )
+}
+
+// The two actions that put this screen's secrets somewhere else, each behind a gate of its own.
+@Composable
+private fun Disclosures(
+    copyGate: DisclosureState<UnlockedEntry, DiscloseError>,
+    qrGate: DisclosureState<UnlockedEntry, DiscloseError>,
+    qrEncoding: QrEncoding,
+    scope: CoroutineScope,
+    onDisclose: suspend (String, CharArray) -> Outcome<String, DiscloseError>,
+    onCopyUri: (UnlockedEntry, String) -> Unit,
+    onIdleLockSuppressed: (Boolean) -> Unit,
+    onSaveImage: (suspend (QrSymbol) -> Outcome<Unit, FileWriteError>)?,
+) {
+    copyGate.request?.let { entry ->
         SecretDisclosureGate(
             statement = disclosureStatement(entry),
+            isBusy = copyGate.isBusy,
+            error = copyGate.error,
+            onConfirm = { password ->
+                copyGate.confirm(scope, password, { subject, entered -> onDisclose(subject.id, entered) }) { uri ->
+                    onCopyUri(entry, uri)
+                }
+            },
+            onDismiss = copyGate::cancel,
+        )
+    }
+
+    QrDisclosure(qrGate, qrEncoding, scope, onDisclose, onCopyUri, onIdleLockSuppressed, onSaveImage)
+}
+
+// The gate and what it opens. The URI it discloses is a complete credential and lives here only
+// while the dialog drawing it does.
+@Composable
+private fun QrDisclosure(
+    gate: DisclosureState<UnlockedEntry, DiscloseError>,
+    qrEncoding: QrEncoding,
+    scope: CoroutineScope,
+    onDisclose: suspend (String, CharArray) -> Outcome<String, DiscloseError>,
+    onCopyUri: (UnlockedEntry, String) -> Unit,
+    onIdleLockSuppressed: (Boolean) -> Unit,
+    onSaveImage: (suspend (QrSymbol) -> Outcome<Unit, FileWriteError>)?,
+) {
+    var shown by remember { mutableStateOf<Pair<UnlockedEntry, String>?>(null) }
+
+    gate.request?.let { entry ->
+        SecretDisclosureGate(
+            statement = qrDisclosureStatement(entry),
             isBusy = gate.isBusy,
             error = gate.error,
             onConfirm = { password ->
-                gate.confirm(scope, password, { subject, entered -> onDiscloseUri(subject.id, entered) }) { uri ->
-                    rows.copy(scope, entry.id, URI_SUBJECT, uri, clipboard, clipboardClearSeconds)
+                gate.confirm(scope, password, { subject, entered -> onDisclose(subject.id, entered) }) { uri ->
+                    shown = entry to uri
                 }
             },
             onDismiss = gate::cancel,
+        )
+    }
+
+    shown?.let { (entry, uri) ->
+        // A symbol is read off the screen with no hand on the machine, which the idle timer would
+        // take for an empty room. The dialog's own minute is what bounds the hold.
+        DisposableEffect(Unit) {
+            onIdleLockSuppressed(true)
+            onDispose { onIdleLockSuppressed(false) }
+        }
+        val symbol = remember(uri) { qrEncoding.encode(uri) }
+        var isSaving by remember { mutableStateOf(false) }
+        var saveError by remember { mutableStateOf<FileWriteError?>(null) }
+        ShowQrDialog(
+            entry = entry,
+            symbol = symbol,
+            onCopyUri = { onCopyUri(entry, uri) },
+            onDismiss = { shown = null },
+            // Offered only where there is both a symbol to write and somewhere to write it.
+            onSaveImage = symbol?.let { drawn ->
+                onSaveImage?.let { save ->
+                    {
+                        scope.launch {
+                            isSaving = true
+                            saveError = (save(drawn) as? Outcome.Failure)?.error
+                            isSaving = false
+                        }
+                    }
+                }
+            },
+            isSaving = isSaving,
+            saveError = saveError,
         )
     }
 }
@@ -239,6 +348,7 @@ private fun AccountList(
                 onHideCode = { callbacks.onHideCode(entry.id) },
                 onEdit = { callbacks.onEdit(entry.id) },
                 onCopyUri = { callbacks.onCopyUri(entry) },
+                onShowQr = { callbacks.onShowQr(entry) },
                 onDelete = { callbacks.onDelete(entry) },
             )
         }

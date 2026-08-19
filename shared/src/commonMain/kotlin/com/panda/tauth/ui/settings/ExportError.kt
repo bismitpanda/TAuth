@@ -2,16 +2,22 @@ package com.panda.tauth.ui.settings
 
 import com.panda.tauth.vault.VaultReadError
 
-// Why a copy was not made. An export reads the vault and writes somewhere else, and the two failures
-// are about different files: a message naming the wrong one sends the user to the wrong place.
+// Why something the user asked for was not placed where they asked for it. A copy of the vault reads
+// the vault first and a saved QR code does not, so the two report through different views of this.
 sealed interface ExportError {
     // The vault could not be read, so there was nothing to copy. It was not written to and is
     // unchanged.
-    data class VaultUnreadable(val cause: VaultReadError) : ExportError
+    data class VaultUnreadable(val cause: VaultReadError) : VaultExportError
 
-    // The destination took the file but not the restriction that keeps it to its owner, so no
-    // ciphertext was written into it.
-    data object NotRestricted : ExportError
+    // The destination took the file but not the restriction that keeps it to its owner, so nothing
+    // was written into it.
+    data object NotRestricted : FileWriteError
 
-    data class Io(val cause: Throwable) : ExportError
+    data class Io(val cause: Throwable) : FileWriteError
 }
+
+sealed interface VaultExportError : ExportError
+
+// Placing bytes in a file only its owner can read, which is every destination outside the vault
+// directory: a copy of the vault and a saved QR code both end here.
+sealed interface FileWriteError : VaultExportError

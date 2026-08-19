@@ -12,6 +12,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
@@ -97,21 +98,15 @@ private fun runTAuth(role: InstanceRole) = application {
         visible = isVisible,
         state = windowState,
         title = APPLICATION_NAME,
-        icon = TAuthIcon,
+        icon = tauthIcon(),
     ) {
         val windowInfo = LocalWindowInfo.current
         val sessionState by session.state.collectAsState()
         val idleMinutes = idleTimeoutMinutes(sessionState)
+        var isIdleLockSuppressed by remember { mutableStateOf(false) }
 
-        LaunchedEffect(session, windowState, windowInfo) {
-            snapshotFlow {
-                WindowPresence(
-                    isVisible = isVisible,
-                    isMinimised = windowState.isMinimized,
-                    isFocused = windowInfo.isWindowFocused,
-                    shownBy = shownBy,
-                )
-            }.collect { applyWindowPresence(it, session::scheduleLock, session::cancelScheduledLock) }
+        WatchPresence(session, windowState, windowInfo) {
+            WindowPresence(isVisible, windowState.isMinimized, windowInfo.isWindowFocused, shownBy)
         }
 
         LaunchedEffect(windowRaise, primary) {
@@ -127,10 +122,10 @@ private fun runTAuth(role: InstanceRole) = application {
             )
         }
 
-        // Keyed on the interval as well as on the window, so a lock or an unlock restarts the wait
-        // against the policy the session publishes with it.
-        LaunchedEffect(idleWatch, isVisible, idleMinutes) {
-            idleWatch.awaitIdle(isVisible, idleMinutes, session::scheduleLock)
+        // Keyed on the interval and the hold as well as the window, so a lock, an unlock or a hold
+        // lifted each begin a whole interval against the policy the session publishes.
+        LaunchedEffect(idleWatch, isVisible, idleMinutes, isIdleLockSuppressed) {
+            idleWatch.awaitIdle(isVisible, idleMinutes, isIdleLockSuppressed, session::scheduleLock)
         }
 
         TauthTheme(darkTheme = preferences.value.theme.isDark(isSystemInDarkTheme())) {
@@ -139,9 +134,31 @@ private fun runTAuth(role: InstanceRole) = application {
                 ticker = ticker,
                 clipboard = clipboard.asCopy(),
                 preferences = preferences,
+                qrEncoding = QrEncoder,
                 shell = shell,
                 isSingleInstanceUnprotected = role is InstanceRole.Unprotected,
+                onIdleLockSuppressed = { isIdleLockSuppressed = it },
+                scanning = { readQrImage { chooseQrImage() } },
+                onSaveQrImage = { symbol ->
+                    saveQrImage(symbol) { chooseSaveDestination(QR_IMAGE_TITLE, QR_IMAGE_FILE_NAME) }
+                },
             )
+        }
+    }
+}
+
+// The four facts are sampled together, so a change to any of them is one report rather than four.
+// The sample is a lambda because the effect outlives the composition that supplied it.
+@Composable
+private fun WatchPresence(
+    session: VaultSession,
+    windowState: WindowState,
+    windowInfo: WindowInfo,
+    presence: () -> WindowPresence,
+) {
+    LaunchedEffect(session, windowState, windowInfo) {
+        snapshotFlow(presence).collect {
+            applyWindowPresence(it, session::scheduleLock, session::cancelScheduledLock)
         }
     }
 }
@@ -168,6 +185,10 @@ private fun shellSettings(paths: VaultPaths, canConfigureTray: Boolean): ShellSe
     canConfigureTray = canConfigureTray,
     onReveal = { revealInFileManager(paths.vaultFile) },
     onExport = { bytes -> exportVault(bytes) { chooseExportDestination() } },
+    onExportPlaintext = { text, format ->
+        exportPlaintext(text, format) { name -> chooseSaveDestination(PLAINTEXT_DIALOG_TITLE, name) }
+    },
+    onChooseImport = { readImportSource { chooseImportSource() } },
 )
 
 // A window behind another one, or on the desktop the user has left, is not back on screen for having

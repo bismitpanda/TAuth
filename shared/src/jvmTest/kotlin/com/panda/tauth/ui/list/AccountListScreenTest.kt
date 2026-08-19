@@ -16,6 +16,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onChildren
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -33,6 +34,11 @@ import com.panda.tauth.ui.CopyResult
 import com.panda.tauth.ui.components.DISCLOSURE_PASSWORD_TAG
 import com.panda.tauth.ui.components.DISCLOSURE_STATEMENT_TAG
 import com.panda.tauth.ui.hotpRow
+import com.panda.tauth.ui.qr.QR_SAVE_PROBLEM_TAG
+import com.panda.tauth.ui.qr.QrEncoding
+import com.panda.tauth.ui.qr.QrSymbol
+import com.panda.tauth.ui.settings.ExportError
+import com.panda.tauth.ui.settings.FileWriteError
 import com.panda.tauth.ui.theme.TauthTheme
 import com.panda.tauth.ui.totpRow
 import com.panda.tauth.vault.EntryChangeError
@@ -50,6 +56,11 @@ private const val LOCK = "Lock"
 private const val MENU = "More"
 private const val GENERATE = "Generate code"
 private const val COPY_URI = "Copy otpauth:// URI"
+private const val SHOW_QR = "Show QR code"
+private const val QR_SYMBOL = "QR code"
+private const val QR_COPY_URI = "Copy URI"
+private const val QR_SAVE = "Save as PNG"
+private const val QR_CLOSE = "Close"
 private const val DELETE = "Delete"
 private const val DELETE_CONFIRM = "Delete account"
 private const val DELETE_CANCEL = "Keep account"
@@ -58,12 +69,17 @@ private const val SORT_ISSUER = "Issuer A–Z"
 private const val SORT_MANUAL = "Manual order"
 private const val EMPTY_HEADING_TEXT = "No accounts yet"
 private const val EMPTY_BODY_TEXT =
-    "Add an account by pasting the otpauth:// URI its provider gave you, or by typing its details in by hand."
+    "Add an account by pasting the otpauth:// URI its provider gave you, by reading an image of the " +
+        "QR code it showed you, or by typing its details in by hand."
 
 // The gate has to state what is about to leave the vault, so the sentence is written out here rather
 // than read from the function the screen calls to produce it.
 private const val DISCLOSURE_STATEMENT =
     "The complete secret for GitHub — alice is about to be placed on the clipboard as an otpauth:// URI."
+
+// The screen is a different destination from the clipboard, so the gate in front of it says so.
+private const val QR_DISCLOSURE_STATEMENT =
+    "The complete secret for GitHub — alice is about to be drawn on screen as a QR code."
 
 private const val TOTP_CODE = "287082"
 private const val TOTP_GROUPED = "287 082"
@@ -111,6 +127,9 @@ private val MANY = List(12) { index ->
 
 private val SHORT_VIEWPORT = 600.dp
 
+// Three modules on a side, which is no real symbol and is all the dialog needs to draw something.
+private val FAKE_SYMBOL = QrSymbol(3, BooleanArray(9) { it % 2 == 0 })
+
 private class FakeClipboard : ClipboardCopy {
     val texts = mutableListOf<String>()
     val delays = mutableListOf<Int>()
@@ -138,6 +157,10 @@ class AccountListScreenTest {
     private var locks = 0
     private var generations = 0
     private var generateAnswer: Outcome<String, EntryChangeError> = Outcome.Success(HOTP_CODE)
+    private var encodedText: String? = null
+    private val idleHolds = mutableListOf<Boolean>()
+    private var savedSymbol: QrSymbol? = null
+    private var saveAnswer: Outcome<Unit, FileWriteError> = Outcome.Success(Unit)
 
     @Test
     fun `a totp row draws the code the ticker supplied`() {
@@ -642,6 +665,143 @@ class AccountListScreenTest {
 
     // Every row carries the same overflow label, so the row is picked by its position in the stored
     // order, which puts Zendesk first.
+    @Test
+    fun `the overflow menu offers the qr code`() {
+        show()
+
+        openMenuOn(TOTP.id)
+
+        compose.onNodeWithText(SHOW_QR).assertIsDisplayed()
+    }
+
+    @Test
+    fun `showing the qr code asks for the password first`() {
+        show()
+
+        openQrGate()
+
+        compose.onNodeWithTag(DISCLOSURE_STATEMENT_TAG).assertTextEquals(QR_DISCLOSURE_STATEMENT)
+    }
+
+    @Test
+    fun `no code is drawn while the gate is open`() {
+        show()
+
+        openQrGate()
+
+        compose.onNodeWithContentDescription(QR_SYMBOL).assertDoesNotExist()
+    }
+
+    @Test
+    fun `a confirmed password draws the code`() {
+        show()
+
+        openQrGate()
+        confirmGateWith(RIGHT_PASSWORD)
+
+        compose.onNodeWithContentDescription(QR_SYMBOL).assertIsDisplayed()
+    }
+
+    // The symbol stands for whatever was encoded, and nothing about the drawing says which URI that
+    // was, so what the screen handed the encoder is asserted rather than what it drew.
+    @Test
+    fun `the code drawn is the uri the vault disclosed`() {
+        show()
+
+        openQrGate()
+        confirmGateWith(RIGHT_PASSWORD)
+
+        compose.runOnIdle { assertEquals(DISCLOSED_URI, encodedText) }
+    }
+
+    @Test
+    fun `a refused password draws no code`() {
+        show()
+
+        openQrGate()
+        confirmGateWith(WRONG_PASSWORD)
+
+        compose.onNodeWithContentDescription(QR_SYMBOL).assertDoesNotExist()
+    }
+
+    @Test
+    fun `copying the uri from the dialog puts it on the clipboard`() {
+        show()
+
+        openQrGate()
+        confirmGateWith(RIGHT_PASSWORD)
+        compose.onNodeWithText(QR_COPY_URI).performClick()
+
+        compose.runOnIdle { assertEquals(listOf(DISCLOSED_URI), clipboard.texts) }
+    }
+
+    // The file written has to be the symbol the user was looking at rather than a second encode of
+    // the same account, which nothing about the drawing would reveal.
+    @Test
+    fun `saving hands over the symbol on screen`() {
+        show()
+
+        openQrGate()
+        confirmGateWith(RIGHT_PASSWORD)
+        compose.onNodeWithText(QR_SAVE).performClick()
+
+        compose.runOnIdle { assertEquals(FAKE_SYMBOL, savedSymbol) }
+    }
+
+    @Test
+    fun `a refused save is reported over the code`() {
+        saveAnswer = Outcome.Failure(ExportError.NotRestricted)
+        show()
+
+        openQrGate()
+        confirmGateWith(RIGHT_PASSWORD)
+        compose.onNodeWithText(QR_SAVE).performClick()
+
+        compose.onNodeWithTag(QR_SAVE_PROBLEM_TAG).assertIsDisplayed()
+    }
+
+    // The gate is typed at, so the input that answers it is what the idle watch is listening for.
+    @Test
+    fun `the gate in front of the code holds nothing off`() {
+        show()
+
+        openQrGate()
+
+        compose.runOnIdle { assertEquals(emptyList(), idleHolds) }
+    }
+
+    @Test
+    fun `a code on screen holds the idle lock off`() {
+        show()
+
+        openQrGate()
+        confirmGateWith(RIGHT_PASSWORD)
+
+        compose.runOnIdle { assertEquals(listOf(true), idleHolds) }
+    }
+
+    @Test
+    fun `the code leaving the screen lets the idle lock back`() {
+        show()
+
+        openQrGate()
+        confirmGateWith(RIGHT_PASSWORD)
+        compose.onNodeWithText(QR_CLOSE).performClick()
+
+        compose.runOnIdle { assertEquals(listOf(true, false), idleHolds) }
+    }
+
+    @Test
+    fun `closing the dialog takes the code off the screen`() {
+        show()
+
+        openQrGate()
+        confirmGateWith(RIGHT_PASSWORD)
+        compose.onNodeWithText(QR_CLOSE).performClick()
+
+        compose.onNodeWithContentDescription(QR_SYMBOL).assertDoesNotExist()
+    }
+
     private fun openMenuOn(id: String) {
         compose.onAllNodesWithText(MENU)[if (id == HOTP.id) 0 else 1].performClick()
     }
@@ -649,6 +809,11 @@ class AccountListScreenTest {
     private fun openUriGate() {
         openMenuOn(TOTP.id)
         compose.onNodeWithText(COPY_URI).performClick()
+    }
+
+    private fun openQrGate() {
+        openMenuOn(TOTP.id)
+        compose.onNodeWithText(SHOW_QR).performClick()
     }
 
     // The search field is on screen too, so the gate's field is reached through the gate's own tag.
@@ -728,9 +893,18 @@ class AccountListScreenTest {
                     sortOrder = sortOrder,
                     clipboardClearSeconds = clearSeconds,
                     clipboard = clipboard,
+                    qrEncoding = QrEncoding { text ->
+                        encodedText = text
+                        FAKE_SYMBOL
+                    },
                     error = error,
                     onSortOrderChange = { chosenSort = it },
                     onVisibleChange = { visible = it },
+                    onIdleLockSuppressed = { idleHolds += it },
+                    onSaveQrImage = { symbol ->
+                        savedSymbol = symbol
+                        saveAnswer
+                    },
                     onGenerate = {
                         generations++
                         generateAnswer

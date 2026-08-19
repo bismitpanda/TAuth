@@ -23,6 +23,7 @@ import com.panda.tauth.settings.SecurityPolicy
 import com.panda.tauth.settings.SortOrder
 import com.panda.tauth.settings.Theme
 import com.panda.tauth.ui.theme.TauthTheme
+import com.panda.tauth.vault.ImportReadError
 import com.panda.tauth.vault.VaultError
 import com.panda.tauth.vault.VaultRewriteError
 import org.junit.Rule
@@ -96,6 +97,8 @@ class SettingsScreenTest {
     private var newPassword: CharArray? = null
     private var rotationPassword: CharArray? = null
     private var exports = 0
+    private var plaintextExports = 0
+    private var importRequests = 0
     private var reveals = 0
     private var backs = 0
 
@@ -447,6 +450,116 @@ class SettingsScreenTest {
     }
 
     @Test
+    fun `the unencrypted export reports the request`() {
+        show()
+
+        compose.onNodeWithText("Export accounts unencrypted").performScrollTo().performClick()
+
+        compose.runOnIdle { assertEquals(1, plaintextExports) }
+    }
+
+    // Two exports over two destinations: neither message may name the other's file, and the copy of
+    // the vault is the only one of the two with a vault to say is unchanged.
+    @Test
+    fun `a destination that cannot restrict the accounts is reported as the destination`() {
+        show(plaintextError = ExportError.NotRestricted)
+
+        compose.onNodeWithText("That location cannot keep the accounts to you alone, so nothing was written there.")
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun `a destination that could not take the accounts is reported as the destination`() {
+        show(plaintextError = ExportError.Io(IOException("read-only file system")))
+
+        compose.onNodeWithText("The accounts could not be written to that location.")
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun `the import reports the request`() {
+        show()
+
+        compose.onNodeWithText("Import accounts").performScrollTo().performClick()
+
+        compose.runOnIdle { assertEquals(1, importRequests) }
+    }
+
+    // A read that failed opens no preview, so what it reports is reported here. Nothing about the
+    // vault reaches this: the file is one TAuth did not necessarily write.
+    @Test
+    fun `a file that is not an export is reported where it was chosen`() {
+        show(importError = VaultError.Corrupt("this file is not an export TAuth wrote"))
+
+        compose.onNodeWithText("Nothing was imported: this file is not an export TAuth wrote.")
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun `a file that could not be read is reported as the file`() {
+        show(importError = VaultError.Io(IOException("permission denied")))
+
+        compose.onNodeWithText("That file could not be read, so nothing was imported.")
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun `a vault locked before the read says nothing was imported`() {
+        show(importError = VaultError.VaultClosed)
+
+        compose.onNodeWithText("The vault locked before the file was read, so nothing was imported.")
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun `a refused import leaves the two export slots empty`() {
+        show(importError = VaultError.VaultClosed)
+
+        compose.onNodeWithTag(SETTINGS_EXPORT_PROBLEM_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(SETTINGS_PLAINTEXT_PROBLEM_TAG).assertDoesNotExist()
+    }
+
+    @Test
+    fun `a refused export leaves the import's slot empty`() {
+        show(exportError = ExportError.NotRestricted)
+
+        compose.onNodeWithTag(SETTINGS_IMPORT_PROBLEM_TAG).assertDoesNotExist()
+    }
+
+    @Test
+    fun `a refused plaintext export leaves the import's slot empty`() {
+        show(plaintextError = ExportError.NotRestricted)
+
+        compose.onNodeWithTag(SETTINGS_IMPORT_PROBLEM_TAG).assertDoesNotExist()
+    }
+
+    @Test
+    fun `a refused import leaves the unencrypted export's slot empty`() {
+        show(importError = VaultError.VaultClosed)
+
+        compose.onNodeWithTag(SETTINGS_PLAINTEXT_PROBLEM_TAG).assertDoesNotExist()
+    }
+
+    @Test
+    fun `a refused plaintext export leaves the vault copy's slot empty`() {
+        show(plaintextError = ExportError.NotRestricted)
+
+        compose.onNodeWithTag(SETTINGS_EXPORT_PROBLEM_TAG).assertDoesNotExist()
+    }
+
+    @Test
+    fun `a refused vault copy leaves the plaintext slot empty`() {
+        show(exportError = ExportError.NotRestricted)
+
+        compose.onNodeWithTag(SETTINGS_PLAINTEXT_PROBLEM_TAG).assertDoesNotExist()
+    }
+
+    @Test
     fun `a refused export leaves the vault's own slot empty`() {
         show(exportError = ExportError.NotRestricted)
 
@@ -739,7 +852,9 @@ class SettingsScreenTest {
         shell: ShellSettings = shellSettings(canConfigureTray = true),
         isBusy: Boolean = false,
         error: VaultRewriteError? = null,
-        exportError: ExportError? = null,
+        exportError: VaultExportError? = null,
+        plaintextError: FileWriteError? = null,
+        importError: ImportReadError? = null,
     ) {
         compose.setContent {
             TauthTheme {
@@ -750,6 +865,8 @@ class SettingsScreenTest {
                     isBusy = isBusy,
                     error = error,
                     exportError = exportError,
+                    plaintextError = plaintextError,
+                    importError = importError,
                     onPolicyChange = { chosenPolicy = it },
                     onThemeChange = { chosenTheme = it },
                     onSortOrderChange = { chosenSortOrder = it },
@@ -761,6 +878,8 @@ class SettingsScreenTest {
                     },
                     onRotate = { rotationPassword = it.copyOf() },
                     onExport = { exports++ },
+                    onPlaintextExport = { plaintextExports++ },
+                    onImport = { importRequests++ },
                     onBack = { backs++ },
                 )
             }

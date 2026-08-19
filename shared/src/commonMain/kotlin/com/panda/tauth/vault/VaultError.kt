@@ -21,7 +21,9 @@ sealed interface VaultError {
         VaultReadError,
         VaultOpenError,
         PasswordCheckError,
-        VaultAdoptError
+        VaultAdoptError,
+        ImportReadError,
+        ImageReadError
 
     data class UnsupportedVersion(val found: Int, val supported: Int) :
         VaultOpenError,
@@ -51,14 +53,17 @@ sealed interface VaultError {
         VaultAdoptError,
         VaultEncodeError,
         PasswordGateError,
-        EntryLookupError
+        EntryLookupError,
+        ImportReadError
 
     // The reader refuses a file past a ceiling, so the writer refuses to produce one.
     data class TooLarge(val size: Int, val limit: Int) : VaultAssembleError
 
     data class Io(val cause: Throwable) :
         VaultReadError,
-        VaultWriteError
+        VaultWriteError,
+        ImportReadError,
+        ImageReadError
 
     data class LockedByAnotherProcess(val path: String) : VaultWriteError
 }
@@ -83,6 +88,14 @@ sealed interface DiscloseError : VaultError
 sealed interface DraftError : VaultError
 
 sealed interface UriParseError : DraftError
+
+// Reading a file the user offers for import, which is a document this did not necessarily write:
+// the file being something other than an export is the damage a read reports.
+sealed interface ImportReadError : VaultError
+
+// Reading an image the user offers to scan. It names no vault, so a vault closed under it is not one
+// of its cases: what it reads is a picture, and the account it finds is not stored by finding it.
+sealed interface ImageReadError : VaultError
 
 sealed interface VaultReadError :
     VaultCreateError,

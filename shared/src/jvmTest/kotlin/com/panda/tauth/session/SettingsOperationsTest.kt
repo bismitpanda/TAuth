@@ -146,7 +146,7 @@ class SettingsOperationsTest {
         assertIs<Outcome.Success<Unit>>(rotate())
     }
 
-    private fun add() = runBlocking { session.addEntry(newEntry()) }
+    private fun add() = runBlocking { session.addEntries(listOf(newEntry())) }
 
     // What the file holds, read the way any other reader would: decrypted from the bytes on disk.
     private fun stored(password: String = PASSWORD, bytes: ByteArray? = file.contents): VaultBody =

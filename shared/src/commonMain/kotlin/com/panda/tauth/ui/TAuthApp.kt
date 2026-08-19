@@ -22,7 +22,14 @@ import com.panda.tauth.totp.TotpCode
 import com.panda.tauth.ui.create.CreateVaultScreen
 import com.panda.tauth.ui.edit.AddAccountScreen
 import com.panda.tauth.ui.edit.EditAccountScreen
+import com.panda.tauth.ui.edit.QrScanning
+import com.panda.tauth.ui.imports.ImportScreen
+import com.panda.tauth.ui.imports.ImportWork
 import com.panda.tauth.ui.list.AccountListScreen
+import com.panda.tauth.ui.qr.QrEncoding
+import com.panda.tauth.ui.qr.QrSymbol
+import com.panda.tauth.ui.settings.FileWriteError
+import com.panda.tauth.ui.settings.PlaintextExport
 import com.panda.tauth.ui.settings.SettingsScreen
 import com.panda.tauth.ui.settings.SettingsWork
 import com.panda.tauth.ui.settings.ShellSettings
@@ -30,6 +37,7 @@ import com.panda.tauth.ui.unlock.UnlockScreen
 import com.panda.tauth.vault.EntryAddError
 import com.panda.tauth.vault.EntryChangeError
 import com.panda.tauth.vault.EntryEdit
+import com.panda.tauth.vault.ImportReadError
 import com.panda.tauth.vault.VaultCreateError
 import com.panda.tauth.vault.VaultEntry
 import com.panda.tauth.vault.VaultError
@@ -49,6 +57,10 @@ private sealed interface Route {
     data object Add : Route
 
     data object Settings : Route
+
+    // The rows it previews live in the holder rather than here, so a credential is not part of what
+    // says which screen is on the window.
+    data object Import : Route
 
     data class Edit(val id: String) : Route
 }
@@ -88,9 +100,13 @@ fun TAuthApp(
     clipboard: ClipboardCopy,
     preferences: PreferencesState,
     modifier: Modifier = Modifier,
+    qrEncoding: QrEncoding = QrEncoding { null },
     shell: ShellSettings = ShellSettings(),
     isSingleInstanceUnprotected: Boolean = false,
     clock: Clock = Clock.System,
+    onIdleLockSuppressed: (Boolean) -> Unit = {},
+    onSaveQrImage: (suspend (QrSymbol) -> Outcome<Unit, FileWriteError>)? = null,
+    scanning: QrScanning? = null,
 ) {
     val scope = rememberCoroutineScope()
     val state by session.state.collectAsState()
@@ -128,14 +144,9 @@ fun TAuthApp(
         }
     }
 
-    // The ticker ends with the lock that zeroes the keys behind it, so a new one is collected for
-    // each unlock rather than a single collection outliving the vault it was started over.
-    LaunchedEffect(state is SessionState.Unlocked) {
-        if (state !is SessionState.Unlocked) return@LaunchedEffect
-        ticker.codes(visible).collect { tick ->
-            codes = tick
-            nowSeconds = clock.now().epochSeconds
-        }
+    CollectCodes(ticker, visible, state is SessionState.Unlocked) { tick ->
+        codes = tick
+        nowSeconds = clock.now().epochSeconds
     }
 
     val create: (CharArray) -> Unit = { creation.run(scope, it, session::create) }
@@ -172,6 +183,7 @@ fun TAuthApp(
                 settings = settings,
                 shell = shell,
                 clipboard = clipboard,
+                qrEncoding = qrEncoding,
                 isEntryBusy = isEntryBusy,
                 listError = listError,
                 addError = addError,
@@ -186,12 +198,43 @@ fun TAuthApp(
                     route = it
                 },
                 onVisibleChange = { visible.value = it },
+                onIdleLockSuppressed = onIdleLockSuppressed,
+                onSaveQrImage = onSaveQrImage,
+                scanning = scanning,
                 onListWork = { work -> scope.launch { listError = (work() as? Outcome.Failure)?.error } },
                 onAddWork = scope.entryWork({ isEntryBusy = it }, { addError = it }),
                 onEditWork = scope.entryWork({ isEntryBusy = it }, { editError = it }),
                 clock = clock,
             )
         }
+    }
+}
+
+// The preview stands for as long as there are rows to decide about, so the route follows them rather
+// than being set by each of the paths that reads a file and finishes with one.
+@Composable
+private fun FollowPreview(isPreviewing: Boolean, route: Route, onRoute: (Route) -> Unit) {
+    LaunchedEffect(isPreviewing) {
+        if (isPreviewing) {
+            onRoute(Route.Import)
+        } else if (route is Route.Import) {
+            onRoute(Route.Settings)
+        }
+    }
+}
+
+// The ticker ends with the lock that zeroes the keys behind it, so a collection belongs to one unlock
+// rather than outliving the vault it was started over.
+@Composable
+private fun CollectCodes(
+    ticker: CodeTicker,
+    visible: MutableStateFlow<Set<String>>,
+    isUnlocked: Boolean,
+    onTick: (Map<String, TotpCode>) -> Unit,
+) {
+    LaunchedEffect(isUnlocked) {
+        if (!isUnlocked) return@LaunchedEffect
+        ticker.codes(visible).collect { onTick(it) }
     }
 }
 
@@ -220,6 +263,7 @@ private fun UnlockedGraph(
     settings: SettingsWork<VaultRewriteError>,
     shell: ShellSettings,
     clipboard: ClipboardCopy,
+    qrEncoding: QrEncoding,
     isEntryBusy: Boolean,
     listError: EntryChangeError?,
     addError: EntryAddError?,
@@ -228,11 +272,20 @@ private fun UnlockedGraph(
     scope: CoroutineScope,
     onRoute: (Route) -> Unit,
     onVisibleChange: (Set<String>) -> Unit,
+    onIdleLockSuppressed: (Boolean) -> Unit,
+    onSaveQrImage: (suspend (QrSymbol) -> Outcome<Unit, FileWriteError>)?,
+    scanning: QrScanning?,
     onListWork: (suspend () -> Outcome<*, EntryChangeError>) -> Unit,
     onAddWork: (suspend () -> Outcome<*, EntryAddError>) -> Unit,
     onEditWork: (suspend () -> Outcome<*, EntryChangeError>) -> Unit,
     clock: Clock,
 ) {
+    // Held here rather than above the graph, so the rows — which carry every secret the file offered
+    // — end with the unlocked vault they were read against.
+    val imports = remember { ImportWork() }
+
+    FollowPreview(imports.isPreviewing, route, onRoute)
+
     when (route) {
         is Route.Accounts -> AccountListScreen(
             entries = state.entries,
@@ -241,11 +294,14 @@ private fun UnlockedGraph(
             sortOrder = preferences.value.sortOrder,
             clipboardClearSeconds = state.policy.clipboardClearSeconds,
             clipboard = clipboard,
+            qrEncoding = qrEncoding,
             error = listError,
             // The ordering outlives the window it was chosen in, so it goes to the file rather than
             // into state the next launch starts without.
             onSortOrderChange = { order -> scope.launch { preferences.update { it.copy(sortOrder = order) } } },
             onVisibleChange = onVisibleChange,
+            onIdleLockSuppressed = onIdleLockSuppressed,
+            onSaveQrImage = onSaveQrImage,
             onGenerate = { id -> session.generateHotpCode(id) },
             onDiscloseUri = { id, password -> session.discloseUri(id, password) },
             onMove = { id, index -> onListWork { session.moveEntry(id, index) } },
@@ -257,11 +313,35 @@ private fun UnlockedGraph(
         )
 
         is Route.Settings ->
-            SettingsDestination(session, settings, preferences, shell, scope, modifier) {
+            SettingsDestination(
+                session = session,
+                settings = settings,
+                preferences = preferences,
+                shell = shell,
+                scope = scope,
+                modifier = modifier,
+                importError = imports.readError,
+                onImport = { imports.open(scope, shell.onChooseImport) { session.readImport(it, clock.now()) } },
+            ) {
+                // Leaving the screen leaves what the last read reported, as every other destination
+                // leaves what it reported.
+                imports.clearReadError()
                 onRoute(Route.Accounts)
             }
 
+        is Route.Import -> ImportScreen(
+            rows = imports.rows,
+            modifier = modifier,
+            addAnyway = imports.addAnyway,
+            isBusy = imports.isBusy,
+            error = imports.addError,
+            onToggleDuplicate = imports::toggle,
+            onImport = { imports.add(scope, session::addEntries) },
+            onCancel = imports::clear,
+        )
+
         is Route.Add -> AddAccountScreen(
+            scanning = scanning,
             onSave = { uri -> onAddWork { addAndReturn(session, uri, clock, onRoute) } },
             onCancel = { onRoute(Route.Accounts) },
             epochSeconds = nowSeconds,
@@ -300,8 +380,26 @@ private fun SettingsDestination(
     shell: ShellSettings,
     scope: CoroutineScope,
     modifier: Modifier,
+    importError: ImportReadError? = null,
+    onImport: () -> Unit = {},
     onBack: () -> Unit,
 ) {
+    var isPlaintextRequested by remember { mutableStateOf(false) }
+    var plaintextError by remember { mutableStateOf<FileWriteError?>(null) }
+    // Read here rather than passed in: this destination is drawn from two branches, and only one of
+    // them has an unlocked vault to count.
+    val state by session.state.collectAsState()
+
+    PlaintextExport(
+        isRequested = isPlaintextRequested,
+        accountCount = (state as? SessionState.Unlocked)?.entries?.size ?: 0,
+        scope = scope,
+        onDisclose = session::disclosePlaintext,
+        onWrite = shell.onExportPlaintext,
+        onFinished = { isPlaintextRequested = false },
+        onWriteError = { plaintextError = it },
+    )
+
     SettingsScreen(
         policy = settings.policy,
         preferences = preferences.value,
@@ -310,6 +408,8 @@ private fun SettingsDestination(
         isBusy = settings.isBusy,
         error = settings.error,
         exportError = settings.exportError,
+        plaintextError = plaintextError,
+        importError = importError,
         onPolicyChange = { policy -> settings.run(scope) { session.setPolicy(policy) } },
         // A refused preference write is reported where the file is written. What this slot carries is
         // what the vault refused, which is a different thing.
@@ -323,6 +423,12 @@ private fun SettingsDestination(
         onRotate = { password -> settings.run(scope, password) { session.rotateDek(password) } },
         // What leaves is the ciphertext the file already holds, so the shell places it without a gate.
         onExport = { settings.export(scope, session::exportEncrypted, shell.onExport) },
+        // The gate and the warning belong to the flow above; this control only asks for it.
+        onPlaintextExport = {
+            plaintextError = null
+            isPlaintextRequested = true
+        },
+        onImport = onImport,
         onBack = onBack,
     )
 }
@@ -333,7 +439,7 @@ private suspend fun addAndReturn(
     clock: Clock,
     onRoute: (Route) -> Unit,
 ): Outcome<Unit, EntryAddError> {
-    val outcome = session.addEntry(uri.toEntry(VaultEntry.newId(), clock.now()))
+    val outcome = session.addEntries(listOf(uri.toEntry(VaultEntry.newId(), clock.now())))
     if (outcome is Outcome.Success) onRoute(Route.Accounts)
     return outcome
 }

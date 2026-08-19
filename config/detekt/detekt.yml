@@ -16,7 +16,11 @@ complexity:
     ignoreDefaultParameters: true
   TooManyFunctions:
     allowedFunctionsPerFile: 30
-    allowedFunctionsPerClass: 20
+    # VaultSession owns the data key, and §8.4's lend and exclusion run across every operation that
+    # reaches one, so each such operation is a member. A second class over the same key would be a
+    # second owner of it, which is what that exclusion exists to prevent, so this count follows what
+    # the vault can be asked to do rather than the class doing more than one thing.
+    allowedFunctionsPerClass: 21
     ignorePrivate: true
     ignoreOverridden: true
 

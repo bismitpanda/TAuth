@@ -92,7 +92,7 @@ Distinct failures get distinct types. `WrongPassword` and `IntegrityFailure` are
 - No business logic in composables. Code generation, formatting and validation live in `:shared` outside `ui/` and are called from there.
 - `remember` for values that are expensive and derived; `derivedStateOf` when a computed value depends on other state and would otherwise recompose too often.
 - Never launch work in composition. Use `LaunchedEffect` with a key that genuinely identifies the work.
-- Colours, spacing and typography come from the theme. No hardcoded `Color(0xFF...)` or raw `.dp` spacing constants in screen code; add a theme token instead. Two things are drawn outside the theme and carry their own colours, each saying so in a comment: §9.7's QR dialog, which is dark-on-light regardless of theme, and the shell's tray and window icon, which the desktop draws on surfaces no composition reaches.
+- Colours, spacing and typography come from the theme. No hardcoded `Color(0xFF...)` or raw `.dp` spacing constants in screen code; add a theme token instead. Two things are drawn outside the theme and carry their own colours, each saying so in a comment: §9.7's QR dialog, which is dark-on-light regardless of theme, and the shell's tray and window icon, which the desktop draws on surfaces no composition reaches. The QR dialog holds its minimum size the same way and for the same reason: a theme free to shrink the symbol is free to make it unscannable, so that measurement sits beside the symbol rather than in the palette.
 
 ## 8. Comments and documentation
 

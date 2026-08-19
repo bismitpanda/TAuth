@@ -26,7 +26,7 @@ internal class SettingsWork<E : VaultError> {
 
     // Held apart from the slot above, which carries what a vault write refused. An export writes
     // nothing to the vault, so neither half of one belongs there.
-    var exportError: ExportError? by mutableStateOf(null)
+    var exportError: VaultExportError? by mutableStateOf(null)
         private set
 
     fun adopt(published: SecurityPolicy) {
@@ -43,7 +43,7 @@ internal class SettingsWork<E : VaultError> {
     fun export(
         scope: CoroutineScope,
         read: suspend () -> Outcome<ByteArray, VaultReadError>,
-        place: suspend (ByteArray) -> Outcome<Unit, ExportError>,
+        place: suspend (ByteArray) -> Outcome<Unit, FileWriteError>,
     ) {
         isBusy = true
         error = null

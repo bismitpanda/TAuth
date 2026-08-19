@@ -44,6 +44,7 @@ const val MENU_LABEL = "More"
 const val EDIT_LABEL = "Edit"
 const val COPY_CODE_LABEL = "Copy code"
 const val COPY_URI_LABEL = "Copy otpauth:// URI"
+const val SHOW_QR_LABEL = "Show QR code"
 const val DELETE_LABEL = "Delete"
 const val REORDER_LABEL = "Reorder"
 
@@ -81,6 +82,7 @@ fun AccountRow(
     onHideCode: () -> Unit = {},
     onEdit: () -> Unit = {},
     onCopyUri: () -> Unit = {},
+    onShowQr: () -> Unit = {},
     onDelete: () -> Unit = {},
 ) {
     val spacing = LocalSpacing.current
@@ -113,6 +115,7 @@ fun AccountRow(
                     onCopyCode = onCopyCode,
                     onEdit = onEdit,
                     onCopyUri = onCopyUri,
+                    onShowQr = onShowQr,
                     onDelete = onDelete,
                 )
             }
@@ -213,6 +216,7 @@ private fun Trailing(
     onCopyCode: () -> Unit,
     onEdit: () -> Unit,
     onCopyUri: () -> Unit,
+    onShowQr: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -230,6 +234,7 @@ private fun Trailing(
             onCopyCode = onCopyCode,
             onEdit = onEdit,
             onCopyUri = onCopyUri,
+            onShowQr = onShowQr,
             onDelete = onDelete,
         )
     }
@@ -241,6 +246,7 @@ private fun OverflowMenu(
     onCopyCode: () -> Unit,
     onEdit: () -> Unit,
     onCopyUri: () -> Unit,
+    onShowQr: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -262,6 +268,12 @@ private fun OverflowMenu(
             DropdownMenuItem(text = { Text(COPY_URI_LABEL) }, onClick = {
                 isOpen = false
                 onCopyUri()
+            })
+            // The same credential as the item above, put on the screen rather than the clipboard,
+            // and behind the same gate.
+            DropdownMenuItem(text = { Text(SHOW_QR_LABEL) }, onClick = {
+                isOpen = false
+                onShowQr()
             })
             DropdownMenuItem(text = { Text(DELETE_LABEL) }, onClick = {
                 isOpen = false

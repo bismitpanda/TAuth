@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -17,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -30,13 +32,25 @@ import com.panda.tauth.ui.theme.LocalSpacing
 import com.panda.tauth.vault.DraftError
 import com.panda.tauth.vault.EntryAddError
 import com.panda.tauth.vault.EntryDraft
+import com.panda.tauth.vault.ImageReadError
 import com.panda.tauth.vault.VaultError
 import com.panda.tauth.vault.resolved
 import com.panda.tauth.vault.secretProblem
 
 internal const val ADD_TITLE = "Add an account"
 internal const val PASTE_PATH_LABEL = "Paste a URI"
+internal const val SCAN_PATH_LABEL = "Read an image"
 internal const val MANUAL_PATH_LABEL = "Enter details"
+
+internal const val SCAN_CHOOSE_LABEL = "Choose an image"
+internal const val SCAN_PICK_TITLE = "Which account?"
+internal const val SCAN_PICK_CANCEL_LABEL = "Cancel"
+
+internal const val SCAN_NO_CODE = "No QR code was found in that image."
+internal const val SCAN_NOT_AN_ACCOUNT = "That QR code is not an account TAuth can add."
+
+internal const val SCAN_PROBLEM_TAG = "add-scan-problem"
+
 internal const val SAVE_LABEL = "Save account"
 internal const val CANCEL_LABEL = "Cancel"
 
@@ -60,10 +74,20 @@ internal const val TYPE_LABEL = "Type"
 internal const val ALGORITHM_LABEL = "Algorithm"
 internal const val ADVANCED_LABEL = "Advanced"
 
-// Which way the account is being entered. Both arrive at the same resolved account and the same
+internal fun scanPickTag(index: Int): String = "add-scan-choice-$index"
+
+// No else branch, over the cases reading an image reports: a case joining that view has to be given
+// a message here before this compiles again.
+internal fun scanMessageFor(error: ImageReadError): String = when (error) {
+    is VaultError.Corrupt -> "That image could not be read: ${error.detail}."
+    is VaultError.Io -> "That image could not be read."
+}
+
+// Which way the account is being entered. All three arrive at the same resolved account and the same
 // preview; only the fields on the way there differ.
 private enum class AddPath {
     PASTE,
+    SCAN,
     MANUAL,
 }
 
@@ -77,14 +101,20 @@ fun AddAccountScreen(
     modifier: Modifier = Modifier,
     isBusy: Boolean = false,
     error: EntryAddError? = null,
+    // Absent where the composition has no desktop under it to read an image with.
+    scanning: QrScanning? = null,
 ) {
     val spacing = LocalSpacing.current
+    val scope = rememberCoroutineScope()
     var path by remember { mutableStateOf(AddPath.PASTE) }
     var pasted by remember { mutableStateOf("") }
     var draft by remember { mutableStateOf(EntryDraft()) }
+    val scan = remember { ScanState() }
 
     val resolved: Outcome<OtpAuthUri, DraftError>? = when (path) {
-        AddPath.PASTE -> if (pasted.isBlank()) null else OtpAuthUri.parse(pasted)
+        // A scan converges on the pasted field, so one image and one paste reach the same preview.
+        AddPath.PASTE, AddPath.SCAN -> if (pasted.isBlank()) null else OtpAuthUri.parse(pasted)
+
         AddPath.MANUAL -> if (draft.secret.isEmpty() && draft.accountName.isEmpty()) null else draft.resolved()
     }
     val ready = (resolved as? Outcome.Success)?.value
@@ -98,6 +128,11 @@ fun AddAccountScreen(
             TextButton(onClick = { path = AddPath.PASTE }, enabled = path != AddPath.PASTE) {
                 Text(PASTE_PATH_LABEL)
             }
+            scanning?.let {
+                TextButton(onClick = { path = AddPath.SCAN }, enabled = path != AddPath.SCAN) {
+                    Text(SCAN_PATH_LABEL)
+                }
+            }
             TextButton(onClick = { path = AddPath.MANUAL }, enabled = path != AddPath.MANUAL) {
                 Text(MANUAL_PATH_LABEL)
             }
@@ -109,6 +144,13 @@ fun AddAccountScreen(
                 onValueChange = { pasted = it },
                 tag = URI_FIELD_TAG,
                 enabled = !isBusy,
+            )
+
+            AddPath.SCAN -> ScanPath(
+                scan = scan,
+                isEnabled = !isBusy,
+                onChoose = { scanning?.let { scan.read(scope, it) { uri -> pasted = uri } } },
+                onPick = { uri -> pasted = uri },
             )
 
             AddPath.MANUAL -> ManualEntry(draft = draft, isEnabled = !isBusy, onChange = { draft = it })
@@ -128,6 +170,49 @@ fun AddAccountScreen(
         if (isBusy) {
             CircularProgressIndicator()
         }
+    }
+}
+
+@Composable
+private fun ScanPath(
+    scan: ScanState,
+    isEnabled: Boolean,
+    onChoose: () -> Unit,
+    onPick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val spacing = LocalSpacing.current
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(spacing.small)) {
+        Button(onClick = onChoose, enabled = isEnabled && !scan.isBusy) { Text(SCAN_CHOOSE_LABEL) }
+        val problem = scan.error?.let(::scanMessageFor) ?: scan.notice
+        problem?.let {
+            Text(
+                it,
+                modifier = Modifier.testTag(SCAN_PROBLEM_TAG),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+    }
+
+    if (scan.choices.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = scan::cancelChoice,
+            title = { Text(SCAN_PICK_TITLE) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(spacing.small)) {
+                    // Named by issuer and account alone: the list stands on screen while it is read.
+                    scan.choices.forEachIndexed { index, uri ->
+                        TextButton(
+                            onClick = { scan.choose(uri, onPick) },
+                            modifier = Modifier.testTag(scanPickTag(index)),
+                        ) { Text(scannedLabel(uri)) }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = scan::cancelChoice) { Text(SCAN_PICK_CANCEL_LABEL) } },
+        )
     }
 }
 

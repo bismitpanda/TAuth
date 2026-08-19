@@ -2,7 +2,10 @@ package com.panda.tauth.ui
 
 import com.panda.tauth.Outcome
 import com.panda.tauth.ui.components.DisclosureState
+import com.panda.tauth.ui.settings.ExportError
+import com.panda.tauth.ui.settings.FileWriteError
 import com.panda.tauth.ui.settings.SettingsWork
+import com.panda.tauth.ui.settings.VaultExportError
 import com.panda.tauth.vault.DiscloseError
 import com.panda.tauth.vault.VaultError
 import com.panda.tauth.vault.VaultRewriteError
@@ -53,5 +56,18 @@ class StateHolderErrorViewsTest {
 
         val kept: VaultRewriteError? = settings.error
         assertEquals(VaultError.WrongPassword, kept)
+    }
+
+    // Placing the copy reports the destination alone, and the read that precedes it is the other half
+    // this slot holds: a placement widened to the whole hierarchy stops this compiling.
+    @Test
+    fun `an export keeps the read it made and the file it wrote`() {
+        val settings = SettingsWork<VaultRewriteError>()
+        val place: suspend (ByteArray) -> Outcome<Unit, FileWriteError> = { Outcome.Failure(ExportError.NotRestricted) }
+
+        settings.export(scope, { Outcome.Success(ByteArray(1)) }, place)
+
+        val kept: VaultExportError? = settings.exportError
+        assertEquals(ExportError.NotRestricted, kept)
     }
 }

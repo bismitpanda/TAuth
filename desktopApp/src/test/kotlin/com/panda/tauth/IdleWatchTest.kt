@@ -80,9 +80,10 @@ class IdleWatchTest {
         scope.cancel()
     }
 
-    private fun watchFor(timeoutMinutes: Int, isVisible: Boolean = true): Job = scope.launch {
-        watch.awaitIdle(isVisible, timeoutMinutes) { reported += it }
-    }
+    private fun watchFor(timeoutMinutes: Int, isVisible: Boolean = true, isSuppressed: Boolean = false): Job =
+        scope.launch {
+            watch.awaitIdle(isVisible, timeoutMinutes, isSuppressed) { reported += it }
+        }
 
     @Test
     fun `an interval that passes with no input reports the idle trigger`() {
@@ -172,7 +173,9 @@ class IdleWatchTest {
     fun `the interval watched is the one the unlocked policy carries`() {
         val state = SessionState.Unlocked(emptyList(), SecurityPolicy(idleTimeoutMinutes = 9))
 
-        scope.launch { watch.awaitIdle(isVisible = true, idleTimeoutMinutes(state)) { reported += it } }
+        scope.launch {
+            watch.awaitIdle(isVisible = true, idleTimeoutMinutes(state), isSuppressed = false) { reported += it }
+        }
 
         assertEquals(listOf(9), delay.intervals)
     }
@@ -181,7 +184,9 @@ class IdleWatchTest {
     fun `a locked vault leaves nothing being watched`() {
         val state = SessionState.Locked(LockReason.HiddenToTray)
 
-        scope.launch { watch.awaitIdle(isVisible = true, idleTimeoutMinutes(state)) { reported += it } }
+        scope.launch {
+            watch.awaitIdle(isVisible = true, idleTimeoutMinutes(state), isSuppressed = false) { reported += it }
+        }
 
         assertEquals(0, monitor.listenCount)
     }
@@ -205,6 +210,34 @@ class IdleWatchTest {
         watchFor(0)
 
         assertEquals(0, monitor.listenCount)
+    }
+
+    // A symbol on screen is read off it rather than typed at, so the quiet this watches for is what
+    // scanning one looks like.
+    @Test
+    fun `a suppressed watch is not watched`() {
+        watchFor(5, isSuppressed = true)
+
+        assertEquals(0, monitor.listenCount)
+    }
+
+    @Test
+    fun `a suppressed watch starts no interval`() {
+        watchFor(5, isSuppressed = true)
+
+        assertEquals(emptyList(), delay.intervals)
+    }
+
+    // The suppression is lifted by starting the watch again rather than by reaching into a standing
+    // one, so what a watch begun after it does is the whole of the hold ending.
+    @Test
+    fun `a watch begun once the suppression is lifted reports on its own`() {
+        watchFor(5, isSuppressed = true)
+
+        watchFor(5)
+        delay.finish(0)
+
+        assertEquals(listOf(LockReason.Idle), reported)
     }
 
     @Test

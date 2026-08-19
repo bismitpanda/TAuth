@@ -29,3 +29,9 @@ internal val vaultJson = Json {
     explicitNulls = false
     ignoreUnknownKeys = true
 }
+
+// The same document rules, laid out to be read: a plaintext export is opened in a text editor by
+// whoever is migrating, which the vault file never is.
+internal val plaintextExportJson = Json(vaultJson) {
+    prettyPrint = true
+}
