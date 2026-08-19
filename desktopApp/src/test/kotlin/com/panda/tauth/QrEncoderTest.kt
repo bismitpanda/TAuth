@@ -22,7 +22,7 @@ import kotlin.test.assertTrue
 // Base32 of the RFC 4226 seed "12345678901234567890", which is 160 bits.
 private const val SECRET = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
 
-// Nineteen characters, a colon and forty-four: the label length §13.2 holds the symbol version to.
+// Nineteen characters, a colon and forty-four: the label length §13.1 holds the symbol version to.
 private const val LONG_ISSUER = "Example Corporation"
 private const val LONG_ACCOUNT = "alice.smith@corporate.department.example.com"
 
@@ -39,7 +39,6 @@ private const val VERSION_OVERHEAD = 17
 // Enough pixels a module that the binarizer has a block to average rather than a single sample.
 private const val DECODE_SCALE = 8
 
-// The signature every PNG opens with, so a file this writes is one an image viewer recognises.
 private val PNG_MAGIC = byteArrayOf(0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte())
 
 private fun imageOf(symbol: QrSymbol): BufferedImage {

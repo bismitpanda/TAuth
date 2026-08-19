@@ -10,7 +10,6 @@ enum class CloseAction {
 enum class StartupWindow {
     VISIBLE,
 
-    // On the taskbar, minimised: out of the way and one click from being back.
     ICONIFIED,
 
     HIDDEN_TO_TRAY,

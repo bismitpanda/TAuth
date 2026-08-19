@@ -2,7 +2,9 @@
 
 A cross-platform desktop TOTP authenticator built on Kotlin Multiplatform and Compose Multiplatform, targeting Linux, macOS and Windows. The vault is encrypted as a whole with a key derived from a master password, which is the sole unlock factor. The vault is unlocked only while the main window is on screen; hiding the window to the system tray destroys the in-memory key material.
 
-Unlocking through platform authenticators — Touch ID, Windows Hello, the freedesktop Secret Service keyring — is specified in §16, Future Improvements. The key hierarchy accommodates it without a file format change.
+Unlocking through platform authenticators — Touch ID, Windows Hello, the freedesktop Secret Service keyring — is specified in §16. The key hierarchy accommodates it without a file format change.
+
+This document is the specification. Where code and plan disagree, one of them is a defect.
 
 ---
 
@@ -34,26 +36,26 @@ Unlocking through platform authenticators — Touch ID, Windows Hello, the freed
 
 ### 2.1 Defended against
 
-| Threat                                                        | Defence                                                                                       |
-|---------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
-| Vault file copied from disk, backup, or a synced folder       | Whole-file AES-256-GCM; key derived with Argon2id                                             |
-| Offline brute force of the master password                    | Argon2id with memory-hard parameters fixed by the format version                              |
-| Tampering with any byte of the vault file, including metadata | GCM authentication tag covers the body; the header is bound as associated data                |
-| Editing the header to weaken or redirect the unwrap           | The CRC fails before a key is derived; a repaired CRC fails the unwrap or the body's tag      |
-| Another user account on the same machine reading the vault    | POSIX mode `0600` / Windows ACL restricted to the owner                                       |
-| Shoulder-surfing of an unattended unlocked window             | Relock on hide-to-tray, on minimise, and on idle timeout                                      |
-| Silent weakening of the lock policy by editing a config file  | Lock triggers and timeouts live in the vault body, under the GCM tag                          |
-| Casual recovery of secrets from a memory dump after locking   | Key material held in `ByteArray`, zeroed on lock; decoded secrets never converted to `String` |
+| Threat | Defence |
+|---|---|
+| Vault file copied from disk, backup, or a synced folder | Whole-file AES-256-GCM; key derived with Argon2id |
+| Offline brute force of the master password | Argon2id with memory-hard parameters fixed by the format version |
+| Tampering with any byte of the vault file, including metadata | GCM authentication tag covers the body; the header is bound as associated data |
+| Editing the header to weaken or redirect the unwrap | The CRC fails before a key is derived; a repaired CRC fails the unwrap or the body's tag |
+| Another user account on the same machine reading the vault | POSIX mode `0600` / Windows ACL restricted to the owner |
+| Shoulder-surfing of an unattended unlocked window | Relock on hide-to-tray, on minimise, and on idle timeout |
+| Silent weakening of the lock policy by editing a config file | Lock triggers and timeouts live in the vault body, under the GCM tag |
+| Casual recovery of secrets from a memory dump after locking | Key material held in `ByteArray`, zeroed on lock; decoded secrets never converted to `String` |
 
 ### 2.2 Not defended against
 
 - An attacker with code execution as the same OS user while the vault is unlocked. Key material is in the process heap by necessity.
-- A vault replaced by an older copy of itself. Every file TAuth writes stays authentic, so a rollback is indistinguishable from the current vault. Detecting it needs an anchor the attacker cannot reach, which a local installation does not have; §16 records what that would take.
+- A vault replaced by an older copy of itself. Every file TAuth writes stays authentic, so a rollback is indistinguishable from the current vault. Detecting it needs an anchor the attacker cannot reach, which a local installation does not have (§16.8).
 - Kernel-level keyloggers or screen capture.
 - Heap contents paged to swap. The JVM does not expose `mlock`; swap encryption is the operating system's responsibility.
 - Physical access with the machine unlocked and TAuth's window open.
 
-### 2.3 Stated consequences of the design
+### 2.3 Consequences of the design
 
 - The vault file's entire contents, including issuer names and account labels, are unreadable without the key. Checking whether an account exists requires unlocking.
 - The master password is unrecoverable. There is no reset path, no recovery code, and no escrow. Losing it means losing every stored secret, and the create-vault screen says so.
@@ -73,51 +75,51 @@ shared/src/commonMain/kotlin/com/panda/tauth/
   Outcome.kt                  Outcome<T, E>, the carrier for a typed error
   totp/
     Base32.kt                 RFC 4648 base32 encode/decode, padding-optional
-    HashAlgorithm.kt          SHA1 | SHA256 | SHA512 enum
+    HashAlgorithm.kt          SHA1 | SHA256 | SHA512
     OtpCore.kt                RFC 4226 §5.2 HMAC and §5.3 truncation, shared by both types
     Hotp.kt                   counter moving factor
     Totp.kt                   RFC 6238 time-step moving factor
     OtpAuthUri.kt             otpauth:// parse and build
     PercentCodec.kt           RFC 3986 percent encode/decode
     EnumParsing.kt            case-insensitive enum lookup
-    TotpCode.kt               code string + validity window
+    TotpCode.kt               code, period, and the instant the period ends
     CodeGrouping.kt           the one break a code is read across
-    PreviewCode.kt            the code an account would produce, worked out before it is stored
+    PreviewCode.kt            the code an account would produce before it is stored
   crypto/
     Aead.kt                   expect: AES-256-GCM seal/open
     Kdf.kt                    expect: Argon2id
     Hmac.kt                   expect: HMAC-SHA1/256/512
     SecureRandom.kt           expect: CSPRNG bytes
-    SecureBytes.kt            zeroable byte holder, AutoCloseable
+    SecureBytes.kt            zeroable byte holder
     Base64Codec.kt            base64 over kotlin.io.encoding
     Crc32.kt                  expect: CRC32 of the header bytes
   vault/
-    VaultEntry.kt             serializable entry model
-    VaultBody.kt              serializable decrypted body
-    VaultHeader.kt            serializable plaintext header
+    VaultEntry.kt             entry model
+    VaultBody.kt              decrypted body
+    VaultHeader.kt            plaintext header
     VaultFormat.kt            byte-layout constants and the JSON configuration
-    VaultCodec.kt             file <-> (header, body) encode/decode
+    VaultCodec.kt             file <-> (header, body)
     VaultFile.kt              the bytes a vault lives in, behind the platform store
-    VaultError.kt             sealed error hierarchy
+    VaultError.kt             the error hierarchy of §12
     EntryEdit.kt              the fields an edit may change, and the model's refusal of one
     EntryUri.kt               entry to otpauth:// URI and back
-    EntryDrafts.kt            the text an add or an edit form holds, and the account it resolves to
-    PlaintextExport.kt        the two shapes the accounts leave the vault in, and what each carries
-    ImportRow.kt              what a file offers, one row at a time, and which rows the vault holds
+    EntryDrafts.kt            the text an add or edit form holds, and the account it resolves to
+    PlaintextExport.kt        the two shapes accounts leave the vault in, and what each carries
+    ImportRow.kt              what a file offers per row, and which rows the vault already holds
   session/
     SessionState.kt           NoVault | Locked | Unlocking | Unlocked
-    LockReason.kt             enum of relock triggers, with the policy each reads
+    LockReason.kt             the relock triggers, and the policy field each reads
     UnlockedEntry.kt          an entry as the UI holds it, without its secret
     SessionClipboard.kt       the one clipboard call a lock makes
     VaultSession.kt           key material, lock lifecycle, state flow
     CodeTicker.kt             live codes for the rows the list has on screen
     TickCadence.kt            the wait that lands a tick on a whole second
   password/
-    PasswordStrength.kt       advisory master-password score, and the minimum length §9.2 enforces
+    PasswordStrength.kt       advisory score, and the minimum length §9.2 enforces
     CommonPasswords.kt        the embedded list a score is checked against
   settings/
     Preferences.kt            plaintext model, readable before unlock
-    PreferencesState.kt       the one owner of that document, and the one path a change takes
+    PreferencesState.kt       the single owner of that document, and the one path a change takes
     SecurityPolicy.kt         encrypted model, carried in the vault body
 
 shared/src/jvmMain/kotlin/com/panda/tauth/
@@ -131,60 +133,55 @@ shared/src/jvmMain/kotlin/com/panda/tauth/
     VaultPaths.kt             per-OS vault directory resolution
     VaultStore.kt             atomic read/write, file locking, permissions
   settings/
-    PreferencesStore.kt       plaintext JSON file; `SecurityPolicy` has no store
-                              of its own and is read and written with the vault
+    PreferencesStore.kt       plaintext JSON file; SecurityPolicy has no store of its own
+                              and is read and written with the vault
 
 shared/src/commonMain/kotlin/com/panda/tauth/ui/
   TAuthApp.kt                 root composable, routes on session state, and the password attempt
                               the create and unlock screens hand their characters to
   ClipboardCopy.kt            the copy a screen asks the shell for, and what it answered
   SingleInstanceNotice.kt     what a window with no single-instance service says above its screen
-  theme/                      Material 3 colour scheme and typography, the spacing scale screens
-                              lay out with, the colours Material has no role for, and which of
-                              the two schemes a stored theme preference asks for
+  theme/                      the palette, type scale, spacing scale and icon set of §9.10
   create/CreateVaultScreen.kt
   unlock/UnlockScreen.kt
   list/AccountListScreen.kt
-  list/AccountRow.kt          code display, countdown ring, copy affordance
+  list/AccountRow.kt          code, countdown ring, mark, copy affordance
   list/AccountOrder.kt        the search filter, the three orderings, and where a drag drops
-  list/Countdown.kt           the second a countdown turns on, and the colour it turns
+  list/Countdown.kt           the fraction of a period left, and the state it reports
+  list/AccountMark.kt         the initial and the colour derived from an account's names
   list/RowState.kt            generated codes, the interval after one, and the copy confirmation
   edit/AddAccountScreen.kt
   edit/EditAccountScreen.kt
   edit/EntryPreview.kt        the resolved account every add path converges on
-  edit/ScannedCodes.kt        the accounts among the codes an image held, and the seam the shell
-                              reads one through
+  edit/ScannedCodes.kt        the accounts among an image's codes, and the shell's decode seam
   edit/ScanState.kt           what an image offered, and the choice several accounts carry
   settings/SettingsScreen.kt
-  settings/ExportError.kt             why a copy of the vault was not placed where it was asked for
-  settings/SettingsWork.kt            what a settings action is doing, what it reported, and the
-                                      policy the screen draws while a rewrite runs
-  settings/ShellSettings.kt           what the shell knows and no screen can ask for itself
-  settings/PlaintextExport.kt         the warning, the format, and the gate every account leaves
-                                      through
-  imports/ImportScreen.kt             what a file offered, and the choice a duplicate carries
-  imports/ImportWork.kt               what an import has read and what has been decided about it
+  settings/ExportError.kt     why a file did not reach the place it was asked for
+  settings/SettingsWork.kt    what a settings action is doing, and what it reported
+  settings/ShellSettings.kt   what the shell knows and no screen can ask for itself
+  settings/PlaintextExport.kt the warning, the format, and the gate every account leaves through
+  imports/ImportScreen.kt     what a file offered, and the choice a duplicate carries
+  imports/ImportWork.kt       what an import has read and what has been decided about it
   components/PasswordField.kt         masked field over the holder beside it
   components/PasswordFieldState.kt    the CharArray a master password is edited in
   components/FormControls.kt          labelled text field and one-of-many choice
   components/SecretDisclosureGate.kt  the password re-entry every disclosure carries, and its state
-  qr/QrSymbol.kt                      the module grid a symbol is drawn from, and the seam the shell
-                                      hands its encoder over through
-  qr/QrLayout.kt                      where the modules land on the canvas that draws them
-  qr/ShowQrDialog.kt                  the symbol on screen, what it stands for, and how long it stands
+  qr/QrSymbol.kt              the module grid a symbol is drawn from, and the shell's encode seam
+  qr/QrLayout.kt              where the modules land on the canvas that draws them
+  qr/ShowQrDialog.kt          the symbol on screen, what it stands for, and how long it stands
 
 desktopApp/src/main/kotlin/com/panda/tauth/
   Main.kt                     application scope, window, tray, lifecycle
   TrayAvailability.kt         whether this desktop has a tray
   WindowLifecycle.kt          close and startup behaviour that follows
   TAuthTray.kt                the tray icon, and the three actions its menu carries
-  TAuthIcon.kt                the mark the tray and the title bar carry, read from the drawable
-                              §4.3's packaged icons are cut from
+  TAuthIcon.kt                the mark the title bar carries, read from the drawable
+                              §4.1's packaged icons are cut from
   ShellWindow.kt              where the window opens, and the geometry a window state records
   WindowClose.kt              what a close request does, and the order an exit does it in
   WindowGeometryRecorder.kt   the wait a geometry settles through before it reaches the file
   RelockTriggers.kt           what the window layer observes, and the report it makes of it
-  IdleWatch.kt                the wait an interval passes through without pointer or key input
+  IdleWatch.kt                the wait an interval passes without pointer or key input
   ExitLock.kt                 the lock a shutdown reaches through the runtime
   SingleInstance.kt           lock file + local socket
   InstanceStartup.kt          which claimed roles open a window and which one ends there
@@ -203,74 +200,35 @@ desktopApp/src/main/kotlin/com/panda/tauth/
 
 ## 4. Dependencies
 
-### 4.1 `gradle/libs.versions.toml` additions
+Every dependency and version goes through `gradle/libs.versions.toml`. This section records what each is for and the constraints on it, not the catalog itself.
 
-```toml
-[versions]
-bouncycastle = "1.85"
-kotlinx-serialization = "1.11.0"
-kotlinx-datetime = "0.8.0"
-zxing = "3.5.3"
+| Dependency | Used for |
+|---|---|
+| `kotlinx-serialization-json` | the header, body, preferences and plaintext export documents |
+| `kotlinx-datetime` | the calendar types the About group and `createdAt` render through |
+| `bcprov-jdk18on` | Argon2id via `Argon2BytesGenerator` |
+| `zxing-core` | `QRCodeWriter` for §9.7, `MultiFormatReader` for §9.5 |
+| `zxing-javase` | `BufferedImageLuminanceSource`, for decoding image files |
+| `composenativetray` | the tray icon and its menu (§10.2) |
+| `compose-components-resources` | reading the drawable the tray and title bar carry |
 
-[libraries]
-kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
-kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
-bouncycastle-prov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
-zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
-zxing-javase = { module = "com.google.zxing:javase", version.ref = "zxing" }
+BouncyCastle supplies Argon2id alone; it is a lightweight-API class needing no JCE provider registration. AES-GCM, HMAC and `SecureRandom` come from the JDK.
 
-[plugins]
-kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
-```
+From kotlinx-datetime 0.8.0, `Instant` and `Clock` are `kotlin.time` types in the standard library. kotlinx-datetime supplies the calendar types built on them — `LocalDateTime`, `TimeZone`, `LocalDate` — and each is imported from the package that owns it.
 
-These versions compile together against Kotlin 2.4.10 (§15). The serialization Gradle plugin takes `version.ref = "kotlin"` because it ships with the compiler; the runtime library versions are independent of it.
+The serialization Gradle plugin takes `version.ref = "kotlin"` because it ships with the compiler; the runtime library versions are independent of it.
 
-From kotlinx-datetime 0.8.0, `Instant` and `Clock` are `kotlin.time` types in the standard library rather than `kotlinx.datetime` types. kotlinx-datetime supplies the calendar types built on them — `LocalDateTime`, `TimeZone`, `LocalDate` — and the plan imports each from the package that owns it.
+The `composenativetray` artifact without the `-app` suffix carries the icon and the menu DSL alone and pulls in no windowing backend of its own.
 
-BouncyCastle is used only for Argon2id via `Argon2BytesGenerator`, which is a lightweight-API class requiring no JCE provider registration. AES-GCM, HMAC and `SecureRandom` come from the JDK.
+Writing a QR symbol out as a PNG uses neither ZXing artifact: §9.7 renders it from the module grid the screen already holds, and the JDK's `ImageIO` encodes that.
 
-### 4.2 `shared/build.gradle.kts`
+### 4.1 Packaging
 
-Add the serialization plugin, then:
+`nativeDistributions` targets DMG, MSI and DEB, and sets `includeAllModules = true`. That trades installer size for immunity to jlink stripping failures, where a stripped runtime fails at the module a code path reaches on one platform only and the failure lands on the user rather than the build. Narrowing it to an explicit module list is deferred (§16.8).
 
-```kotlin
-commonMain.dependencies {
-    // Compose dependencies as currently declared
-    implementation(libs.kotlinx.serialization.json)
-    implementation(libs.kotlinx.datetime)
-}
-jvmMain.dependencies {
-    implementation(libs.bouncycastle.prov)
-}
-commonTest.dependencies {
-    implementation(libs.kotlin.test)
-}
-```
+The mark is `desktopApp/src/main/composeResources/drawable/tauth.svg`, read through the resources library for the tray and the title bar. The three forms jpackage takes — `icons/tauth.png`, `icons/tauth.ico`, `icons/tauth.icns` — are cut from that one file, so the installer and the running application cannot show different marks. A monochrome variant sits beside it for the macOS menu bar, which draws a tray icon as a template image rather than in colour.
 
-### 4.3 `desktopApp/build.gradle.kts`
-
-```kotlin
-dependencies {
-    implementation(project(":shared"))
-    implementation(compose.desktop.currentOs)
-    implementation(libs.compose.components.resources)
-    implementation(libs.composeNativeTray)
-    implementation(libs.kotlinx.coroutinesSwing)
-    implementation(libs.compose.uiToolingPreview)
-    implementation(libs.zxing.core)
-    implementation(libs.zxing.javase)
-}
-```
-
-`composenativetray` is the tray icon and its menu, for the reasons §10.2 gives; the artifact without the `-app` suffix carries the icon and the menu DSL alone and pulls in no windowing backend of its own. The resources library is what a drawable is read through, by the tray and by the title bar alike (§4.3's icons).
-
-ZXing is used in both directions: `core` provides `MultiFormatReader` for QR import (§9.5) and `QRCodeWriter` for QR display (§9.7); `javase` provides `BufferedImageLuminanceSource` for decoding image files. Writing a symbol out as a PNG needs neither, since §9.7 renders it from the module grid the screen holds and the JDK's `ImageIO` encodes that.
-
-`nativeDistributions` sets `includeAllModules = true`, which trades installer size for immunity to jlink stripping failures: a stripped runtime fails at the module a code path reaches on one platform only, and that failure lands on the user rather than on the build. Narrowing to an explicit `modules("java.naming", "java.management", "jdk.crypto.ec")` list is listed in §16.8, after the artifacts are verified.
-
-The mark is `src/main/composeResources/drawable/tauth.svg`, read through the resources library for the tray and the title bar. The three forms jpackage takes — `icons/tauth.png`, `icons/tauth.ico` and `icons/tauth.icns` — are cut from that one file, so the installer and the running application cannot show different marks. A monochrome variant sits beside it for the macOS menu bar, which draws a tray icon as a template image rather than in colour.
-
-Beside the icons, `nativeDistributions` carries what an installer names the application by: a description, a vendor and a copyright; on Linux a package name, a maintainer, a menu group and a category; on macOS a bundle identifier, which is what a keychain entry and a Screen Recording grant are remembered against and is therefore fixed here rather than derived; on Windows a menu group and an upgrade UUID, fixed for the lifetime of the application because a changed one installs a second copy beside the first rather than replacing it.
+Beside the icons, `nativeDistributions` carries a description, a vendor and a copyright; on Linux a package name, a maintainer, a menu group and a category; on macOS a bundle identifier, fixed rather than derived because it is what a keychain entry and a Screen Recording grant are remembered against; on Windows a menu group and an upgrade UUID, fixed for the lifetime of the application because a changed one installs a second copy beside the first rather than replacing it.
 
 ---
 
@@ -280,11 +238,11 @@ HOTP and TOTP are two moving factors over one core. `OtpCore` holds the HMAC and
 
 ### 5.1 Base32
 
-RFC 4648 alphabet `ABCDEFGHIJKLMNOPQRSTUVWXYZ234567`. The decoder accepts input with or without `=` padding, ignores ASCII whitespace, and accepts lowercase by upper-casing before lookup. Invalid characters produce `VaultError.InvalidSecret`. The decoder returns `ByteArray`; the encoder is needed only for export and produces unpadded output.
+RFC 4648 alphabet `ABCDEFGHIJKLMNOPQRSTUVWXYZ234567`. The decoder accepts input with or without `=` padding, ignores ASCII whitespace, and accepts lowercase by upper-casing before lookup. Invalid characters produce `VaultError.InvalidSecret`. The decoder returns `ByteArray`; the encoder produces unpadded output.
 
-Padding is optional but not free-form: an `otpauth://` secret carries none, and input that does carry padding must carry the right amount. RFC 4648 §6 pads to a multiple of eight characters, so the count follows from the number of data symbols and a group needing none can carry none. A wrong count means characters were lost, which is the case padding exists to reveal.
+Padding is optional but not free-form: an `otpauth://` secret carries none, and input that does carry padding must carry the right amount. RFC 4648 §6 pads to a multiple of eight characters, so the count follows from the number of data symbols, and a group needing none can carry none. A wrong count means characters were lost, which is what padding exists to reveal.
 
-Secret length is not constrained by the format. RFC 4226 recommends at least 128 bits and 160 bits is the norm; TAuth accepts any non-empty decoded secret and displays a warning in the UI for secrets shorter than 16 bytes.
+Secret length is not constrained by the format. RFC 4226 recommends at least 128 bits and 160 bits is the norm; TAuth accepts any non-empty decoded secret and warns in the UI below 16 bytes.
 
 ### 5.2 HOTP truncation (RFC 4226 §5.3)
 
@@ -306,9 +264,9 @@ The result is left-padded with zeros to `digits` characters.
 T = floor((currentUnixSeconds - T0) / X)
 ```
 
-with `T0 = 0` and `X` the entry's `period`. `T` is encoded as a **64-bit big-endian** integer. RFC 6238 errata 8672 records that treating `T` as 32-bit introduces a year-2038 defect; the implementation uses `Long` throughout and the test suite includes the `20000000000` vector specifically to exercise values beyond 32 bits.
+with `T0 = 0` and `X` the entry's `period`. `T` is encoded as a **64-bit big-endian** integer. RFC 6238 errata 8672 records that treating `T` as 32-bit introduces a year-2038 defect; the implementation uses `Long` throughout and §5.4's `20000000000` vector exercises values beyond 32 bits.
 
-Time source is the system clock via `kotlin.time.Clock.System`. A `Clock` is injected into `TotpGenerator` so tests can supply fixed instants. No NTP correction is performed; a settings screen note explains that a system clock skewed by more than the period will produce rejected codes.
+Time comes from `kotlin.time.Clock.System`. A `Clock` is injected so tests supply fixed instants. No NTP correction is performed; a settings note explains that a system clock skewed by more than the period produces rejected codes.
 
 ### 5.4 Test vectors
 
@@ -324,11 +282,11 @@ Secret is the ASCII string `12345678901234567890` (20 bytes), HMAC-SHA1, 6 digit
 | 3 | 969429 | 8 | 399871 |
 | 4 | 338314 | 9 | 520489 |
 
-Feeding counter `floor(t / 30)` into the same code path must reproduce the TOTP vectors below, which is the check that the two types share one implementation rather than two.
+Feeding counter `floor(t / 30)` into the same code path reproduces the TOTP vectors below, which is the check that the two types share one implementation.
 
 #### TOTP (RFC 6238 Appendix B)
 
-All vectors use `T0 = 0`, `X = 30`, and **8 digits**. RFC 6238 errata 2866 (verified) corrects the specification text, which claims a single shared secret: the reference implementation uses a distinct seed per algorithm. Errata 5132 restates the same defect. The seeds are ASCII strings:
+All vectors use `T0 = 0`, `X = 30`, and **8 digits**. The specification text claims a single shared secret and is wrong; errata 2866 (verified) records that the reference implementation uses a distinct seed per algorithm, and errata 5132 restates it. The seeds are ASCII strings:
 
 - SHA-1: `12345678901234567890` (20 bytes)
 - SHA-256: `12345678901234567890123456789012` (32 bytes)
@@ -354,35 +312,35 @@ otpauth://totp/LABEL?secret=SECRET&issuer=ISSUER&algorithm=ALG&digits=D&period=P
 Parsing rules:
 
 - **Type** — the authority component. `totp` and `hotp` are accepted. Any other value is `VaultError.MalformedUri`.
-- **Label** — percent-decoded path, leading `/` stripped. If it contains a `:` (or its percent-encoded `%3A`), the portion before the first colon is the issuer prefix and the remainder, with surrounding whitespace trimmed, is the account name. Otherwise the whole label is the account name.
-- **secret** — required, base32, padding optional. Absent, undecodable, or decoding to no bytes at all produces `VaultError.InvalidSecret`. Whitespace and padding decode to nothing, so a non-empty secret can still carry no key.
-- **issuer** — optional. When both the `issuer` parameter and an issuer label prefix are present and differ, the `issuer` parameter wins and the discrepancy is surfaced in the import preview.
+- **Label** — percent-decoded path, leading `/` stripped. If it contains a `:` (or `%3A`), the portion before the first colon is the issuer prefix and the remainder, whitespace trimmed, is the account name. Otherwise the whole label is the account name.
+- **secret** — required, base32, padding optional. Absent, undecodable, or decoding to no bytes produces `VaultError.InvalidSecret`. Whitespace and padding decode to nothing, so a non-empty secret can still carry no key.
+- **issuer** — optional. Where both the parameter and a label prefix are present and differ, the parameter wins and the discrepancy is surfaced in the import preview.
 - **algorithm** — optional, one of `SHA1`, `SHA256`, `SHA512`, case-insensitive. Default `SHA1`.
-- **digits** — optional integer. Accepted range 6–8. Default 6. Values outside the range are rejected rather than clamped.
-- **period** — optional integer seconds, `totp` only, at least 1 with no upper bound. Default 30. Present on a `hotp` URI it is ignored.
-- **counter** — required for `hotp`, rejected on `totp`. Unsigned 64-bit initial counter value. Absent on a `hotp` URI it is `VaultError.MalformedUri`; unlike every other parameter it has no default, because a wrong starting counter yields codes the server will not accept.
+- **digits** — optional integer, 6–8. Default 6. Values outside the range are rejected rather than clamped.
+- **period** — optional integer seconds, `totp` only, at least 1 with no upper bound. Default 30. Ignored on a `hotp` URI.
+- **counter** — required for `hotp`, rejected on `totp`. Unsigned 64-bit. Absent on a `hotp` URI it is `VaultError.MalformedUri`; it alone has no default, because a wrong starting counter yields codes the server will not accept.
 
 Unknown query parameters are ignored and not preserved.
 
-Space, tab, carriage return and newline are shed from the ends of the input, which is what a paste from a chat window or a wrapped mail carries. One of those four surviving in the query makes the URI `VaultError.MalformedUri`: the query is where a wrapped paste is taken in silently, since base32 skips whitespace inside a secret and a parameter name carrying whitespace is an unknown parameter and ignored. The label carries its own whitespace raw, which is how issuers write it — `otpauth://totp/ACME Corp:alice@acme.com?secret=...` — and it is unambiguous there, since the label runs to the `?` and every character of it is part of a name.
+Space, tab, carriage return and newline are shed from the ends of the input, which is what a paste from a chat window or a wrapped mail carries. One of those four surviving in the query makes the URI `VaultError.MalformedUri`: the query is where a wrapped paste is taken in silently, since base32 skips whitespace inside a secret and a parameter name carrying whitespace is an unknown parameter and ignored. The label carries whitespace raw, which is how issuers write it — `otpauth://totp/ACME Corp:alice@acme.com?secret=...` — and it is unambiguous there, since the label runs to the `?` and every character of it is part of a name.
 
 The type and the algorithm are matched by ASCII case alone. Unicode case folding maps U+017F LATIN SMALL LETTER LONG S onto `S`, which would read `algorithm=%C5%BFHA256` as SHA-256 from a character the grammar's VCHAR has no room for.
 
-URI construction for export percent-encodes the label as `issuer:accountName`, emits `issuer` as an explicit parameter, and omits `algorithm`, `digits` and `period` when they hold default values. A `hotp` URI always carries `counter`, holding the entry's current value at the moment the URI is built.
+Construction percent-encodes the label as `issuer:accountName`, emits `issuer` as an explicit parameter, and omits `algorithm`, `digits` and `period` at their defaults. A `hotp` URI always carries `counter`, at the value the entry holds when the URI is built.
 
-Construction applies the parser's rules to its own arguments, so `parse(build(x)) == x` for every value the constructor accepts: the secret decodes to a key, the issuer and account name are well-formed UTF-16, the account name carries no colon, and an absent issuer is null rather than empty. A lone surrogate has no UTF-8 encoding and so cannot be percent-encoded at all. The last two rules are what the round trip rests on for those values: a colon in the account name builds a label that reads back as a different account under an issuer nobody entered, and an empty issuer builds `&issuer=`, which reads back as no issuer.
+Construction applies the parser's rules to its own arguments, so `parse(build(x)) == x` for every value the constructor accepts: the secret decodes to a key, the issuer and account name are well-formed UTF-16, the account name carries no colon, and an absent issuer is null rather than empty. A colon in the account name would build a label reading back as a different account under an issuer nobody entered; an empty issuer would build `&issuer=`, reading back as no issuer. A lone surrogate has no UTF-8 encoding and cannot be percent-encoded at all.
 
 ### 5.6 HOTP counter semantics
 
 The counter is stored per entry and advances only when the user asks for a code. `TotpGenerator` derives its counter from the clock and holds no state; `HotpGenerator` reads and advances state, which makes code generation a write.
 
-**Ordering.** Generating an HOTP code persists the incremented counter to the vault *before* the code reaches the screen. The reverse order allows a crash between display and write to leave the stored counter behind the code already shown, and reissuing that code trips replay rejection on any server that tracks consumed counters. The cost of the chosen order is a skipped counter value when a write succeeds and the user never uses the code, which the server's look-ahead window absorbs.
+**Ordering.** Generating an HOTP code persists the incremented counter *before* the code reaches the screen. The reverse order lets a crash between display and write leave the stored counter behind the code already shown, and reissuing that code trips replay rejection on any server tracking consumed counters. The cost is a skipped counter value when a write succeeds and the user never uses the code, which the server's look-ahead window absorbs.
 
-A counter at the unsigned 64-bit maximum has no successor to store, so generation is refused and no code is shown. Unsigned arithmetic wraps, and a counter wrapping to zero would reissue every code the server has already consumed. Editing the counter (§9.6) is what moves such an entry again.
+A counter at the unsigned 64-bit maximum has no successor to store, so generation is refused and no code is shown; wrapping to zero would reissue every code the server has already consumed. Editing the counter (§9.6) is what moves such an entry again.
 
-**Write volume.** Each HOTP code view rewrites the whole vault: fresh nonce, re-encrypt, atomic rename, fsync, per §6.6. TOTP entries cause no writes at all. A vault of HOTP entries is therefore materially more write-heavy than one of TOTP entries.
+**Write volume.** Each HOTP code view rewrites the whole vault per §6.6: fresh nonce, re-encrypt, atomic rename, fsync. TOTP entries cause no writes at all.
 
-**Drift.** RFC 4226 increments the client counter on every code request and the server counter only on successful authentication, so any code generated and not submitted moves the two apart. Servers absorb this with a look-ahead window of `s` values; beyond it, authentication fails until the counter is reset. Two consequences for the UI: the current counter value is visible on the entry (§9.6), and it is editable so a user told "your token is out of sync" can correct it without deleting and re-adding the account.
+**Drift.** RFC 4226 increments the client counter on every code request and the server counter only on successful authentication, so any code generated and not submitted moves the two apart. Servers absorb this with a look-ahead window; beyond it, authentication fails until the counter is reset. The current counter is therefore visible on the entry and editable (§9.6), so a user told "your token is out of sync" can correct it without deleting and re-adding the account.
 
 **Codes do not expire.** An HOTP code stays valid at the server until consumed or superseded, so it carries no countdown and is not recomputed on a timer (§8.5).
 
@@ -398,13 +356,13 @@ A counter at the unsigned 64-bit maximum has no successor to store, so generatio
 | macOS | `~/Library/Application Support/TAuth/vault.tauth` |
 | Windows | `%APPDATA%\TAuth\vault.tauth` |
 
-`XDG_DATA_HOME` and `%APPDATA%` are used only when they name an absolute path; the XDG Base Directory Specification requires a relative value be treated as invalid and ignored, and the same applies to `%APPDATA%` for the same reason. A location that still comes out relative — an empty `user.home` leaves every branch above relative — is refused rather than resolved against the working directory, which would put the vault wherever the application happened to be launched from and leave the next launch unable to find it.
+`XDG_DATA_HOME` and `%APPDATA%` are used only when they name an absolute path; the XDG Base Directory Specification requires a relative value be ignored, and the same applies to `%APPDATA%`. A location that still comes out relative — an empty `user.home` leaves every branch relative — is refused rather than resolved against the working directory, which would put the vault wherever the application was launched from and leave the next launch unable to find it.
 
 Settings are split by whether the application must read them before the vault is open.
 
-`preferences.json` sits beside the vault in plaintext and holds what is needed to draw the window and build the tray before any password is entered: theme, window geometry and position, start-minimised, minimise-to-tray, list sort order. It contains no secrets and nothing that governs when the vault locks.
+`preferences.json` sits beside the vault in plaintext and holds what is needed to draw the window and build the tray before any password is entered: theme, density, window geometry and position, start-minimised, minimise-to-tray, list sort order. It contains no secrets and nothing governing when the vault locks.
 
-Everything that governs locking travels inside the encrypted body as `SecurityPolicy` (§6.4): idle timeout, lock-on-minimise, lock-on-focus-loss, hide grace period and clipboard clear delay. These are read only while the vault is unlocked, so placing them inside creates no chicken-and-egg problem, and it puts them under the GCM tag where an edit is detected rather than obeyed. A plaintext idle timeout is a file an attacker can rewrite to disable the control that §8.3 exists to provide.
+Everything governing locking travels inside the encrypted body as `SecurityPolicy` (§6.4): idle timeout, lock-on-minimise, lock-on-focus-loss, hide grace period, clipboard clear delay. These are read only while unlocked, so placing them inside creates no chicken-and-egg problem, and it puts them under the GCM tag where an edit is detected rather than obeyed. A plaintext idle timeout is a file an attacker rewrites to disable the control §8.3 exists to provide.
 
 Minimise-to-tray stays in plaintext because it is not a security control: with the tray it hides and locks, without the tray it exits and locks.
 
@@ -425,9 +383,9 @@ offset  size      content
 
 The associated data for the body's AEAD operation is the **entire prefix**: bytes `0` through `14 + headerLength - 1` inclusive. It binds the body to the header it was written under, so a header lifted from another vault fails the body's authentication even though that header is internally consistent.
 
-The CRC covers the ten bytes ahead of it as well as the header JSON, and is checked before any key is derived, which is what separates a damaged file from a mistyped password (§6.7). Those ten bytes decide what the reader takes the file to be and where it believes the header ends, so they are checked by the same step that checks the header: a damaged version byte is reported as damage rather than as a vault from a TAuth that does not exist, and a corrupted `headerLength` fails whether or not the bytes it slices happen to parse. The CRC is unkeyed and so detects damage rather than tampering; tampering is the GCM tag's job.
+The CRC covers the ten bytes ahead of it as well as the header JSON, and is checked before any key is derived, which is what separates a damaged file from a mistyped password (§6.7). Those ten bytes decide what the reader takes the file to be and where it believes the header ends, so the same step checks them: a damaged version byte is reported as damage rather than as a vault from a TAuth that does not exist, and a corrupted `headerLength` fails whether or not the bytes it slices happen to parse. The CRC is unkeyed and detects damage rather than tampering; tampering is the GCM tag's job.
 
-The layout of those ten bytes is fixed for every format version. A reader can therefore check the preamble of a file written by a version it does not know before reporting that it cannot read it.
+The layout of those ten bytes is fixed for every format version, so a reader can check the preamble of a file written by a version it does not know before reporting that it cannot read it.
 
 ### 6.3 Header JSON
 
@@ -436,25 +394,20 @@ The layout of those ten bytes is fixed for every format version. A reader can th
   "v": 1,
   "vaultId": "<base64, 16 bytes>",
   "salt": "<base64, 16 bytes>",
-  "wrap": {
-    "nonce": "<base64, 12 bytes>",
-    "ct": "<base64, 48 bytes>"
-  },
-  "body": {
-    "nonce": "<base64, 12 bytes>"
-  }
+  "wrap": { "nonce": "<base64, 12 bytes>", "ct": "<base64, 48 bytes>" },
+  "body": { "nonce": "<base64, 12 bytes>" }
 }
 ```
 
-`wrap.ct` is 48 bytes: the 32-byte DEK encrypted under the KEK plus the 16-byte GCM tag. The wrap operation uses an empty associated data field.
+`wrap.ct` is 48 bytes: the 32-byte DEK encrypted under the KEK plus the 16-byte GCM tag. The wrap uses an empty associated data field.
 
-`salt` is the only part of the derivation the file carries, because it is random per vault and cannot be derived from anything else. The function, its version, the lane count and the cost are all fixed by the format version `v` (§6.5), so the header holds no copy of them: a stored copy could only ever disagree with the version that implies it, and a cost read from a plaintext header would be an allocation of the attacker's choosing.
+`salt` is the only part of the derivation the file carries, because it is random per vault and cannot be derived from anything else. The function, its version, the lane count and the cost are fixed by the format version `v` (§6.5), so the header holds no copy of them: a stored copy could only disagree with the version implying it, and a cost read from a plaintext header would be an allocation of the attacker's choosing.
 
-`vaultId` is a random 16-byte identifier generated at vault creation. It binds keyring entries to a specific vault (§16.3); the password-only design does not read it.
+`vaultId` is a random 16-byte identifier generated at creation. It binds keyring entries to a specific vault (§16.3); the password-only design does not read it.
 
-The header is serialised with `kotlinx.serialization` using `encodeDefaults = true`, `explicitNulls = false`, and no pretty-printing, so that byte-for-byte reproduction is deterministic. The exact header bytes read from disk are retained in memory and reused as associated data rather than being re-serialised, which removes any dependence on serialiser stability.
+The header is serialised with `encodeDefaults = true`, `explicitNulls = false`, and no pretty-printing, so byte-for-byte reproduction is deterministic. The exact header bytes read from disk are retained and reused as associated data rather than re-serialised, which removes any dependence on serialiser stability.
 
-Deserialisation must be tolerant of unknown keys (`ignoreUnknownKeys = true`), so that a vault written by a later version carrying additional header fields still fails cleanly on the version check rather than on a parse error.
+Deserialisation tolerates unknown keys, so a vault written by a later version carrying additional header fields fails on the version check rather than on a parse error.
 
 ### 6.4 Body plaintext JSON
 
@@ -486,13 +439,13 @@ Deserialisation must be tolerant of unknown keys (`ignoreUnknownKeys = true`), s
 }
 ```
 
-`id` is a UUIDv7 rendered in canonical form, giving creation-ordered identifiers. `orderIndex` holds explicit user ordering; it is renumbered densely from zero on every write. `secret` is the base32 string exactly as imported, not the decoded bytes, so that a round-trip export reproduces the original URI.
+`id` is a UUIDv7 in canonical form, giving creation-ordered identifiers. `orderIndex` holds explicit user ordering and is renumbered densely from zero on every write. `secret` is the base32 string exactly as imported, not the decoded bytes, so a round-trip export reproduces the original URI.
 
 `type` is `totp` or `hotp`. `period` applies to `totp` and is null on `hotp`; `counter` applies to `hotp` and is null on `totp`. The pairing is enforced on deserialisation, and a `hotp` entry with a null counter is `VaultError.Corrupt` rather than a silent default to zero, which would generate codes from the wrong position.
 
-An entry meets the rules §5.5 places on a URI: `secret` is base32 that decodes to at least one byte, `issuer` and `accountName` are well-formed UTF-16, `accountName` carries no colon, and `issuer` is absent rather than empty. The body is attacker-writable and JSON carries an unpaired surrogate through as readily as any other escape, so a body failing any of them is `VaultError.Corrupt` at the read rather than a failure at the first code the entry is asked for or a throw out of the URI constructor when the entry is exported.
+An entry meets the rules §5.5 places on a URI: `secret` is base32 decoding to at least one byte, `issuer` and `accountName` are well-formed UTF-16, `accountName` carries no colon, and `issuer` is absent rather than empty. The body is attacker-writable and JSON carries an unpaired surrogate through as readily as any other escape, so a body failing any of them is `VaultError.Corrupt` at the read rather than a failure at the first code the entry is asked for or a throw out of the URI constructor when the entry is exported.
 
-`policy` carries the security settings described in §6.1. Absent fields take the defaults shown, so a body written before a field existed opens unchanged; an absent `policy` object is the full default set. Defaults are the conservative value in every case, so a truncated or partially-understood policy locks sooner rather than later. Changing a policy value is an ordinary vault write and therefore requires an unlocked session.
+Absent `policy` fields take the defaults shown, so a body written before a field existed opens unchanged; an absent `policy` object is the full default set. Defaults are conservative in every case, so a truncated or partially-understood policy locks sooner rather than later. Changing a policy value is an ordinary vault write and requires an unlocked session.
 
 The three durations are rejected when negative, which makes the body `VaultError.Corrupt`. Zero disables a control and is a choice the user can make; a negative reads as disabled to every check while naming a duration, so it would switch a control off in a body that appears to set it.
 
@@ -505,7 +458,7 @@ The three durations are rejected when negative, which makes the body `VaultError
 | DEK → body | AES-256-GCM | 12-byte random nonce, 128-bit tag, AAD = file prefix |
 | Random material | `java.security.SecureRandom` | default provider, no seeding |
 
-Argon2id parameters exceed the OWASP minimum of m = 19456 KiB, t = 2, p = 1. On the reference machine (§15) the chosen parameters cost about 175 ms:
+Argon2id parameters exceed the OWASP minimum of m = 19456 KiB, t = 2, p = 1. On the reference machine (§15) they cost about 175 ms:
 
 | Parameters | Median of three runs |
 |---|---|
@@ -520,7 +473,7 @@ The budget is set by §8.3 rather than by the unlock screen: hiding to the tray 
 
 The parameters belong to format version 1 rather than to the individual vault, and the file records none of them. Strengthening them is a format version change: each reader uses the parameters its version names, so a vault written under version 1 keeps opening at version 1's cost. Nothing in the derivation is attacker-writable and there is no parameter to validate on read.
 
-The two-level hierarchy — password to KEK to DEK to body — makes password change an O(1) header rewrite rather than a full re-encryption, and is the structure the keyring path in §16 attaches to. Replacing the DEK is a separate operation (§7.1), because a password change alone leaves a leaked DEK working.
+The two-level hierarchy — password to KEK to DEK to body — makes password change an O(1) header rewrite rather than a full re-encryption, and is the structure §16's keyring path attaches to. Replacing the DEK is a separate operation (§7.1), because a password change alone leaves a leaked DEK working.
 
 **Nonce discipline.** A fresh 12-byte nonce is generated for the body on every write and for the wrap on every KEK change. Reusing a nonce with the same key across two plaintexts breaks GCM completely, so the rule is structural rather than procedural: every nonce is drawn inside `VaultCodec` and no function it calls accepts one from outside it.
 
@@ -532,7 +485,7 @@ The two-level hierarchy — password to KEK to DEK to body — makes password ch
 4. Assemble the prefix (magic, version, length, CRC, header) and use it as AAD.
 5. Encrypt the body under the DEK.
 6. Take the lock.
-7. Write prefix and ciphertext to `vault.tauth.tmp` in the same directory. On POSIX the owner-only mode is a creation attribute and is read back before any ciphertext is written; elsewhere the file is created with no mode of its own and the directory's inheritable access control entry is what restricts it.
+7. Write prefix and ciphertext to `vault.tauth.tmp` in the same directory. On POSIX the owner-only mode is a creation attribute, read back before any ciphertext is written; elsewhere the file is created with no mode of its own and the directory's inheritable access control entry restricts it.
 8. `FileChannel.force(true)` on the temp file.
 9. `Files.move(tmp, target, ATOMIC_MOVE, REPLACE_EXISTING)`.
 10. Force the parent directory's channel, so the rename itself is durable and not only the bytes it renames.
@@ -541,21 +494,21 @@ The rename at step 9 is the commit point: a reader sees the previous file whole 
 
 A save that fails at step 7 or 8 deletes `vault.tauth.tmp`: it holds part of a file nothing can read, and the vault file has not been touched. A save that fails at step 9 leaves it in place and logs its path, because it holds the whole new vault and, where the rename was not atomic, can be the only complete copy of it.
 
-Steps 1 to 5 refuse a body the read procedure would reject: a `v` the reader does not support, a header past the 64 KiB bound of §6.7, or a file past the 16 MiB whole-file ceiling. No version and no size reaching step 7 is one that step 9 would commit as a vault this version cannot open.
+Steps 1 to 5 refuse a body the read procedure would reject: a `v` the reader does not support, a header past the 64 KiB bound of §6.7, or a file past the 16 MiB whole-file ceiling. Nothing reaching step 7 is something step 9 would commit as a vault this version cannot open.
 
 Durability across a power cut is best effort and is not reported: on macOS, from JDK 21, `FileChannel.force` is `fcntl(fd, F_FULLFSYNC)` for a local mount and plain `fsync` for any other (JDK-8080589), and `fsync` returns before the drive empties its write cache; a network store can acknowledge a flush its server has not performed; Windows will not open a directory as a channel.
 
-The lock at step 6 is an exclusive `FileLock` on a sibling `vault.lock`. It is advisory across processes on the same machine and stops two instances, or an instance and an export, from interleaving writes. It is a separate file so that locking never opens the vault for writing. `vault.lock` is opened without following links, so a symbolic link left at that name opens nothing and, where it dangles, creates nothing.
+The lock at step 6 is an exclusive `FileLock` on a sibling `vault.lock`. It is advisory across processes on the same machine and stops two instances, or an instance and an export, from interleaving writes. It is a separate file so that locking never opens the vault for writing, and it is opened without following links, so a symbolic link left at that name opens nothing and, where it dangles, creates nothing.
 
-Ahead of the lock, the directory holding the vault is restricted to its owner. On POSIX it is created at `0700` and it alone: a creation attribute reaches every parent `createDirectories` makes, and those parents are the data root shared with every other application, so they keep the mode a directory is created with. A directory that is anything other than `0700` is chmodded to it and the mode is then read back, so a mount that accepts a chmod and discards it produces `VaultError.Io` instead of a success that leaves the directory traversable. A directory reached through a symbolic link is left as it is found, because a chmod through the link tightens whatever it points at; the mode read back is that of the directory the link resolves to. A data directory linked onto another disk at `0700` is therefore written to, and one linked onto a directory anyone can traverse produces `VaultError.Io` and no write.
+Ahead of the lock, the directory holding the vault is restricted to its owner. On POSIX it is created at `0700` and it alone: a creation attribute reaches every parent `createDirectories` makes, and those parents are the data root shared with every other application, so they keep the mode a directory is created with. A directory that is anything other than `0700` is chmodded to it and the mode is then read back, so a mount that accepts a chmod and discards it produces `VaultError.Io` instead of a success that leaves the directory traversable. A directory reached through a symbolic link is left as it is found, because a chmod through the link tightens whatever it points at; the mode read back is that of the directory the link resolves to.
 
-Elsewhere the directory is created with no mode of its own and its access control list is set to a single ALLOW entry for the owner, carrying `FILE_INHERIT` and `DIRECTORY_INHERIT`, which a file created inside the directory inherits. A path with no access control view produces `VaultError.Io`. Nothing is read back, and the entry is written through a symbolic link to whatever the link resolves to, so the mode-discarding guarantee and the symbolic-link exemption above hold on POSIX alone.
+Elsewhere the directory is created with no mode of its own and its access control list is set to a single ALLOW entry for the owner, carrying `FILE_INHERIT` and `DIRECTORY_INHERIT`, which a file created inside it inherits. A path with no access control view produces `VaultError.Io`. Nothing is read back, and the entry is written through a symbolic link to whatever the link resolves to, so the mode-discarding guarantee and the symbolic-link exemption above hold on POSIX alone.
 
 Reading is not gated on the directory's mode: a vault already there stays readable.
 
 ### 6.7 Read procedure
 
-1. Read the whole file into memory through one open descriptor, whose size decides the ceiling, so that the file measured is the file read. A file past the 16 MiB whole-file ceiling produces `VaultError.Corrupt` before the read is attempted, since a hostile size raises `OutOfMemoryError` rather than an exception that can be caught and converted.
+1. Read the whole file into memory through one open descriptor, whose size decides the ceiling, so the file measured is the file read. A file past the 16 MiB whole-file ceiling produces `VaultError.Corrupt` before the read is attempted, since a hostile size raises `OutOfMemoryError` rather than an exception that can be caught and converted.
 2. Verify the magic. A file that does not carry it produces `VaultError.Corrupt`.
 3. Parse `headerLength` and slice the header JSON. A length exceeding the file size, or exceeding a 64 KiB sanity bound, produces `VaultError.Corrupt`.
 4. Verify the CRC over bytes `0`–`9` and the header JSON. A mismatch produces `VaultError.Corrupt`, before any key is derived.
@@ -567,7 +520,7 @@ Reading is not gated on the directory's mode: a vault already there stays readab
 
 `v` is read out of a document on its own, ahead of the rest of that document, because only the version says what the rest of it means: a later version is free to give a field a type this one never used, and deserialising those fields under this version's model would report a vault from a later TAuth as damage.
 
-The parser takes a quoted integer wherever this format specifies a number, so a `v` of `"1"` reads as version 1 on the header path and on the body path alike, and an entry's `period`, `digits` and `orderIndex` read the same way quoted. The two reads of `v` — the standalone one and the model's — go through the same parser and so agree on the value; the writer emits a number.
+The parser takes a quoted integer wherever this format specifies a number, so a `v` of `"1"` reads as version 1 on the header path and on the body path alike, and an entry's `period`, `digits` and `orderIndex` read the same way quoted. The two reads of `v` go through the same parser and so agree on the value; the writer emits a number.
 
 A document that will not deserialise produces `VaultError.Corrupt` naming which document it was, and nothing out of the document itself. A parser reports the input it stopped in, and that input is the salt with the wrapped DEK on the header path and every entry's secret on the body path.
 
@@ -577,11 +530,11 @@ The order of steps 4 and 5 is what separates the three failures a user can act o
 
 ### 6.8 Vault creation
 
-On first run, or when the resolved path holds no file, the UI presents the create flow. Creation generates a 16-byte salt, a 16-byte vault id, and a 32-byte DEK from `SecureRandom`, derives the KEK from the chosen password, wraps the DEK, and writes an empty entry list. The vault file exists before the user adds any account, so that a failure to write is surfaced immediately rather than after they have entered a secret.
+On first run, or where the resolved path holds no file, the UI presents the create flow. Creation generates a 16-byte salt, a 16-byte vault id and a 32-byte DEK from `SecureRandom`, derives the KEK from the chosen password, wraps the DEK, and writes an empty entry list. The file exists before the user adds any account, so a failure to write surfaces immediately rather than after they have entered a secret.
 
-A path that already holds a vault produces `VaultError.VaultFileExists` and no write, since the write would replace every secret in that vault with those of a new one. The check is not atomic with the write it guards: it stops the create flow from overwriting a vault, not a second process from writing one in between, which is what §10.3 covers.
+A path that already holds a vault produces `VaultError.VaultFileExists` and no write, since the write would replace every secret in that vault with those of a new one. The check is not atomic with the write it guards: it stops the create flow from overwriting a vault, not a second process from writing one in between, which §10.3 covers.
 
-The session reads the file back and opens it, so the create flow lands on the account list rather than on a password prompt, and a write that did not land as it was sealed is found at creation rather than at the next unlock. That is a second Argon2id derivation, paid once per vault; the alternative is a codec that hands its key back to be adopted. Reading the file rather than reopening the buffer is what makes the check about the vault on disk: the buffer opens by construction, whatever the filesystem did with it.
+The session reads the file back and opens it, so the create flow lands on the account list rather than on a password prompt, and a write that did not land as it was sealed is found at creation rather than at the next unlock. That is a second Argon2id derivation, paid once per vault. Reading the file rather than reopening the buffer is what makes the check about the vault on disk: the buffer opens by construction, whatever the filesystem did with it.
 
 ---
 
@@ -602,7 +555,7 @@ Argon2id derivation runs off the UI thread on `Dispatchers.Default`. The unlock 
 
 **Unlock.** Derive KEK, unwrap DEK, decrypt body, decode secrets into `SecureBytes`. The KEK is zeroed immediately after the unwrap; only the DEK is retained for the session.
 
-**Change password.** Requires an unlocked session and re-entry of the current password, which is verified by a fresh derivation and unwrap rather than by comparing against session state. Generates a new 16-byte salt, derives a new KEK from the new password, re-wraps the existing DEK, and rewrites the file with a fresh body nonce. The body plaintext is unchanged; the DEK is unchanged.
+**Change password.** Requires an unlocked session and re-entry of the current password, verified by a fresh derivation and unwrap rather than against session state. Generates a new 16-byte salt, derives a new KEK from the new password, re-wraps the existing DEK, and rewrites the file with a fresh body nonce. The body plaintext is unchanged; the DEK is unchanged.
 
 **Rotate DEK.** Offered in settings as "re-encrypt vault". Generates a new DEK, re-encrypts the body under it, and re-wraps it under the existing KEK. This is the recovery action after a suspected DEK compromise, and the migration path once §16 lands and a keyring copy of an old DEK must be invalidated.
 
@@ -625,7 +578,7 @@ sealed interface SessionState {
 
 `VaultSession` owns a `MutableStateFlow<SessionState>` and holds the DEK in a private `SecureBytes`. The DEK is never exposed through the public API; callers request operations, not keys.
 
-`UnlockedEntry` is a `VaultEntry` without its `secret`: the id, type, issuer, account name, algorithm, digits, period, counter, creation time and order index that the account list and the edit screen draw. The session decodes each secret into key bytes it zeroes on lock, and the base32 text those came from stays alive in the open vault's parsed body (§8.4); an entry the UI holds carries neither form, so no entry the session publishes is a credential. What a composable holds of its own is another matter: the add screen keeps the pasted URI and the typed base32 in `String`s for the life of the screen. The policy travels with the state because it lives in the encrypted body, which is where a lock trigger and a clipboard clear have to read it from.
+`UnlockedEntry` is a `VaultEntry` without its `secret`: the id, type, issuer, account name, algorithm, digits, period, counter, creation time and order index the account list and the edit screen draw. The session decodes each secret into key bytes it zeroes on lock, and the base32 text those came from stays alive in the open vault's parsed body (§8.4); an entry the UI holds carries neither form, so no entry the session publishes is a credential. What a composable holds of its own is another matter: the add screen keeps the pasted URI and the typed base32 in `String`s for the life of the screen. The policy travels with the state because it lives in the encrypted body, which is where a lock trigger and a clipboard clear have to read it from.
 
 The state answers `NoVault` from whether a file sits at the resolved path, and creation refuses a path that already holds one (§6.8).
 
@@ -647,19 +600,19 @@ fun scheduleLock(reason: LockReason)
 fun cancelScheduledLock()
 ```
 
-Everything down to the state assignment runs under the lock that guards the session's fields, so a lock arriving from the tray and an unlock finishing on a worker cannot interleave over one key. The clipboard call is outside it: the platform clipboard blocks under contention, and stalling every other operation on the session for the length of that is worse than clearing a moment after the state says locked.
+Everything down to the state assignment runs under the lock guarding the session's fields, so a lock arriving from the tray and an unlock finishing on a worker cannot interleave over one key. The clipboard call is outside it: the platform clipboard blocks under contention, and stalling every other operation on the session for the length of that is worse than clearing a moment after the state says locked.
 
 The session reaches the clipboard through a one-call interface it holds and the shell implements, rather than by publishing something a collector acts on. A lock for an exit is followed by the process ending, and a collector gets no turn to run in between, which would leave a code or an `otpauth://` URI on the clipboard of a machine whose vault is shut.
 
-`scheduleLock` reads the grace period from the `SecurityPolicy` the session holds, and whether the reason is armed at all; a zero grace period locks at once. It is a no-op against an already-locked vault, so a caller never has to ask what state the session is in. `cancelScheduledLock` drops a pending timer without locking. Both are on the session rather than on the window because the policy lives in the unlocked body and is unreadable exactly when it is irrelevant.
+`scheduleLock` reads the grace period and the arming from the `SecurityPolicy` the session holds; a zero grace period locks at once. It is a no-op against an already-locked vault, so a caller never has to ask what state the session is in. `cancelScheduledLock` drops a pending timer without locking. Both are on the session rather than on the window because the policy lives in the unlocked body and is unreadable exactly when it is irrelevant.
 
 The timer belongs to the application scope the session is constructed with, so shutting the application down cancels a pending lock. Three things drop one: `cancelScheduledLock`, a `lock` from any source, and that scope ending. A second `scheduleLock` arriving while one is pending is ignored rather than restarted, since the window has been off the screen since the first trigger fired and a later trigger must not push that deadline out.
 
-Triggers arriving while a derivation is running are held and replayed once the body is open, and the first the policy arms takes effect. None of them can be judged when it lands, because the policy that says whether it is armed is still encrypted; holding only one would let a disarmed reason swallow an armed one that followed it, and the window would come back unlocked from the hide that the arming exists to catch. A derivation that fails keeps them, because the window is still wherever the trigger found it, and the user returning to it clears them through `cancelScheduledLock`.
+Triggers arriving while a derivation is running are held and replayed once the body is open, and the first the policy arms takes effect. None can be judged when it lands, because the policy that says whether it is armed is still encrypted; holding only one would let a disarmed reason swallow an armed one that followed it, and the window would come back unlocked from the hide the arming exists to catch. A derivation that fails keeps them, because the window is still wherever the trigger found it, and the user returning to it clears them through `cancelScheduledLock`.
 
 A `lock` landing while a derivation runs takes precedence over it. The unlock destroys the key it derived rather than installing it, leaves the state the lock set, and returns `VaultError.VaultClosed`: the vault the user closed stays closed, and opening it is another password entry.
 
-A password change and a DEK rotation (§7.1) reach that point having already written the file, since the vault they reopen is the one they have just committed. A lock landing there leaves the rewrite standing and only the session shut, so the vault that stays closed is the rewritten one and the password that opens it is the new one. `VaultClosed` therefore says the session closed, not that the change was refused.
+A password change and a DEK rotation (§7.1) reach that point having already written the file, since the vault they reopen is the one they have just committed. A lock landing there leaves the rewrite standing and only the session shut, so `VaultClosed` says the session closed, not that the change was refused.
 
 ### 8.3 Lock triggers
 
@@ -672,45 +625,47 @@ A password change and a DEK rotation (§7.1) reach that point having already wri
 | Application exit | shutdown hook | always |
 | Window focus lost | `LocalWindowInfo.current.isWindowFocused` | **off** |
 
-Every configurable trigger reads from the `SecurityPolicy` in the unlocked vault body, never from `preferences.json`. The policy is available whenever it is needed, since a trigger can only fire against an unlocked vault, and it is unavailable exactly when it is irrelevant. Editing the plaintext preferences file cannot extend a timeout or disable a trigger.
+Every configurable trigger reads the `SecurityPolicy` in the unlocked vault body, never `preferences.json`. The policy is available whenever it is needed, since a trigger can only fire against an unlocked vault, and it is unavailable exactly when it is irrelevant. Editing the plaintext preferences file cannot extend a timeout or disable a trigger.
 
 Focus loss defaults to off: copying a code and switching to a browser is the application's most common interaction, and locking on focus loss makes every such action cost a full Argon2id re-derivation.
 
 Hiding to the tray carries no switch, only the grace period below. It is what §1 means by the vault being unlocked while the window is on screen, and nothing else would catch a window that stayed hidden: the idle timeout runs while the window is visible, so a hidden window that did not lock would hold the key until the process ended.
 
-The exit trigger is a JVM shutdown hook, which covers a normal exit, `SIGINT` and `SIGTERM`, and the in-app quit paths that lock before they call it. `SIGKILL`, a power loss and a JVM crash run no hook at all, and a process ended that way leaves the key wherever the operating system leaves its pages and the clipboard holding whatever was last copied. The hook can also run after the toolkit is down, so its zeroing lands where its clipboard clear may not.
+The exit trigger is a JVM shutdown hook, covering a normal exit, `SIGINT` and `SIGTERM`, and the in-app quit paths that lock before they call it. `SIGKILL`, a power loss and a JVM crash run no hook at all, and a process ended that way leaves the key wherever the operating system leaves its pages and the clipboard holding whatever was last copied. The hook can also run after the toolkit is down, so its zeroing lands where its clipboard clear may not.
 
 The idle trigger is held off while §9.7's QR dialog is on screen, which is the one thing this application draws to be read rather than typed at: a symbol being scanned looks to the watch exactly like an empty room. The hold ends with the dialog, and the dialog closes itself after a minute without interaction, so what it costs is bounded by that minute rather than by the person remembering to close it. No other trigger is affected, and a window hidden or minimised over an open dialog locks on its own trigger as it would over any other screen.
 
-A configurable grace period delays the hide-triggered and minimise-triggered lock. Default is 0 seconds, meaning immediate. Options are 0 / 30 s / 2 min. The grace timer is cancelled if the window becomes visible again before it fires. The timer runs as a cancellable coroutine on the application scope, not as a `java.util.Timer`, so that shutdown cancels it deterministically.
+A configurable grace period delays the hide-triggered and minimise-triggered lock. Default is 0 seconds, meaning immediate; the options are 0 / 30 s / 2 min. The timer is cancelled if the window becomes visible again before it fires, and runs as a cancellable coroutine on the application scope, not as a `java.util.Timer`, so shutdown cancels it deterministically.
 
 ### 8.4 Handling of decoded secret material
 
 Base32-decoded secrets are held as `SecureBytes` and are never converted to `String`. `SecureBytes.destroy()` fills the backing array with zeros and marks the holder unusable; a later lend refuses to run its block and returns `null`, which the vault path reports as `VaultError.VaultClosed`.
 
-JVM `String` instances are immutable and cannot be wiped, and this boundary is **not** enforced by the API. `VaultEntry.secret` holds the base32 text as a `String`, `OpenVault` retains the whole `VaultBody`, and kotlinx's lexer materialises every string token before any deserialiser sees it, so each stored secret exists as an unwipeable `String` for as long as the vault is open. The rule above forbids a *decoded* secret in a `String`, and the base32 text passes it by the letter while being the credential in full. The session decodes every secret into `SecureBytes` at unlock and publishes entries carrying neither form of it, so no entry the UI receives is a credential. What a screen collects for itself is: an `otpauth://` URI pasted into the add screen and the base32 an `EntryDraft` holds are both the credential in full, in `String`s that live until the screen leaves composition. The decoded bytes are lent to a block and never handed over, and that lend is `internal`, so the public API gives out nothing while any caller inside `:shared`, `ui/` included, can ask for one. What keeps the encoded form alive is the open vault the session holds for its key, so a heap dump of an unlocked vault still yields every secret in base32; ending that needs `OpenVault` to give up its parsed body, which is listed as deferred in §16.8.
+JVM `String` instances are immutable and cannot be wiped, and this boundary is **not** enforced by the API. `VaultEntry.secret` holds the base32 text as a `String`, `OpenVault` retains the whole `VaultBody`, and kotlinx's lexer materialises every string token before any deserialiser sees it, so each stored secret exists as an unwipeable `String` for as long as the vault is open. The rule above forbids a *decoded* secret in a `String`, and the base32 text passes it by the letter while being the credential in full. The session decodes every secret into `SecureBytes` at unlock and publishes entries carrying neither form, so no entry the UI receives is a credential. What a screen collects for itself is: an `otpauth://` URI pasted into the add screen and the base32 an `EntryDraft` holds are both the credential in full, in `String`s living until the screen leaves composition. The decoded bytes are lent to a block and never handed over, and that lend is `internal`, so the public API gives out nothing while any caller inside `:shared` can ask for one. What keeps the encoded form alive is the open vault the session holds for its key, so a heap dump of an unlocked vault still yields every secret in base32; ending that needs `OpenVault` to give up its parsed body, deferred in §16.8.
 
-`SecureBytes.adopt` is the only constructor and it takes ownership of the array, so a caller cannot hold a second reference by accident. The destroyed flag is `@Volatile`, written after the zeroing and read before the array, so a thread that observes the flag also observes the zeroed bytes rather than a cached view of a live key. Nothing zeroes a holder that is dropped without `destroy()`; the discipline is the API contract, not a collector hook.
+`SecureBytes.adopt` is the only constructor and takes ownership of the array, so a caller cannot hold a second reference by accident. The destroyed flag is `@Volatile`, written after the zeroing and read before the array, so a thread that observes the flag also observes the zeroed bytes rather than a cached view of a live key. Nothing zeroes a holder dropped without `destroy()`; the discipline is the API contract, not a collector hook.
 
-Key material is lent to a block rather than handed out: the lend is the only member that gives a caller the array, and `destroy()` and that block exclude each other. What the lend guarantees is that no `destroy()` runs while the block holds the array, not that the block cannot keep the array past its own return; a block that keeps it holds bytes a later `destroy()` zeroes under it. A lock arriving during a write waits for that write to finish, and a write beginning after the lock finds the key gone and fails. Zeros reaching a seal part-way through it would leave a body encrypted under them beside a header carrying the real wrapped key, and the rename would commit that over the previous file. The common standard library offers atomics but no mutex, so the exclusion is an `expect`/`actual` primitive in `crypto` like the other platform primitives.
+Key material is lent to a block rather than handed out: the lend is the only member that gives a caller the array, and `destroy()` and that block exclude each other. What the lend guarantees is that no `destroy()` runs while the block holds the array, not that the block cannot keep it past its own return. A lock arriving during a write waits for that write to finish, and a write beginning after the lock finds the key gone and fails: zeros reaching a seal part-way through would leave a body encrypted under them beside a header carrying the real wrapped key, and the rename would commit that over the previous file. The common standard library offers atomics but no mutex, so the exclusion is an `expect`/`actual` primitive in `crypto` like the other platform primitives.
 
-The master password is handled as `CharArray` from the text field through to the KDF call, and zeroed after derivation. Compose's `TextField` state is `String`-based, so this boundary is imperfect: a `BasicTextField` with a custom `CharArray`-backed state holder is the conforming approach, and every field that takes the master password uses it. The container, the minimum height and the focus indication come from Material's own decoration through `BasicTextField`'s `decorationBox`, so keeping the holder costs nothing visually.
+The master password is handled as `CharArray` from the text field through to the KDF call, and zeroed after derivation. Compose's `TextField` state is `String`-based, so every field that takes the master password is a `BasicTextField` over a `CharArray`-backed holder. The container, the minimum height and the focus indication come from Material's own decoration through `decorationBox`, so keeping the holder costs nothing visually.
 
 Generated six-to-eight digit codes are `String`. They are short-lived, low-value, and needed as `String` for display and clipboard.
 
 This reduces but does not eliminate residue. A heap dump taken while unlocked contains everything; one taken after locking contains the zeroed arrays plus whatever the garbage collector has not yet reclaimed of transient `String` instances.
 
-The KDF adds residue that TAuth cannot reach. `Argon2BytesGenerator` zeroes its memory blocks when it returns each to the block pool, and leaves three things for the collector: the UTF-8 encoding it makes of the password `CharArray`, the 72-byte H0 prehash seeds, and the 1024-byte scratch block holding the last block digested. H0 is enough to finish the derivation without the password, so it is worth as much as the key it produces. All three are locals of the generator, so the exposure lasts from the derivation until the collector reclaims them.
+The KDF adds residue TAuth cannot reach. `Argon2BytesGenerator` zeroes its memory blocks when it returns each to the block pool, and leaves three things for the collector: the UTF-8 encoding it makes of the password `CharArray`, the 72-byte H0 prehash seeds, and the 1024-byte scratch block holding the last block digested. H0 is enough to finish the derivation without the password, so it is worth as much as the key it produces. All three are locals of the generator, so the exposure lasts from the derivation until the collector reclaims them.
 
 ### 8.5 Code ticker
 
-While unlocked and the window is visible, a single coroutine emits on a one-second cadence, computing every visible TOTP entry's current code and the seconds remaining in its period. Entries scrolled out of view are not computed. A hidden window consumes no CPU.
+While unlocked and the window is visible, a single coroutine emits on a one-second cadence, computing every visible TOTP entry's current code. Entries scrolled out of view are not computed. A hidden window consumes no CPU.
 
 The coroutine is the collection of a cold flow, so hiding the window cancels the collection and with it the ticker. A lock ends the flow instead, and needs no collector to do it: the flow reads the session state, and a state that is no longer `Unlocked` completes it after one empty emission, which leaves no row holding a code from a session that has closed. The list publishes the ids of the rows it has on screen, since the ticker cannot see them for itself, and a scroll recomputes at once rather than at the next second.
 
 HOTP entries are outside the ticker entirely. Their codes change only on explicit request (§5.6), and recomputing one on a timer would advance the counter without the user asking.
 
-Each row shows the remaining fraction of its own period, since entries may have different periods. The countdown ring turns amber in the final five seconds. When a period boundary crosses, the new code replaces the old with a brief crossfade rather than an abrupt swap.
+`TotpCode` carries the code, the period, and the instant that period ends. The countdown is drawn from that instant against the clock at frame time, so the ring sweeps continuously while the ticker keeps its one-second cadence. That cadence is what keeps an HOTP row and an off-screen row uncomputed, and drawing must not change how often a code is computed.
+
+Each row shows the remaining fraction of its own period, since entries may have different periods. Expiry is reported in more than colour (§9.10). Where the platform asks for reduced motion, the ring steps on the tick instead of sweeping.
 
 ---
 
@@ -718,58 +673,66 @@ Each row shows the remaining fraction of its own period, since entries may have 
 
 **Secret disclosure gate.** Three actions put a shared secret where something other than TAuth can read it: copy `otpauth://` URI (§9.4), show QR code (§9.7), and plaintext export (§9.9). Each emits a complete credential, and the medium — clipboard, screen, file — is outside the vault's protection once the action completes. All three carry the same gate: re-entry of the master password even when the session is unlocked, and a one-line statement of what is about to leave the vault. Copying a generated code is not in this set; a code expires or is consumed, a secret does not.
 
+The interface is opened many times a day for a few seconds each, and the whole of an interaction is: appear, find one account, put its code on the clipboard, leave. The measure of every screen is how few actions sit between the window opening and a code on the clipboard.
+
 ### 9.1 Navigation
 
 A single window. Routing is driven by `SessionState`, not by a navigation library:
 
 - `NoVault` → create-vault screen
 - `Locked` → unlock screen
-- `Unlocking` → the screen that asked for the password, showing its progress: a creation, an unlock and a settings action that rewrites the vault all run through this state, and the state alone does not say which asked for it. A derivation started from settings leaves the settings screen standing, since routing away from it would take the user off the control they used for the length of an Argon2id derivation
-- `Unlocked` → account list, with add / edit / settings / import preview presented as full-screen destinations within the unlocked graph. The preview is the one of the four the user does not route to: it stands for as long as there are rows to decide about, so reading a file opens it and finishing with it returns to the settings screen the file was chosen from
+- `Unlocking` → the screen that asked for the password, showing its progress. A creation, an unlock and a settings action that rewrites the vault all run through this state, and the state alone does not say which asked for it. A derivation started from settings leaves the settings screen standing, since routing away would take the user off the control they used for the length of a derivation.
+- `Unlocked` → account list, with add / edit / settings / import preview as full-screen destinations within the unlocked graph. The preview is the one of the four the user does not route to: it stands for as long as there are rows to decide about, so reading a file opens it and finishing with it returns to the settings screen the file was chosen from.
 
 ### 9.2 Create vault
 
-Master password field with confirmation and a strength meter. A prominent, non-dismissable note states that the master password cannot be recovered and that losing it means losing every stored secret. The note is acknowledged with a checkbox before the create button enables.
+Master password field with confirmation and a strength meter. A prominent, non-dismissable note states that the master password cannot be recovered and that losing it means losing every stored secret. It is acknowledged with a checkbox before the create button enables.
 
-Minimum password length is 8 characters, enforced. The strength meter is advisory and based on length, character-class diversity, and a check against a small embedded list of common passwords; it never blocks submission above the minimum length.
+Minimum password length is 8 characters, enforced. The strength meter is advisory — length, character-class diversity, and a check against a small embedded list of common passwords — and never blocks submission above the minimum length.
 
 ### 9.3 Unlock
 
-Password field with a reveal toggle, auto-focused. Enter submits. The Argon2id derivation blocks the button and shows a progress indicator for its duration.
+Password field with a reveal toggle, auto-focused. Enter submits. The derivation blocks the button and shows a progress indicator for its duration.
 
 Failed attempts show an inline error. There is no attempt counter and no lockout: the vault is a local file, so a UI rate limit obstructs the legitimate user without impeding an attacker who can copy it.
 
-If the previous lock had a reason worth reporting — idle timeout, in particular — the screen shows it as a subtitle so the user understands why they are being asked again.
+Where the previous lock had a reason worth reporting — an idle timeout in particular — the screen shows it as a subtitle, so the user understands why they are being asked again.
 
 ### 9.4 Account list
 
-A scrollable list. A TOTP row shows issuer, account name, the current code grouped for readability (`123 456`), and a circular countdown. Tapping it copies the code and shows a transient confirmation with the clipboard clear countdown.
+A scrollable list, compact by default, with a density choice (§9.10). The code is the most prominent element of a row, since it is what the interaction exists to reach.
 
-An HOTP row shows issuer, account name, the current counter value, and a generate control in place of the countdown. It displays no code until the user asks for one, because displaying one consumes a counter value (§5.6). After generation the code stays on screen with a copy affordance until the row is collapsed, the list is left, or the vault locks; the generate control is disabled for a short interval afterwards so a double-tap does not silently burn two counter values. A failed vault write leaves the counter unchanged and shows no code.
+A TOTP row shows the account's mark, issuer, account name, the current code grouped for readability (`123 456`), and a circular countdown. Activating it copies the code and shows a transient confirmation with the clipboard clear countdown.
+
+An HOTP row shows the mark, issuer, account name, the current counter, and a generate control in place of the countdown. It displays no code until the user asks for one, because displaying one consumes a counter value (§5.6). After generation the code stays on screen with a copy affordance until the row is collapsed, the list is left, or the vault locks; the generate control is disabled for a short interval afterwards so a double-tap does not silently burn two counter values. A failed vault write leaves the counter unchanged and shows no code.
 
 Above the list: a search field filtering on issuer and account name, case-insensitively and on substring match; a sort control (manual order, issuer A–Z, recently added); a lock button; a settings button, which is where the destination of §9.8 is entered; and an add button.
 
-Manual reordering by drag. `orderIndex` is renumbered and the vault is written on drop.
+**Keyboard path.** The search field takes focus as the window opens. The arrow keys move the selection through the list, Enter copies the selected row's code, and Escape leaves the current destination. Every action a pointer reaches is reachable from the keyboard, reordering included.
 
-The drag handle acts only while the list is in manual order and the search field is empty. A drop yields a position in the whole vault, so it can be read off the list only when the list is showing the whole vault in the order the vault stores it; under either of the other two orderings, or with a query hiding rows, a drop would renumber by a position nothing on screen names. The handle is inert in those states rather than absent, so the row does not change shape as a query is typed.
+Manual reordering by drag, and by a keyboard equivalent on the selected row. `orderIndex` is renumbered and the vault is written on drop.
+
+Reordering acts only while the list is in manual order and the search field is empty. A drop yields a position in the whole vault, so it can be read off the list only when the list is showing the whole vault in the order the vault stores it; under either of the other two orderings, or with a query hiding rows, a drop would renumber by a position nothing on screen names. The handle is inert in those states rather than absent, so the row does not change shape as a query is typed.
 
 Row overflow menu: edit, copy code, copy `otpauth://` URI, show QR code (§9.7), delete. Copying the URI is a secret disclosure and carries the gate stated at the head of §9. Delete requires a confirmation dialog naming the account, and is irreversible; recovery requires an export taken earlier.
 
 A copied URI is subject to the same clipboard clear delay as a copied code (§11), matched on the exact string that was placed there.
 
-An empty vault shows an empty state naming the ways an account arrives, rather than an unadorned blank list. It names the three paths §9.5 offers: pasting an `otpauth://` URI, reading an image of the QR code, or typing the details by hand.
+A code changing is announced politely, so a screen reader is not interrupted every period.
+
+An empty vault shows an empty state naming the three paths §9.5 offers: pasting an `otpauth://` URI, reading an image of the QR code, or typing the details by hand.
 
 ### 9.5 Add account
 
 Three input paths in one screen:
 
 1. **Paste URI.** A text field accepting `otpauth://`. Parses on input and shows a live preview of the resolved fields, or the specific parse error.
-2. **QR image.** A file picker (`java.awt.FileDialog`) filtering on PNG, JPEG, GIF and BMP. The image is decoded with ZXing's `MultiFormatReader` over a `BufferedImageLuminanceSource` with `HybridBinarizer`, through `GenericMultipleBarcodeReader` so that every code in the image is read rather than the first: one screenshot can hold a page of them. The accounts among the payloads are what is offered — a code can be a payment link, a wireless password, anything at all — and one account is taken without asking while several are presented as a selection list naming each by its issuer and account name and nothing else, since the list stands on screen while it is read. An image holding codes but no account, and an image holding no code, are different things to the person holding it and are not one sentence. The path converges on the same field a paste fills, so one image and one paste reach the same preview.
+2. **QR image.** A file picker filtering on PNG, JPEG, GIF and BMP. The image is decoded with ZXing's `MultiFormatReader` over a `BufferedImageLuminanceSource` with `HybridBinarizer`, through `GenericMultipleBarcodeReader` so every code in the image is read rather than the first: one screenshot can hold a page of them. The accounts among the payloads are what is offered — a code can be a payment link, a wireless password, anything at all — and one account is taken without asking while several are presented as a selection list naming each by its issuer and account name and nothing else, since the list stands on screen while it is read. An image holding codes but no account, and an image holding no code, are different things to the person holding it and are not one sentence. The path converges on the same field a paste fills.
 3. **Manual entry.** Type (TOTP or HOTP, defaulting to TOTP), issuer, account name, secret, and an advanced section for algorithm, digits, and either period or starting counter according to type. The secret field validates base32 on input, against the secret alone rather than through the whole form: the entry model refuses an empty account name before it reaches the secret, so a form checked only through that would answer a base32 mistake by naming a different field. The counter field accepts an unsigned 64-bit value and defaults to 0.
 
 All three converge on the same preview showing the resolved entry. A TOTP preview carries a live sample code. An HOTP preview shows the starting counter and the code that counter would produce, computed without persisting anything, so verifying the entry does not consume a counter value before the account exists. Saving writes the vault immediately.
 
-Screen-region QR capture is listed in §16.8: it requires `java.awt.Robot` screen capture permission, which on macOS triggers a Screen Recording privacy prompt and on Wayland needs a portal integration.
+Screen-region QR capture is deferred (§16.8).
 
 ### 9.6 Edit account
 
@@ -787,13 +750,13 @@ The writer scales its result up to whole multiples of the size asked of it and n
 
 `zxing-core` is a JVM library and the dialog is a screen, so what crosses into `:shared` is a module grid rather than a `BitMatrix`: `QrSymbol` carries the dark modules with the quiet zone already in them, and `QrEncoding` is the seam the shell hands its encoder over through, in the manner of the clipboard and the export destination.
 
-**Rendering.** The `QrSymbol` is drawn onto a Compose `Canvas` as one filled rectangle per dark module. The module size is computed as `floor(canvasPx / symbol.width)` and the symbol is centred with the remainder as extra quiet zone, so no module straddles a fractional pixel boundary. Fractional module edges blur under scaling and scanners reject the result at small sizes far more often than the visual difference suggests.
+**Rendering.** The `QrSymbol` is drawn onto a Compose `Canvas` as one filled rectangle per dark module. The module size is `floor(canvasPx / symbol.width)` and the symbol is centred with the remainder as extra quiet zone, so no module straddles a fractional pixel boundary. Fractional module edges blur under scaling and scanners reject the result at small sizes far more often than the visual difference suggests.
 
-The symbol is always dark-on-light with a light quiet zone, independent of the application theme. Inverting module polarity for a dark theme breaks a large fraction of scanners, so the dialog draws its own light surface behind the symbol rather than inheriting the theme background. Minimum rendered size is 240×240 logical pixels; the dialog scales the symbol up to the available space in whole-module increments.
+The symbol is always dark-on-light with a light quiet zone, independent of the application theme. Inverting module polarity for a dark theme breaks a large fraction of scanners, so the dialog draws its own light surface behind the symbol rather than inheriting the theme background. Minimum rendered size is 240×240 logical pixels; the dialog scales the symbol up to the available space in whole-module increments. That minimum is held beside the symbol rather than in the palette, because a theme free to shrink the symbol is free to make it unscannable.
 
 **Actions.** Beneath the symbol: the issuer and account name as plain text, so the user can confirm they are exporting the account they intended; "Copy URI"; and "Save as PNG", written with `0600` permissions. The image is rendered from the `QrSymbol` the screen is drawing rather than from a second encode of the same URI, so what lands in the file is the symbol the user was looking at; its modules are laid down whole for the reason the screen lays them down whole. The save is the shell's, since only the shell has a filesystem, and the screen reports the request and whatever comes back. It is offered only over a symbol: a URI the format cannot carry leaves nothing to write.
 
-**Gating.** Displaying the QR places a complete credential on screen in machine-readable form; a photograph, a screenshot, or an active screen-sharing session captures it in full. The dialog carries the secret disclosure gate stated at the head of §9. It closes after 60 seconds without interaction, and suppresses the idle lock timer while open so the vault does not lock underneath a symbol the user is mid-scan.
+**Gating.** Displaying the QR places a complete credential on screen in machine-readable form; a photograph, a screenshot, or an active screen-sharing session captures it in full. The dialog carries the gate stated at the head of §9. It closes after 60 seconds without interaction, and suppresses the idle lock timer while open so the vault does not lock underneath a symbol the user is mid-scan.
 
 For an HOTP entry the encoded URI carries the counter as it stands when the dialog opens. Scanning it clones the entry at that position rather than at the position the other authenticator will next need, so the dialog states the counter in text beneath the symbol alongside the issuer and account name.
 
@@ -804,10 +767,12 @@ Reachable only from the unlocked graph, because the groups marked *policy* below
 - **Security** *(policy)* — change master password; re-encrypt vault (DEK rotation).
 - **Locking** *(policy)* — idle timeout (off / 1 / 5 / 15 min); lock on minimise; grace period before hide-triggered lock; lock on focus loss (default off).
 - **Clipboard** *(policy)* — clear delay (off / 10 / 20 / 60 s).
-- **Appearance** *(preference)* — theme (system / light / dark); list sort order.
+- **Appearance** *(preference)* — theme (system / light / dark); density; list sort order.
 - **Tray** *(preference)* — minimise to tray; start minimised. Both disabled with an explanation when no tray is available.
 - **Data** — vault file location with a reveal-in-file-manager action; the encrypted export; the unencrypted export; import. Each of the three reports in a slot of its own: they fail over different files, and one message naming another's would send the user to the wrong place.
 - **About** — version, licence, and the security notes describing what the vault protects against and what it does not.
+
+The screen is a set of controls, not a document. Each control carries its own label and, where it needs one, a single line beneath it; standing paragraphs of explanation belong to the About group. The groups are sized for the window of §10.1 rather than for a full screen.
 
 A policy change is applied in memory and written with the vault before the control reflects it, so a failed write leaves the stored policy and the displayed state in agreement. A preference change writes `preferences.json` and needs no unlocked vault, though the screen that hosts it does.
 
@@ -817,15 +782,15 @@ The distinction is stated once in the screen's header rather than repeated per c
 
 **Encrypted export** produces a copy of the vault file. It is the recommended backup and requires no additional confirmation.
 
-The copy carries the whole vault, so it is created the way §6.6 creates the vault itself: `0600` as a creation attribute, read back before any ciphertext is written, and the write made into the channel the creation opened rather than back through the name it was created under. A destination the user picks is a directory another local user may be able to write to, which is where the difference between those and a `chmod` after the write is the whole file. Where the destination filesystem carries no POSIX modes, an owner-only access control entry is set on the empty file instead, and a filesystem offering neither refuses the export rather than writing it.
+The copy carries the whole vault, so it is created the way §6.6 creates the vault itself: `0600` as a creation attribute, read back before any ciphertext is written, and the write made into the channel the creation opened rather than back through the name it was created under. A destination the user picks is a directory another local user may be able to write to, which is where the difference between that and a `chmod` after the write is the whole file. Where the destination filesystem carries no POSIX modes, an owner-only access control entry is set on the empty file instead, and a filesystem offering neither refuses the export rather than writing it.
 
-Every file TAuth writes outside its own directory goes down that one path, because every one of them carries a secret in a form something other than TAuth reads: this copy, §9.7's saved QR image, and the plaintext export below. What differs between them is what the destination is asked for and what a failure is worded as, not how the file is created.
+Every file TAuth writes outside its own directory goes down that one path, because each carries a secret in a form something other than TAuth reads: this copy, §9.7's saved QR image, and the plaintext export below. What differs between them is what the destination is asked for and how a failure is worded, not how the file is created.
 
-**Plaintext export** produces a JSON file or a list of `otpauth://` URIs, carrying the secret disclosure gate stated at the head of §9 and a dialog stating that the output is unencrypted. The file is written with `0600` permissions. This is the migration path to other authenticators and is the reason plaintext export exists at all. HOTP entries export with their current counter, which is a point-in-time snapshot: codes generated in TAuth after the export move the vault ahead of the exported file.
+**Plaintext export** produces a JSON file or a list of `otpauth://` URIs, carrying the gate stated at the head of §9 and a dialog stating that the output is unencrypted. This is the migration path to other authenticators and is the reason plaintext export exists at all. HOTP entries export with their current counter, which is a point-in-time snapshot: codes generated in TAuth after the export move the vault ahead of the exported file.
 
 The two formats differ in what survives being read back. The URI list is one `otpauth://` URI per line, each line ended, which is what another authenticator enrols from and is all it enrols from. The JSON document is `{"v": 1, "entries": [...]}` over the entry objects of §6.4 unchanged, so it carries the entry ids, the creation times and the stored order, none of which a URI has a field for. The `policy` object is not exported: it governs this application and enrols nothing. Both are written in the order the vault stores rather than the order the entries happen to sit in, so a re-import restores the list as it was left.
 
-The warning is read before the password is asked for, since the password is what the user is being asked to spend on a decision they have not yet been shown. Both formats are offered there, and the dialog states the counter snapshot above as well as what the file holds.
+The warning is read before the password is asked for, since the password is what the user is being asked to spend on a decision they have not yet been shown. Both formats are offered there, and the dialog states the counter snapshot as well as what the file holds.
 
 **Import** accepts a plaintext export or a newline-separated list of `otpauth://` URIs, shows a preview with per-entry validity, and detects duplicates by `(issuer, accountName, secret)`, offering skip or add-anyway per duplicate.
 
@@ -835,7 +800,21 @@ The secret half of the duplicate key is compared with padding and case set aside
 
 An account arriving takes an id of the receiving vault's making, since one carried in may already name an entry there; the creation time is kept where the document carries one, and is the moment of the import where a URI does not. Accepted accounts are added in one vault write: added one at a time, a batch stopping half way would leave the file holding a part of what the user accepted.
 
-The preview counts what will be added, what the vault already holds and what could not be read, and lists a row per account under its issuer and account name. A duplicate carries the choice §9.9 offers and opens on skipping it; every other account is taken. A refused row names where it sat in the file and the rule it broke, and no row puts a secret on the screen. Nothing can be added while the choices leave nothing to add. The rows carry every secret the file offered, so they end with the write that takes them, with the preview being left, and with the vault being locked.
+The preview counts what will be added, what the vault already holds and what could not be read, and lists a row per account under its issuer and account name. A duplicate carries the choice above and opens on skipping it; every other account is taken. A refused row names where it sat in the file and the rule it broke, and no row puts a secret on the screen. Nothing can be added while the choices leave nothing to add. The rows carry every secret the file offered, so they end with the write that takes them, with the preview being left, and with the vault being locked.
+
+### 9.10 Appearance
+
+The palette is a flat dark surface under a single accent, with the light scheme drawn from the same tokens. Colours, spacing, type and iconography come from the theme; no screen holds a raw colour or a raw dimension. The mark of §4.1 is the brand seed.
+
+A face is bundled for all three platforms rather than taken from each, so the application reads the same everywhere. The generated code keeps a monospace face, so a digit changing moves none of the others. Every other numeral — the HOTP counter, the countdown seconds — is set in tabular figures for the same reason.
+
+Controls carry icons beside their labels, drawn from one set held in the theme. An account carries a generated mark: its initial over a colour derived from its issuer and account name. **No brand icon is shown and none is fetched.** The issuer is a field of an `otpauth://` URI that anything can write, so a real company's mark beside an account would be the application vouching for a string nothing authenticates, and fetching one would tell whoever serves it what accounts the vault holds.
+
+Density is a user choice — compact or comfortable — applied to the account list and stored in `preferences.json`.
+
+Two things are drawn outside the theme and say so where they are drawn: §9.7's QR dialog, which is dark-on-light regardless of theme and holds its own minimum size, and the shell's tray and window icon, which the desktop draws on surfaces no composition reaches.
+
+Every state the interface reports in colour is also reported in another channel: the countdown states its expiry in text a screen reader announces as well as by the ring's colour. Where the platform asks for reduced motion, animation is dropped rather than shortened.
 
 ---
 
@@ -858,20 +837,12 @@ private fun runTAuth(role: InstanceRole) = application {
     val windowState = rememberWindowState(isMinimized = startup.startup == StartupWindow.ICONIFIED)
     var visible by remember { mutableStateOf(startup.startup != StartupWindow.HIDDEN_TO_TRAY) }
 
-    if (lifecycle.isTrayShown) {
-        // dev.nucleusframework.composenativetray, for the reasons §10.2 gives. The drawable rather
-        // than a painter, so the desktop sizes the mark rather than the painter claiming a size.
-        Tray(
-            icon = Res.drawable.tauth,
-            tooltip = "TAuth",
-            primaryAction = { visible = true },
-        ) {
-            Item(label = "Show") { visible = true }
-            Item(label = "Lock now") { session.lock(LockReason.Manual) }
-            Divider()
-            Item(label = "Quit") { session.lock(LockReason.Exit); exitApplication() }
-        }
-    }
+    TAuthTray(
+        isShown = lifecycle.isTrayShown,
+        onShow = { visible = true },
+        onLock = { session.lock(LockReason.Manual) },
+        onQuit = { session.lock(LockReason.Exit); exitApplication() },
+    )
 
     Window(
         onCloseRequest = {
@@ -882,13 +853,15 @@ private fun runTAuth(role: InstanceRole) = application {
         },
         visible = visible,
         state = windowState,
-        title = "TAuth",
+        title = APPLICATION_NAME,
         icon = tauthIcon(),
     ) {
         TAuthApp(session, prefs, shell)
     }
 }
 ```
+
+The window is small and stays small. It is resizable between a minimum and a maximum, minimises, and does not maximise: nothing it draws benefits from a full screen, and every destination is laid out for that width.
 
 The preference document has a single owner. `PreferencesState` holds it, and every writer — the settings screen, the account list's sort control, the window geometry recorder — changes it through `update`, which derives the next document from the value the holder carries and then writes that. A writer copying its own field onto the document as the file held it at launch puts back every other field chosen since, and the geometry recorder writes without being asked, so it would do that on every move of the window.
 
@@ -900,9 +873,9 @@ Two things read that document at different times. The window opens where the doc
 
 Minimising is the platform's own on every desktop and is not one of those answers. Hiding the window is the close request's alone, which is what leaves `WindowState.isMinimized` an observable thing for the minimise trigger of §8.3 to fire on and for `SecurityPolicy` to govern.
 
-The window opens at the geometry §6.1 holds, clamped to the bounds the model enforces, and a position that is unset is left to the platform to choose. A move or a resize is written back once it settles, so a drag reaches the file as one write rather than as every position it passed through. A minimised, maximised or full screen window records nothing: the extent it reports is that state's rather than the one it returns to, and the geometry standing in the file is the one the window will come back to.
+The window opens at the geometry §6.1 holds, clamped to the bounds the model enforces, and a position that is unset is left to the platform to choose. A move or a resize is written back once it settles, so a drag reaches the file as one write rather than as every position it passed through. A minimised or full screen window records nothing: the extent it reports is that state's rather than the one it returns to, and the geometry standing in the file is the one the window will come back to.
 
-`isSystemTraySupported()` is `java.awt.SystemTray.isSupported()`. `isTraySupported` is a **global** property in `androidx.compose.ui.window`, not an `ApplicationScope` extension, and delegates to the same call. `Tray` is an `ApplicationScope` extension taking `(icon: Painter, state: TrayState, tooltip: String, onAction: () -> Unit, menu: @Composable MenuScope.() -> Unit)`. Both are confirmed present in Compose Multiplatform 1.11.1 (§15).
+`isSystemTraySupported()` is `java.awt.SystemTray.isSupported()`, which §10.2 records as a proxy for the question the tray library actually answers.
 
 Relock is driven by observing visibility, minimisation and focus rather than by wiring each call site:
 
@@ -931,40 +904,27 @@ A window another process raised is the exception the collector has to carry: it 
 
 ### 10.2 Platform behaviour
 
-**Linux.** `java.awt.SystemTray.isSupported()` returns true only when a StatusNotifierItem or legacy notification-area host is present. GNOME removed built-in tray support in 3.26. Recovery requires a shell extension: the third-party AppIndicator/KStatusNotifierItem extension, or the official Status Icons extension shipped with GNOME Shell Extensions from GNOME 47, neither of which is installed by default in most distributions. The AppIndicator extension has broken across GNOME major releases, notably at GNOME 48. The practical consequence is that a large fraction of GNOME users have no tray.
+**Linux.** `java.awt.SystemTray.isSupported()` returns true only when a StatusNotifierItem or legacy notification-area host is present. GNOME removed built-in tray support in 3.26. Recovery requires a shell extension: the third-party AppIndicator/KStatusNotifierItem extension, or the official Status Icons extension shipped from GNOME 47, neither of which is installed by default in most distributions. The AppIndicator extension has broken across GNOME major releases, notably at GNOME 48. The practical consequence is that a large fraction of GNOME users have no tray.
 
-The application must therefore never become invisible and unquittable. When `isTraySupported` is false, the tray-related settings are disabled with an explanation, `onCloseRequest` exits the application, and `startMinimised` opens the window minimised on the taskbar rather than hidden with nothing to restore it. A tray the desktop supports and the user has turned off reaches the same close and startup behaviour, since no icon is on screen to raise a hidden window either way; its settings stay offered, because they are what turns the tray back on.
+The application must therefore never become invisible and unquittable. Where no tray is available, the tray-related settings are disabled with an explanation, `onCloseRequest` exits the application, and `startMinimised` opens the window minimised on the taskbar rather than hidden with nothing to restore it. A tray the desktop supports and the user has turned off reaches the same close and startup behaviour, since no icon is on screen to raise a hidden window either way; its settings stay offered, because they are what turns the tray back on.
 
-Ubuntu ships `ubuntu-appindicators` enabled by default, so the AWT tray works there without user action; on the reference machine (§15) `SystemTray.isSupported()` returns true under a Wayland session, because AWT runs through XWayland with the X11 toolkit. A GNOME installation without that extension, which is most non-Ubuntu GNOME, reports false and takes the degraded path above.
+Ubuntu ships `ubuntu-appindicators` enabled by default, so the tray works there without user action; on the reference machine (§15) `SystemTray.isSupported()` returns true under a Wayland session, because AWT runs through XWayland with the X11 toolkit. A GNOME installation without that extension reports false and takes the degraded path above.
 
-The tray icon and its menu are `dev.nucleusframework:composenativetray`, which talks to StatusNotifierItem over D-Bus directly. Compose's own `Tray` is `java.awt.SystemTray` with a `java.awt.PopupMenu`, and neither is drawn by Compose: the menu is AWT's own rendering, which no theme reaches, and the icon is handed to a tray slot at the size the painter claims rather than the size the desktop asks for, so it arrives cropped on a GNOME shell scaling it. The library renders the desktop's own menu and takes the drawable, sizing the mark itself.
+The tray icon and its menu are `dev.nucleusframework:composenativetray`, which talks to StatusNotifierItem over D-Bus directly. Compose's own `Tray` is `java.awt.SystemTray` with a `java.awt.PopupMenu`, and neither is drawn by Compose: the menu is AWT's own rendering, which no theme reaches, and the icon is handed to a tray slot at the size the painter claims rather than the size the desktop asks for, so it arrives cropped on a shell scaling it. The library renders the desktop's own menu and takes the drawable, sizing the mark itself.
 
 Its primary action follows each platform: a single left click on Windows, macOS and KDE Plasma, and a double left click on GNOME, which is the convention there.
 
 Whether a tray exists is still `java.awt.SystemTray.isSupported()`, since the library exposes no equivalent. That answer is a proxy rather than the same question: AWT reports on an XEmbed notification area while the library speaks StatusNotifierItem, so a desktop offering one and not the other is answered wrongly. What it decides is the degraded path above, and it errs in the direction that costs a hidden window rather than an unquittable one only where AWT is the pessimistic of the two.
 
-**macOS.** The tray icon appears in the menu bar, sized for it at 22×22 logical points. `java.awt.TrayIcon` takes a plain `Image` and carries no template flag, so the menu bar draws the image as given rather than tinting it to the current appearance; a monochrome glyph therefore keeps one colour across a light and a dark menu bar and disappears into one of them. The icon carries the background it reads against, which costs the appearance-matched look a template image would have had. TAuth keeps its Dock icon. A pure menu-bar application with no Dock icon is achievable with `LSUIElement`:
+**macOS.** The tray icon appears in the menu bar, sized for it at 22×22 logical points. A monochrome variant is supplied for it, since the menu bar draws a tray icon as a template image rather than in colour. TAuth keeps its Dock icon: `LSUIElement` and the equivalent `-Dapple.awt.UIElement=true` JVM argument both remove the application from the Dock and the application switcher, which does not suit an application whose main window is the primary interface.
 
-```kotlin
-macOS {
-    infoPlist {
-        extraKeysRawXml = """
-            <key>LSUIElement</key>
-            <true/>
-        """.trimIndent()
-    }
-}
-```
-
-Neither this nor the equivalent `-Dapple.awt.UIElement=true` JVM argument is used: both remove the application from the Dock and the application switcher, which does not suit an application whose main window is the primary interface.
-
-**Windows.** The tray icon works without additional configuration and may be placed in the notification overflow area by default, which is expected and requires no handling.
+**Windows.** The tray icon works without additional configuration and may be placed in the notification overflow area by default, which is expected and requires no handling. System accent-colour following is deferred (§16.8).
 
 ### 10.3 Single instance
 
 Two TAuth processes writing one vault lose an update, and a tray application relaunched from the Start menu or Spotlight should raise the existing window rather than start a second process.
 
-Implementation: the role is claimed before the composition starts, so a launch that hands its request over constructs no window, no session and no `VaultStore`, and ends by returning from `main`. The claim attempts an exclusive `FileLock` on `<vaultDir>/instance.lock`. On success, bind a `ServerSocket` on `127.0.0.1:0`, write the chosen port into the lock file's sibling `instance.port`, and listen for a `SHOW` command. On failure to acquire the lock, read the port, connect, send `SHOW`, and wait for the running instance's acknowledgement; the launch that receives it exits with status 0. The running instance makes its window visible and requests focus, and reports that raise as a show request rather than as the user returning to the window: the relock collector of §10.1 cancels a pending relock only for the user's return, so a window raised by `SHOW` comes up with a scheduled relock still standing.
+The role is claimed before the composition starts, so a launch that hands its request over constructs no window, no session and no `VaultStore`, and ends by returning from `main`. The claim attempts an exclusive `FileLock` on `<vaultDir>/instance.lock`. On success, bind a `ServerSocket` on `127.0.0.1:0`, write the chosen port into the sibling `instance.port`, and listen for a `SHOW` command. On failure to acquire the lock, read the port, connect, send `SHOW`, and wait for the running instance's acknowledgement; the launch that receives it exits with status 0. The running instance makes its window visible and requests focus, and reports that raise as a show request rather than as the user returning to the window: the relock collector of §10.1 cancels a pending relock only for the user's return, so a window raised by `SHOW` comes up with a scheduled relock still standing.
 
 The exit turns on the acknowledgement rather than on the send, because a port a crashed instance recorded can have been taken since by an unrelated program: a launch that exited on the send alone would raise nothing and report nothing. The running instance records the request before it answers, so an acknowledged request is a request that will be acted on.
 
@@ -980,7 +940,7 @@ What ends a raise is the first pointer or key event after it, read from the same
 
 ## 11. Clipboard
 
-Copy uses `java.awt.Toolkit.getDefaultToolkit().systemClipboard`. After the configured delay, the clipboard is cleared **only if its current contents still equal the exact string TAuth placed there**, so that the timer never destroys something the user copied in the meantime. This covers generated codes and copied `otpauth://` URIs alike. The comparison reads the clipboard contents, which on some platforms can throw `IllegalStateException` under contention; failures are caught and the clear is skipped.
+Copy uses `java.awt.Toolkit.getDefaultToolkit().systemClipboard`. After the configured delay, the clipboard is cleared **only if its current contents still equal the exact string TAuth placed there**, so the timer never destroys something the user copied in the meantime. This covers generated codes and copied `otpauth://` URIs alike. The comparison reads the clipboard contents, which on some platforms can throw `IllegalStateException` under contention; failures are caught and the clear is skipped.
 
 The clipboard is also cleared, subject to the same equality check, on every lock.
 
@@ -1038,11 +998,7 @@ sealed interface PasswordCheckError : PasswordGateError
 
 `VaultError` is a sealed interface and is never thrown. Fallible operations return `Outcome<T, E>`, where `E` is the view of this hierarchy holding the cases that operation reports, so failure modes are visible in signatures and a `when` over a view with no `else` branch fails to compile when a case joins it. Exceptions from the JDK are caught where they arise and converted immediately: `IOException` does not propagate past `VaultStore`, `GeneralSecurityException` does not propagate past the `crypto` package. See STYLE_GUIDE.md §4.
 
-Every error maps to a specific user-facing message. `WrongPassword` and `IntegrityFailure` in particular must never share a message: one means "try again", the other means "this file has been modified or damaged". `WrongPassword` says the password did not work and claims nothing about the file, which §6.7 explains. `NoSuchEntry` and `Corrupt` are separated for the same reason: an entry deleted between a click and the operation it started is not a damaged vault.
-
-`InvalidEntry` covers every value an operation refuses to store: the entry model's rules where the model is the one refusing, and rules an operation holds of its own — an id already in the vault, a counter with no successor — where it is. The detail states the rule and never the value, because it reaches log output and the screen.
-
-The hierarchy carries a view per operation whose failure reaches a message, and a view per step within one, each holding the cases that operation or step produces. A step's view names the operations it reaches, so an operation's cases are the union of its steps rather than a list repeated on every case. A `when` over a view has a branch only for a case that view admits, which is what makes a message mapping over one testable at every branch.
+Each case declares the views it belongs to. A view exists per operation whose failure reaches a message, and per step within one; a step's view names the operations it reaches, so an operation's cases are the union of its steps rather than a list repeated on every case. A `when` over a view has a branch only for a case that view admits, which is what makes a message mapping over one testable at every branch.
 
 | View | Cases |
 |---|---|
@@ -1069,195 +1025,105 @@ The hierarchy carries a view per operation whose failure reaches a message, and 
 | `ImportReadError` | `Corrupt`, `Io`, `VaultClosed` |
 | `ImageReadError` | `Corrupt`, `Io` |
 
-`ExportError` is a second hierarchy of the same shape, over what stops a file reaching the place the user chose. `VaultUnreadable` belongs to a copy of the vault, which reads the vault first; `NotRestricted` and `Io` belong to the write itself, which is `FileWriteError` and is what §9.7's saved image reports. A copy of the vault is `VaultExportError`, the union of the two. The wording differs between the operations for the same case, since one has a vault to say is unchanged and the other has not, which is why they are separate mappings rather than one.
+Every error maps to a specific user-facing message, and the wording is per operation even where the case is shared. `WrongPassword` and `IntegrityFailure` must never share a message: one means "try again", the other means "this file has been modified or damaged". `NoSuchEntry` and `Corrupt` are separated for the same reason — an entry deleted between a click and the operation it started is not a damaged vault.
+
+`InvalidEntry` covers every value an operation refuses to store: the entry model's rules where the model is the one refusing, and rules an operation holds of its own — an id already in the vault, a counter with no successor. The detail states the rule and never the value, because it reaches log output and the screen.
+
+`ExportError` is a second hierarchy of the same shape, over what stops a file reaching the place the user chose. `VaultUnreadable` belongs to a copy of the vault, which reads the vault first; `NotRestricted` and `Io` belong to the write itself, which is `FileWriteError` and is what §9.7's saved image reports. A copy of the vault is `VaultExportError`, the union of the two. The wording differs between the operations for the same case, since one has a vault to say is unchanged and the other has not.
 
 Two cases belong to a write alone. `TooLarge` is the encoder refusing to produce a file the reader would refuse, and a read past the same ceiling reports `Corrupt` instead; `LockedByAnotherProcess` is the file lock a write takes and a read does not. Neither can reach an unlock, an export or a disclosure.
 
-Reading an image is a view of its own rather than the import's, since it names no vault: the account a code holds is not stored by being found, so a vault closed under the reading is not one of its cases. `Corrupt` reaches an import because the file offered is a document TAuth did not necessarily write, and one that is not an export is damaged in the sense that case names. Its message is the import's own: the case is shared, the wording per operation is not, which is what a view per operation is for.
+Reading an image is a view of its own rather than the import's, since it names no vault: the account a code holds is not stored by being found, so a vault closed under the reading is not one of its cases. `Corrupt` reaches an import because the file offered is a document TAuth did not necessarily write, and one that is not an export is damaged in the sense that case names.
 
 Adding an entry and changing one are separate views because they report different cases: an add decodes a secret and so reports `InvalidSecret`, while it names no existing entry and so cannot report `NoSuchEntry`; a change is the reverse. One view over both would leave each of their screens a branch nothing can reach.
 
-A view is named for a step rather than for a call site, so two branches are admitted by a view and unreachable on the path that view serves. `TooLarge` is admitted by a creation, whose body is empty and cannot approach the encoder's ceiling, and `InvalidSecret` is admitted by the same, whose body carries no entry to decode. `UnsupportedVersion` is admitted by every commit, whose header and body versions are the writer's own constants rather than anything read. Naming a view per call site instead would need a type per operation over the same steps; each of these branches is worded for the case it names, so one reached by a later change says the right thing.
+A view is named for a step rather than for a call site, so three branches are admitted by a view and unreachable on the path that view serves: `TooLarge` and `InvalidSecret` on a creation, whose body is empty and carries no entry to decode, and `UnsupportedVersion` on every commit, whose header and body versions are the writer's own constants rather than anything read. Naming a view per call site instead would need a type per operation over the same steps; each of these branches is worded for the case it names, so one reached by a later change says the right thing.
 
 ---
 
 ## 13. Testing
 
-### 13.1 `commonTest`
+Rules are in STYLE_GUIDE.md §10: backticked behavioural names, one subject per test, spec vectors as individual cases rather than a loop over a table, no mocking framework, a fixed `Clock` and a temp directory, no reliance on wall-clock time and no sleeps. Tests never read or write outside a temp directory and never touch the real vault path.
 
-**HOTP** — all ten RFC 4226 Appendix D vectors, each as a separate assertion naming its counter. Counter 0 and the 64-bit maximum, confirming the counter is encoded as an unsigned 64-bit big-endian value throughout.
+Changes under `crypto/` or `vault/` need a test that fails before the change and passes after.
 
-**TOTP** — all eighteen RFC 6238 Appendix B vectors, each as a separate assertion with the algorithm, timestamp and expected value visible in the test name. Truncation of the eight-digit RFC values to six digits for the default configuration. Period boundary behaviour at exactly `T` and `T-1`. The `20000000000` vector, exercising 64-bit `T`.
+### 13.1 Required coverage
 
-**Shared core** — feeding `floor(t / period)` through the HOTP entry point reproduces every TOTP vector, proving one implementation rather than two.
+**OTP core.** Every RFC 4226 Appendix D and RFC 6238 Appendix B vector of §5.4 as its own case, naming its counter or its algorithm and timestamp. The `20000000000` vector, exercising 64-bit `T`. Period boundary behaviour at exactly `T` and `T-1`. Feeding `floor(t / period)` through the HOTP entry point reproduces every TOTP vector, which is what establishes one implementation rather than two. Base32 against RFC 4648 §10, padded and unpadded, padding of the wrong length in both directions, every trailing group length that cannot end an encoding, lowercase, embedded whitespace, invalid characters, empty input.
 
-**Base32** — RFC 4648 §10 vectors, padded and unpadded input, padding of the wrong length in both directions, every trailing group length that cannot end an encoding, lowercase input, embedded whitespace, invalid characters, empty input.
+**URI.** Every parsing rule of §5.5 as its own case, in both directions, plus round-trip build-then-parse for every entry configuration of both types. Every expectation is a URI written out in the test rather than one rebuilt from the entry it describes, since the format omits a parameter equal to its default and a rebuilt expectation agrees with whatever fields the build happened to read.
 
-**otpauth URI** — issuer in the label prefix only; issuer as a parameter only; both present and equal; both present and conflicting; percent-encoded label with a colon and with spaces; missing secret; unknown type; digits outside 6–8; a period below the minimum; `hotp` without `counter`; `totp` carrying `counter`; `hotp` carrying `period`; counter at the 64-bit maximum; unknown parameters ignored; parameter names matched without regard to case; leading spaces and a trailing newline shed from the input while a leading U+2028 is not; a trailing space shed rather than kept by the last parameter's value; round-trip build-then-parse for every entry configuration of both types.
+**Vault codec.** Round trip with an empty entry list and with several hundred entries. A wrong password gives `WrongPassword`; a flipped bit in the ciphertext or the GCM tag gives `IntegrityFailure`; a flipped bit at every offset across the header, in the CRC itself, and at every offset ahead of it gives `Corrupt` and never `WrongPassword`, swept exhaustively rather than sampled. A modified `headerLength` never silently succeeds, and one with the high bit set gives `Corrupt` rather than a backwards slice. Two successive writes of identical content produce different ciphertext, which is what proves nonce freshness. Every value drawn from the CSPRNG is compared across two independently created vaults, because a constant satisfies any assertion made within one. Each key array is lent to a block so its zeroing is asserted rather than inspected, after a block that returns and after one that throws.
 
-**Error views** — each view's membership asserted as a whole set rather than case by case, so a membership added to a case fails the view it joined just as one dropped fails the view it left. The two cases a write alone produces are asserted absent from an unlock, which is what keeps the encoder's size ceiling and a held file lock off the unlock screen. A case added to the hierarchy stops the naming table compiling, and naming it there fails the count until it joins the list every view is measured over. Reading an image is asserted to hold the image's own two cases and nothing about a vault, which is what separates it from the import's view over the same file-reading failures. The views over `ExportError` are asserted the same way and for the same reason: writing a file reports the destination and nothing about a vault, while a copy of the vault reports the read as well.
+**Crypto primitives.** Argon2id against published Argon2 reference vectors; AES-GCM against NIST vectors; HMAC against RFC 2202 and RFC 4231, including the case 6 keys exceeding the hash's block size. The Argon2 cost test states the parameters as literals on the reference side, never through the constants under test, and each constant has a test of its own naming its value — these are the only things standing between a hand-edited constant and a silently weaker KDF. `secureRandomBytes` is asserted to be backed by `java.security.SecureRandom`, which nothing about the bytes themselves establishes from inside one process.
 
-**Vault codec** — round trip with an empty entry list and with several hundred entries; wrong password produces `WrongPassword`; a flipped bit in the ciphertext or the GCM tag produces `IntegrityFailure`; a flipped bit at every offset across the header produces `Corrupt` and never `WrongPassword`, swept exhaustively rather than sampled; a flipped bit in the CRC itself produces `Corrupt`; a flipped bit at every offset ahead of the CRC produces `Corrupt`; a modified `headerLength` produces `Corrupt` and never a silent success; truncated file; a version byte the writer never wrote produces `Corrupt` while a later version whose CRC agrees produces `UnsupportedVersion`; an unknown header key is tolerated; two successive writes of identical content produce different ciphertext, proving nonce freshness.
+**Error views.** Each view's membership asserted as a whole set rather than case by case, so a membership added to a case fails the view it joined just as one dropped fails the view it left. A case added to the hierarchy stops the naming table compiling. The two cases a write alone produces are asserted absent from an unlock. The views over `ExportError` are asserted the same way.
 
-Every value drawn from the CSPRNG — the DEK, the salt, the wrap nonce — is compared across two independently created vaults, because a constant satisfies any assertion made within one. Rotation keeps the salt and draws a fresh wrap nonce, which matters because it wraps under the KEK that wrapped the previous key. A header or body `v` the reader does not know produces `UnsupportedVersion`; a `headerLength` with the high bit set produces `Corrupt` rather than a backwards slice. A `v` written as a quoted digit reads as that version on both paths, and an entry's quoted `period` reads as that period, which is the latitude §6.7 records.
+**Vault store.** An atomic write leaves no `.tmp` on success; a failed write leaves the original intact and readable; a failure at the rename leaves the whole new vault in the temp file; POSIX modes are `0600` on the vault and the lock file and `0700` on the directory, including ones that already existed too widely; a write that cannot take the file lock reports `LockedByAnotherProcess` and leaves the previous vault byte for byte.
 
-Each of the codec's three key arrays is lent to a block, so each zeroing is asserted rather than inspected: the KEK through `withKek`, a freshly drawn DEK through `withFreshDek`, and the DEK an unlock hands over through `adoptedOrZeroed`. Every one is checked both after a block that returns and after a block that throws. The adopted DEK is also checked to survive the one path that keeps it, since zeroing there would hand back a vault whose key is zeros.
+**Vault paths.** Resolution under a set, unset, blank and relative `XDG_DATA_HOME`, the same for `%APPDATA%`, an empty home leaving the location unresolved, and per-OS branches driven by an injected OS identifier rather than the real `os.name`.
 
-**Entry model** — `orderIndex` renumbering on insert, delete and reorder; an `id` in canonical form carrying the version 7 nibble, ordering and uniqueness being `Uuid.generateV7`'s contract rather than this project's; `period`/`counter` pairing enforced per type; a `hotp` entry with a null counter rejected as `Corrupt`.
+**Session and entry operations.** Every lock path zeroes the DEK and every decoded secret, verified by retaining a reference to the backing array. The scheduled lock's grace period and arming, the triggers held and replayed across a derivation, and the precedence of a lock landing during one. Every entry operation is read back through the codec rather than off the session, and repeated against a refused write to establish that nothing moved. The ticker never computes an HOTP entry, and a row scrolled out of view is not computed at all.
 
-**Edit model** — each field an edit may change, one case per field; the secret, the id, the creation time, the order index and the type unchanged by an edit that changes everything it can reach; a hotp counter set to a resynchronisation value. Every rule the entry model holds is refused through the edit rather than thrown: a digit count outside the range, a counter on a `totp` entry, a `hotp` entry left with none, a period on a `hotp` entry, an empty account name, a colon in one, an empty issuer. A dropped issuer is accepted, and a refusal carries the rule it broke rather than the value.
+**QR.** For every entry configuration in the URI matrix, encode the entry to a URI, render it, decode the symbol, and assert the payload equals the original byte for byte; the symbol is drawn at several pixels a module, since the binarizer averages blocks rather than sampling points. A URI reaches the encoder percent-encoded and so carries nothing outside ASCII, which leaves the character set standing on no entry configuration — it is asserted on the seam instead, over text outside Latin-1. Three cases hold the parameters the symbol is read at: the error correction level the decode reports, a quiet zone two modules deep on every side, and the symbol version staying at or below 10 for a 160-bit secret with a 64-character label, since larger symbols become hard to scan at the dialog's minimum size. Text past the format's capacity yields no symbol.
 
-**Lock reasons** — the arming and the grace period of each trigger, one case per reason, read from a single policy whose durations all differ so that a reason reading the wrong field answers with a number no case accepts. Hiding to the tray, a manual lock and an exit are armed whatever the policy says; minimise and focus loss follow their switches; a zero idle timeout disarms the idle trigger rather than firing it at once.
+**Screens.** Every failure mapping a screen carries is asserted at every branch, with the wrong-password and damaged-file messages kept apart in both directions. Every state a screen reports is read through the semantics tree, and no rendering of a draft, a holder or an entry carries a secret.
 
-**Security policy** — a body with no `policy` object yields the full defaults; a partial `policy` fills the remainder from defaults; each default is asserted field by field so a later change names itself; a negative duration is rejected; a policy edit round-trips through a write and read; tampering with a policy value in the ciphertext produces `IntegrityFailure` rather than an altered policy.
+**Appearance.** Every theme token read from the light and the dark mode in one composition, so a token the theme fails to switch shows as two equal readings. The code readout is monospace. The countdown's expiry state is read through the description it carries rather than through its colour, and the fraction it reports is read at two different periods at one instant, which agree only if the period dividing it is the one the code was generated under.
 
-**Password check** — the password that created a vault is accepted against the header that vault holds, and one differing by a single character is refused as `WrongPassword`. A salt that is not base64, a wrapped key of the wrong size and a wrap nonce of the wrong size are each refused as `Corrupt` rather than as a wrong password, which is what keeps a header an attacker rewrote from reading as a mistyped password. The body takes no part on this path and nothing here asserts anything about it. The zeroing of the derived key and of the key it unwraps is not observable from outside the codec and is asserted nowhere.
+### 13.2 Verified nowhere
 
-**Entry URI** — an entry at the default algorithm, digit count and period builds a URI carrying none of the three, and one off all three under an issuer with a space in it builds each of them; an hotp entry carries its counter, at a middling value and at the unsigned 64-bit maximum; an entry with no issuer builds a label of the account name alone. Every expectation is a URI written out in the test rather than one rebuilt from the entry it describes, since the format omits a parameter equal to its default and a rebuilt expectation agrees with whatever fields the build happened to read. The secret survives a build-then-parse round trip, and no rendering of the URI object carries it.
+Stated rather than left to be discovered:
 
-**Entry drafts** — each field an add form and an edit form collect, one case per field. An issuer left blank resolves to an absent issuer rather than an empty one. The type decides which moving factor is read, so a counter typed into a totp form is dropped and a period typed into an hotp one is; on the edit form the type is the entry's rather than the form's. A counter past the unsigned 64-bit maximum, a half-typed number in any numeric field, an empty account name, a colon in one, a secret that is not base32 and a digit count outside the range are each refused, and the refusal states the rule rather than the value it refused. No rendering of a draft carries the secret.
-
-**QR symbol** — the grid a symbol crosses the module line as, and the arithmetic that puts it on a canvas. A module is read by its column and its row, and the module at the transposed position is a different one, which is what a mirrored rendering would agree with. The grid does not follow the array it was built from, since a caller keeping that array could otherwise move a module under a drawing that reads it every frame; a grid that is not square is refused. A module is a whole number of pixels, what the modules do not fill is split between the two sides, a canvas the modules fill exactly starts at its own edge, and a canvas smaller than the symbol lays down no module rather than a fraction of one.
-
-**Plaintext export** — the two shapes the accounts leave in, over a body whose order indices run against the list they sit in, so an export taking the list as it finds it disagrees with one reading the order the vault stores. A URI list carries one line an account, ends its last line, and is empty rather than a blank line for a vault holding nothing; a JSON document carries every account, states the version it was written at, and carries the id, the creation time and the order index a URI has no field for. Neither carries the policy. A counter-based account exports at the counter it stands at.
-
-**Import rows** — a list of URIs reads one account a line, carrying the account, the counter and a creation time of the import's own; blank lines are passed over and a line that will not parse is refused on its own, naming where it sat and quoting neither the secret nor the value it refused. A document reads every account it carries, keeps the creation time it carries, and gives each an id of the receiving vault's making; one the entry model refuses is refused on its own and states the rule, and one in no shape at all is refused without quoting what it was reading. A file that opens as a document and is not one, and a document carrying no entries, are unreadable rather than empty, and the message quotes none of the file. An account the vault already holds is a duplicate, one it does not is not, a secret spelled with other padding or case is the same account, and a file carrying one account twice offers the second as the duplicate. What an import accepts is every account by default and a duplicate only once its position is chosen; a position no duplicate sits at adds nothing, and a refused row is no account whatever is chosen.
-
-**Scanned codes** — an account among the codes is offered and one that is not is passed over, which over a mixture is the accounts alone; every account in an image is offered, and an image holding none offers nothing. A choice is named by its issuer and account name, by its account alone where it has no issuer, and by nothing that carries the secret.
-
-**Code grouping** — six, seven and eight digit codes each break in one place, with the left group never the shorter of the two; a code padded with a leading zero keeps it.
-
-**Preview code** — the code an account would produce before it is stored, against published vectors alone: the RFC 6238 SHA-1 values at 59 and at 1111111109 seconds, the SHA-256 value at 59 seconds under that algorithm's own seed, the same account read at six digits, and a period the account names rather than the default; the RFC 4226 counter 0 and counter 1 values at eight digits and at six. An hotp preview is asserted not to move with the clock, which is what would show a code no server computes. The zeroing of the decoded key is not observable from outside and is asserted nowhere.
-
-**Account order** — the search matches a substring of the account name or of the issuer without regard to case, refuses one that matches neither, and matches an account with no issuer on its name alone; an empty query and one of spaces alone each match an account outright. The three orderings run over one set of four accounts whose order indices, issuers, account names and creation times all differ, with two issuers differing only in case so that an ordering comparing them byte for byte separates two accounts the user reads as one provider. A drop lands one row on, stays put under half a row, moves up, clamps to either end of the list, and stays where it was against a list that has not been measured. The pitch a drop divides by is the distance between two adjacent rows rather than one row's height, read from offsets whose first is negative as a scrolled list reports it, so a pitch taken from that offset alone rather than from the difference is wrong here; it falls back to the single row's height when only one is on screen and to nothing when none is. A six-gap drag divides by the pitch that function returns, with the distance travelled written out rather than derived from it, so the row height as the divisor overshoots the drop by one place rather than moving with it.
-
-**Countdown** — the second at which the ring changes colour, stated as a literal in the test rather than read from the constant under test, read on the boundary, one second above it, at a whole period and at one second left; the light and the dark colour sets each supply their own running and expiring colours. The boundary and the second above it are the pair that moves it; the other two sit well inside their bands and would not. The sweep is read at the same instant under a thirty-second and a sixty-second period, which differ only if the period the code was generated under is the one dividing it; a whole period fills the ring, and a period of nothing fills nothing rather than dividing by zero.
-
-### 13.2 `jvmTest`
-
-**Crypto primitives** — Argon2id against published Argon2 reference vectors, confirming BouncyCastle is invoked with the intended version and parameters; AES-GCM against NIST test vectors; HMAC against RFC 2202 and RFC 4231 vectors, including the case 6 keys that exceed the hash's block size and so are hashed down before use; base64 over input producing `+` and `/`, and rejecting the URL-safe alphabet that replaces them; the generator behind `secureRandomBytes` is asserted to be a `java.security.SecureRandom`, which nothing about the bytes themselves establishes from inside one process.
-
-The Argon2 cost test states the parameters as literals on the reference side, never through the constants under test, and each constant has a test of its own naming its value. The cost travels nowhere in the file, so these are the only things standing between a hand-edited constant and a silently weaker KDF.
-
-**Vault store** — atomic write leaves no `.tmp` on success; a failed write leaves the original file intact and readable; a write that fails at the rename leaves the whole new vault in `vault.tauth.tmp`; a vault behind a directory the process cannot traverse is reported as unreadable rather than as absent; POSIX permissions are `0600` on the vault and the lock file and `0700` on the directory, including a directory or lock file that already existed too widely; concurrent writes from two `VaultStore` instances serialise on the in-process lock and leave one whole payload rather than a mixture. A write that cannot take the file lock reports `LockedByAnotherProcess` and leaves the previous vault byte for byte, driven by an injected channel whose `tryLock` declines the way it does when another process holds the lock — two channels in one JVM collide instead, and both stores queue on the in-process lock before either reaches the file lock.
-
-**Vault paths** — resolution under a set `XDG_DATA_HOME`, an unset one, a blank one and a relative one, the same for `%APPDATA%`, an empty home leaving the location unresolved, and per-OS branches driven by an injected OS identifier rather than the real `os.name`.
-
-**Session** — `lock()` zeroes the DEK array, verified by retaining a reference to the backing array; the KEK is zeroed after unwrap; scheduled lock fires after the grace period; scheduled lock is cancelled when the user brings the window back, and stands when another process's show request raises it; the ticker stops on lock; the ticker never computes an HOTP entry; `scheduleLock` reads its grace period and arming from the session's policy and is a no-op against a locked vault. A lock zeroes every decoded secret and clears the clipboard; an unlocked entry has no field holding the base32 secret, and each secret decodes to the key that base32 stands for; a second `scheduleLock` does not push a pending deadline out; a lock landing during a derivation leaves the vault locked and the unlock reporting `VaultClosed`; a trigger arriving during a derivation locks the vault once the body is open, and one the policy disarms arriving ahead of an armed one does not swallow it; a lock drops the timer scheduled before it, and a schedule after that lock arms a timer of its own; a body holding two entries under one id is refused; creation against a path that already holds a vault is refused and writes nothing. A tick carries the published RFC 6238 code for the instant on a fixed clock, computed under the algorithm and the period the entry itself names rather than the defaults; the seconds it reports run out on the period boundary; a row scrolled into view is computed before the next tick and one scrolled out of view is not computed at all; a lock leaves an empty map behind and ends the ticker, and a collection cancelled as the window hides emits nothing further.
-
-**Entry operations** — add, edit, delete and reorder each write the vault, and what the file holds afterwards is read back through the codec rather than taken from the session. An added entry lands past the last order index whatever index it arrived with and lends the key its base32 stands for; an id already in the vault is refused and writes nothing; a delete zeroes the key it drops and closes the gap it leaves in the order; a move renumbers densely and an index past either end is that end; an operation naming an entry the vault does not hold reports `NoSuchEntry`, and one against a locked vault reports `VaultClosed`. Every operation is repeated against a refused write: the entries, the order, the counter, the decoded keys and the published state all stay as the file still holds them, a delete's key stays live and lendable, and an added entry's key is neither installed nor left alive. Reading an import is exercised through the session as well: it offers the accounts a file carries, marks one the vault already holds against the vault's own secrets, reports `VaultClosed` against a locked vault, and reads no file of its own. A batch is one write however many accounts it carries, reaches the file whole, keeps the order it arrived in, lands past the entries already stored and leaves every key in it lendable; an empty one writes nothing, one naming an id the vault holds or naming one id twice is refused, and one against a refused write leaves the entries as they were with no key behind. Ordering is asserted from inside the write, which is the only point that separates the two orders: the bytes being written already carry the change while the state the session publishes does not. A generated code is computed under the algorithm and the digit count its own entry names, each against a published vector, since an entry sitting at the defaults agrees with a session that reads neither field; a counter at the unsigned 64-bit maximum is refused, stays where it is and writes nothing. An entry write landing during a derivation waits for it, since one that did not would be committed to the file and then dropped by the install of the body that derivation had already read.
-
-**Secret disclosure** — the master password is checked while the vault stays open, against the header the open vault holds: the vault's own password is accepted and one differing by a single character is refused, and after either the published state and the decoded keys are exactly as they were, so a mistyped answer at the gate is not a lock. A check neither reads the file nor writes it, which a check succeeding after the file behind it has gone establishes rather than assumes. A check against a locked vault reports `VaultClosed`. The whole vault discloses through the same check: as a list of URIs compared against URIs written out in the test, and as a document carrying every account in the order the vault holds; a refused password discloses nothing at all and reports the password, a locked vault reports `VaultClosed`, and neither reads nor writes the file. The URI a disclosure returns carries the fields its entry names — a spaced issuer with a non-default algorithm, digit count and period on one entry, a counter on the other — and is compared against a URI written out in the test. A refused password returns no URI at all and reports the password rather than the entry; an id the vault does not hold and a locked vault each disclose nothing. That no published entry carries the secret the URI does is asserted too, but `UnlockedEntry` has no field it could be in, so the assertion holds of an empty list and of any state whatever: it is a fence against a field being added, not evidence about this work.
-
-**Scan state** — the half of the image path that holds what was found, tested without a composition. One account is taken without asking and offers no choice; several are offered as a choice, take none of them yet, and the one chosen is the one taken, with choosing ending the choice and abandoning it taking nothing. A code that is not an account and an image holding no code each say so, and say different things; an image the user declined says nothing and takes nothing; one the shell could not read reports what it said. A second read opens on nothing the first reported.
-
-**Import preview** — the summary counts what will be added and follows a duplicate being taken; an account is named by its issuer and account name and no row carries the secret it stands for. A duplicate says the vault already holds it and opens on skipping, an account the vault does not hold offers no choice at all, and choosing one reports its position. A refused row names where it sat and the rule it broke. Importing and cancelling each report themselves, a file with nothing left to add holds the import back until a duplicate is taken, and a write in flight holds the controls. A message is asserted for four of the failures storing new entries reports, including the wording that says none of them landed.
-
-**Import state** — the half of the import that holds the rows, tested without a composition. A file read opens a preview holding what it offered; one the user declined opens none and reports nothing, and one the shell or the vault refused reports what each said and opens none. A duplicate is taken by its position and taken twice is left out again. What is written is what the preview accepted, with a taken duplicate among it; a write that landed drops the rows, one that was refused keeps the preview up and reports what it said, and a second read opens on none of the first read's choices.
-
-**Unencrypted export** — the warning is on screen before any password is asked for and nothing is disclosed while it stands; dismissing it writes nothing and ends the request. The format chosen there is the format disclosed and the format written, and the flow opens on JSON. An accepted password writes what was disclosed and ends the request; a refused one writes nothing, leaves the gate standing and says the password did not open the vault. A destination that refused the file is reported and one that took it reports nothing.
-
-**Secret disclosure gate** — the statement the caller supplied is on screen, the field opens focused, and the confirm button and the field's Done action each hand over the characters typed and each refuse an empty entry, which would otherwise reach the check as a zero-length password. A running check disables the button and refuses a second submission behind it, while the field goes on taking characters that reach the caller once the check ends; the progress indicator is on screen for a check and absent otherwise; cancelling reports a dismissal and hands over nothing. A message is asserted for each of the four failures a disclosure reports — a wrong password, a damaged header, an entry deleted underneath the gate and a lock that overtook the check — with the wrong-password and damaged-file messages kept apart in both directions. The check reads the header the open vault holds rather than the file, so what its damaged case is about is that header and nothing about the file on disk reaches this mapping.
-
-**Gate state** — the half of the gate that holds the password, tested without a composition. The array handed to a check is zeroed on every path out of it: after a refusal, after a confirmation arriving with no gate open, and when a lock cancels the scope mid-derivation, which is the case the gate exists for and the one where nothing else would wipe it — the array is a copy no field holder owns. A check whose gate was dismissed while it ran discloses nothing when it finishes, does not close a gate opened after it, and leaves no check running; a check that is not dismissed discloses what it was given and keeps the gate up on a refusal.
-
-**Account row** — the issuer, the account name and the code in its two groups, at six digits and at eight; the countdown reports a running code above the boundary and an expiring one on it, read through the description the ring carries rather than through its colour, and reports how much of its period is left as a range a screen reader announces, which is the arc's own fraction and the only readable form of it: a sixty-second account sweeps half what a thirty-second one does at the same instant. An hotp row shows its counter and no code at all until it is given one, which the same row carrying that same code once it is given one makes falsifiable; it carries no countdown, and offers nothing to collapse until a code is on it. A disabled generate control reports nothing when pressed. Each item of the overflow menu reports what it names, and copying a code is offered only while one is on screen.
-
-**Show QR** — the symbol is on screen through the description it carries, which is the only part of a drawing a test reaches; the account it stands for is named beneath it by issuer and account name. An hotp account states its counter and what scanning that counter does, and a totp account states no counter at all. A URI the format cannot carry says so and draws nothing, rather than leaving the dialog blank. Copying reports the request and closing reports a dismissal. A save is offered where there is somewhere to write and absent where there is not, takes no second request while one is running, and reports a message for each of the two failures writing a file produces. The dialog stands through a save in flight rather than closing on its interval, since the file dialog it is waiting on is the user standing in front of one. The dialog closes on its own after a minute with nobody at it, and an interaction puts that interval back, which is asserted by using it just inside the minute and finding it still standing a minute later. What the symbol looks like is asserted nowhere: the semantics tree carries the description and not a pixel, and only the scanners of §13.3 read the rendering.
-
-**Password attempt** — the array a password field hands over is a copy no holder owns, and this is what zeroes it: after a refusal, after an acceptance, and when the scope is cancelled mid-derivation, which is a lock or a closing window and the one path where nothing else would. A refusal is reported and an acceptance reports nothing; an attempt says it is running until its derivation ends and not once it has, which is what decides whether the create or the unlock screen shows the progress of a derivation, since one attempt is held per operation and the session's state does not say which of them asked.
-
-**Account list** — the ids of the rows on screen are published, which is the only way the ticker learns them, and a row below the fold of a viewport too short to hold the list is left out of that set. A search on either field keeps the row that matches and drops the one that does not; the sort control reports what was chosen, and each of the three orderings lays the rows out from their positions on screen, over three accounts arranged so that each ordering produces a layout neither of the others does — two rows would admit only two layouts between three orderings, leaving one ordering indistinguishable from another whatever the fixtures held. A tapped code reaches the clipboard with the clear delay in force and the row counts that same delay down a second at a time, says so once when no clear is scheduled, and says the copy was refused when the clipboard refuses it. An hotp row carries no code until the control is pressed; the control goes dead behind a generation and a second press inside that interval reaches the vault not at all, which is the two counter values a double-tap would otherwise spend; the code stays once the interval has passed and goes when the row is collapsed; a refused generation shows no code and leaves the control live. Copying the URI puts the gate up over the account it names and nothing on the clipboard; a refused password leaves the gate standing, says the password did not open the vault, and still puts nothing there; the accepted one closes the gate, puts the URI on the clipboard and counts it down as a code does. Showing the QR code puts up a gate of its own, stating the screen rather than the clipboard, and draws nothing until a password is accepted; a refused one draws nothing either. What the accepted one draws is asserted as the text the screen handed the encoder, since the drawing itself says nothing about which URI it stands for. Copying from the dialog reaches the clipboard under the same delay, and closing takes the code off the screen. Saving hands the shell the symbol on screen rather than the URI behind it, which is the whole of what makes the file the symbol the user saw, and a refused save is reported over the code. A code on screen holds the idle lock off and the code leaving the screen lets it back, while the gate in front of it holds nothing off, since a gate is typed at and typing is what the watch is listening for. An hotp row copies the code it generated rather than one arriving under its id from the ticker, which the ticker does not produce and the screen therefore must not read. A delete names the account, reports it when confirmed and reports nothing when dismissed. A drag past the end of the list reports the last position; one in an ordering that is not the stored order and one while a query is filtering the list each report nothing, and clearing the query brings the handle back. A message is asserted for each of the seven failures a change to an entry reports: the account that is no longer there, a refused value quoting the rule it broke, a lock before the write, another process holding the file, a failed write, a vault past the size the writer will produce, and a version the reader does not know. The routing suite asserts the same slot over a refused delete, which is where the list's error reaches it from the session rather than from a fixture.
-
-**Entry preview** — a message is asserted for each of the three ways typed or pasted values fail to make an account: a URI the parser does not read, a secret that will not decode, and details the entry model refuses, each quoting the rule it broke. Nothing about a vault file reaches this mapping, since a draft is resolved without opening or writing one.
-
-**Add account** — nothing is previewed and nothing can be saved before anything is entered. A pasted URI previews its issuer, its account name and a sample code that is the published value for the second the caller named; an hotp one previews its starting counter and the code that counter produces; a URI that does not parse is reported in place of a preview and leaves the save disabled. Saving hands over the account that was resolved, with its secret. The typed form reaches the same sample code as the URI for the same account, and the account name, the issuer, the secret, the digit count, the period, the algorithm, the counter and the type each reach the account that is saved. The advanced fields are hidden until asked for, and the form offers the moving factor its type carries and not the other; the counter field opens reading zero, without anything being typed into it, since an account enrolled at any other position is one the server is not expecting. The secret is checked on its own: a base32 mistake is reported against that field with the account name left blank, which is the field the entry model would otherwise refuse first, and a secret that is empty or valid reports nothing. Cancelling reports the cancellation and hands over no account. A message is asserted for each of the seven failures storing a new entry reports: a refused value quoting the rule it broke, a secret that will not decode reported against the secret, a lock before the write, another process holding the file, a failed write, a vault past the size the writer will produce, and a version the reader does not know. The image path is offered only where the shell can read one; an account read from an image reaches the preview and is what a save hands over, an image holding no code and a code that is not an account each say so, an image that could not be read says so, and several accounts are offered by name with the one chosen reaching the preview.
-
-**Edit account** — the screen opens on the account name stored, states the type rather than offering it, and carries no secret field at all, which is `EntryEdit` having no field for one rather than a check on this screen. The account name and the issuer each reach the edit handed over, and an issuer cleared away is handed over as absent. The advanced disclosure is hidden until asked for and carries its warning; the digit count, the period and the algorithm each reach the edit; a totp entry is offered no counter and an hotp entry no period; an hotp counter set backwards and one at the unsigned 64-bit maximum each reach the edit, which is the resynchronisation §9.6 exists for. A half-typed number holds the save back and says what it is waiting for, while the rules on a name are left to the entry model and reported in the words it refused them. Cancelling hands over nothing. A message is asserted for each of the seven failures a change to an entry reports: the account that is no longer there, a refused value quoting the rule it broke, a lock before the write, another process holding the file, a failed write, a vault past the size the writer will produce, and a version the reader does not know. An add reports a secret that will not decode and a change cannot, so the two screens hold different mappings and neither slot takes the other's failure.
-
-**Application routing** — a location holding no vault opens the create screen and one holding a vault opens the unlock screen; a creation driven through the create screen reaches the account list, which is the only place the create path is exercised end to end; an unlock reaches the account list; the add destination opens inside the unlocked graph and returns to the list when it is cancelled; a lock taken from the list and a lock taken from the add destination each leave the unlocked graph for the unlock screen. The unlock screen is drawn for a locked vault whatever route the graph was left on, so what establishes that a lock also resets the route is where the next unlock lands: on the list, not on the destination the lock interrupted. The edit destination opens from a row's overflow menu. An account pasted into the add screen and a rename made on the edit screen each reach the vault file, read back through the codec rather than off the screen, which is the only place the two save paths are exercised at all. A refused delete is reported on the list and does not follow the user onto the add screen, which is the separation of a list failure from a destination's save failure. The fallback that leaves the edit destination when the account it named is deleted underneath it is reached by no test. Neither is the import wiring: the holder living inside the unlocked graph, the route following the rows, and the file being chosen and read are each asserted in their own suites and nowhere crossed with the routing.
-
-**Preferences** — `preferences.json` absent, empty, malformed or holding unknown keys all yield usable defaults rather than a startup failure, since the file is attacker-writable and the application must open regardless. No security-relevant field is read from it.
-
-**Settings** — the screen is read against a policy and a preference document with every field off its default, so a control drawing anything of its own disagrees with the fixture in every field rather than in none. Each of the five policy controls opens on the value the policy carries and hands over one whole policy, asserted against a literal, so the field chosen and the four left alone are one assertion. A policy the caller does not move leaves the control where it stood, which is the screen holding no state of its own and is what makes a refused vault write show as a refusal rather than as a change. Each preference control opens on the stored value and hands over what was chosen. The tray controls are disabled and explained where no tray is available and enabled where one is. The header's statement is asserted as a literal written out in the test, and the notes on re-encryption, export, the missing tray and the About group are each asserted to repeat none of it, which is §9.8's "stated once". A password change is held back until a current password is typed, while the two new ones differ, and while the new one is short; the two arrays it hands over are the characters that were typed; a re-encryption hands over its own. A running derivation holds the timeout choices, the locking switches and the export.
-
-An export reports in a slot of its own, since neither half of one is a vault write: a destination that cannot restrict the copy, a destination that could not be written and a vault that could not be read each produce their own message, and the three read cases asserted name a read rather than a write. Each slot is asserted empty for a failure belonging to the other.
-
-Three of the five policy controls — the minimise lock, the focus-loss lock and the grace period — are asserted at the screen's callback and no further; only the idle timeout and the clipboard delay are followed to the vault file. `SettingsWork` zeroing the password arrays it was handed shares no test. A message is asserted for each of the eight failures a rewrite of the whole file reports — a wrong password, a lock during the change, another process holding the file, a read or write that failed, a vault past the size the writer will produce, a damaged file, a version the reader does not know, and a file that is not there — with the wrong-password and damaged-file messages kept apart in both directions. A rewrite reads the file and writes it back, so the failure that can be either half says so rather than naming one, and the damaged case claims nothing about whether the change landed. The export's read half asserts all three of its own: a file that is not there, a damaged one, and one that could not be read. The unencrypted export reports its request and holds a slot of its own, worded about the accounts rather than the vault. The import reports its request and holds a third, worded about the file rather than the vault, since a read that failed opens no preview to carry it; each of the three slots is asserted empty for the others' failures.
-
-**Preference ownership** — the holder publishes a change and writes the whole document, leaving the fields the change did not name; a later change carries the field an earlier one set, which is the single-owner rule stated in §10.1 and the one case a write derived from a launch-time snapshot fails. A refused write reports the failure and leaves the change published, since it costs the next launch the setting rather than this one. The shell's half is crossed with the geometry recorder: a geometry reaching the file carries a theme and an ordering chosen since the window opened, and a preference reaching the file carries the geometry recorded before it.
-
-**HOTP counter** — generating a code persists the incremented counter before returning it; a write failure leaves the stored counter unchanged and yields no code; a counter surviving a lock/unlock cycle; two successive generations produce consecutive counter values and different codes.
-
-**Password change** — the vault opens under the new password and fails under the old; the DEK is unchanged, verified by comparing decrypted body bytes.
-
-**Settings operations** — the session's side of the actions §9.8 drives, read back through the codec rather than off the session. A password change leaves the file opening under the new password and refusing the old, the session unlocked over the same entries under the policy the body carries, and every decoded key lending the bytes its base32 stands for; a wrong current password writes nothing and leaves the published state, the data key and the decoded keys where they were; a change against a locked vault reports `VaultClosed` and writes nothing. A rotation replaces the key the body is encrypted under while the password, the entries and the policy stand, and an entry still yields the published code its counter names, which is a rotation not disturbing the secrets. An entry written after either rewrite reaches the file the new password opens, and the one written after a rotation is sealed under the rotated key: a session holding the vault it had before the rewrite writes a body against a header the file no longer carries, which reverts the change rather than reporting anything. A policy change reaches the file and the published state, a lock scheduled after it waits the grace period the new policy names, and a refused write leaves the stored and the published policy in agreement and reports the write's own error. An export hands back the bytes on disk: the copy opens under the vault's own password, carries an entry added before it, opens under the new password after a change, comes out of a locked session, writes nothing, and reports `NoVaultFile` against no file. The policy fixtures differ from the defaults and from each other in every field, so a policy the session reports from anywhere other than the body it wrote disagrees in every field rather than in none.
-
-Four things on those paths have no test. A lock landing mid-rewrite leaves the file rewritten and the operation reporting `VaultClosed`; two settings operations in flight at once serialise on the session's own lock; an export takes its copy behind that lock, which no assertion can separate from one taken beside it; and the zeroing of the KEK a rewrite derives is asserted in the codec's suite rather than through the session.
-
-**QR round trip** — for every entry configuration in the URI test matrix, encode the entry to an `otpauth://` URI, render it through `QRCodeWriter`, decode the resulting symbol through `MultiFormatReader`, and assert the decoded payload equals the original URI byte for byte. The symbol is drawn to an image at several pixels a module for the decode, since the binarizer averages blocks rather than sampling points.
-
-A URI reaches the encoder percent-encoded and so carries nothing outside ASCII, which leaves the character set the encoder is asked for standing on no entry configuration. It is asserted on the seam instead, over text holding characters outside Latin-1 as well as outside ASCII. Three further cases hold the parameters the symbol is read at: the error correction level the decode reports, a quiet zone two modules deep on every side with the finder pattern immediately inside it, and the symbol version staying at or below 10 for a 160-bit secret with a 64-character label, since larger symbols become hard to scan at the dialog's minimum size. Text past the format's capacity yields no symbol.
-
-**UI harness** — the screens are `commonMain` and their tests are here, because the Compose test rule and the JUnit 4 machinery it comes with are JVM. One suite covers the harness alone: composing a node, reaching it by its text and driving it off-screen, so a source set that has lost the ability to do any of that says so once rather than through every screen at once.
-
-**Password holder and field** — each editing primitive against the `CharArray` behind the field: insertion at the cursor, deletion, replacement of a selection, a paste landing whole, an edit addressing past the end of the text. The array is asserted zeroed after a deletion, a clear, a destroy, a growth into a larger array and a departure from composition; a destroyed holder takes no further character; the copy handed out is independent of the holder; and a rendering of the holder carries no character of the password. The masked field is driven through the coordinates a text field reports, since two runs of mask characters are indistinguishable and the cursor is what says which run changed: an edit with no render behind it is refused, an edit after a clear is refused until the next render, a second edit before the next render is measured against the first, and a render in the other form replaces the base. On screen the field shows one mask character per character typed and none of the characters until the reveal toggle asks for them.
-
-**Theme** — the content colour follows the mode, which is what the background surface sets and what a theme carrying tokens alone would leave black in both. Every token read from the light and the dark mode in one composition, so one the theme fails to switch shows up as two equal readings: surface and text luminance moving in the direction the mode demands, the primary and both countdown colours differing between modes, an expiring countdown distinct from a running one and amber in both, the spacing steps ascending and identical across modes, and the code readout monospace.
-
-**Create vault** — the recovery note on screen before anything is typed and still there once acknowledged; the create button held disabled by an unacknowledged note, a password below the minimum length, a differing confirmation and a running derivation; the strength meter reporting a common password weak and a long four-class one strong while blocking neither; the button and the Done action of a field each enforcing the same three rules and handing over the characters typed; and a message asserted for each of the nine failures a creation reports — a failed write, a path that already holds a vault, another process holding the file, a file gone by the read-back, a vault past the size the writer will produce, a version the reader does not know, a wrong password, a read-back that is damaged, and a lock that overtook the creation — with the wrong-password and damaged-file messages asserted never to stand in for one another. The creation is driven against a file that hands back altered bytes, which is what establishes that it opens the file rather than the buffer it sealed; §12 records the two branches its view admits and its path cannot reach.
-
-**Unlock** — the field holding focus as the screen opens; the button and the Done action each handing over the password and each refusing an empty entry; the button held disabled for the length of a derivation and the Done action refusing a second one behind it; the progress indicator on screen for the derivation and absent otherwise. A message is asserted for each of the eight failures an unlock reports — a failed read, a file that is not there, a version the reader does not know, a failed tag, a structure that does not parse, a secret that does not decode, a wrong password, and a lock that overtook the derivation — with the wrong-password and damaged-file messages kept apart in both directions. The mapping words nothing else: a file past the size ceiling and another process holding the vault belong to a write, and no branch for either reaches this screen to be asserted. A failed attempt leaves the button live, the field taking characters and the next password reaching the caller on both routes, which is the refusal of a lockout in §9.3 as it stands on screen. The subtitle is asserted over each reason it reports, each reason it does not, and a vault not unlocked in this session; a tag every subtitle carries is read once in the positive and three times for absence, so what the absences look for is the tag a reported subtitle has.
+- **Anything visual.** Compose's test APIs read the semantics tree, so an unpainted background and an unrenderable field populate it identically. §13.3 and a person looking are the only verification of a rendering.
+- **The two access-control-list branches**, in `VaultStore` (§6.6) and `OwnerOnlyFile` (§9.9). Reached only where a filesystem exposes `AclFileAttributeView`, which on Linux is no ordinary mount: a FAT volume takes that branch and then offers no view either, so it exercises the refusal beside it rather than the entry being set.
+- **DMG and MSI.** jpackage emits only the host format.
+- **Four session paths**: a lock landing mid-rewrite, two settings operations in flight at once, an export taking its copy behind the session lock, and the zeroing of the KEK a rewrite derives.
+- **Two routing fallbacks**: leaving the edit destination when the account it named is deleted underneath it, and the import wiring crossed with routing.
+- **`SettingsWork` zeroing the password arrays it was handed.**
+- **The zeroing inside the password check and the preview code**, which is not observable from outside the codec.
 
 ### 13.3 Manual verification
 
-Tray behaviour requires manual verification on GNOME (with and without a tray extension), KDE Plasma, Windows 11, and macOS.
+Tray behaviour on GNOME (with and without a tray extension), KDE Plasma, Windows 11 and macOS: the click each platform names — a single left click on Windows, macOS and KDE Plasma, a double on GNOME — the menu on the secondary click throughout, and whether the desktop draws the icon at the size it asked for.
 
-The relock triggers of §8.3 are verified on a running window, since the collector reads state a headless test cannot produce: hiding to the tray, minimising, restoring onto a desktop that gives the window no focus, and leaving the window untouched for the idle interval, each against a grace period of 0 and of 30 seconds. What this catches and no unit test can is a window whose composition stops reporting when it leaves the screen, which would leave a hidden window unlocked.
+The relock triggers of §8.3 on a running window, since the collector reads state a headless test cannot produce: hiding to the tray, minimising, restoring onto a desktop that gives the window no focus, and leaving the window untouched for the idle interval, each against a grace period of 0 and of 30 seconds. What this catches is a window whose composition stops reporting when it leaves the screen, which would leave a hidden window unlocked.
 
-The raise of §10.3 is verified by launching TAuth a second time while the first is running: against a window hidden to the tray, against one minimised, and against one standing behind another window, with the pointer left where it rests each time. The window comes forward in all three and the second launch ends on its own, and a window raised with nobody at the machine locks when its relock falls due. What this catches and no unit test can is a raise the desktop does not carry out and a raise the toolkit reports back as the user's own input.
+The raise of §10.3 by launching TAuth a second time while the first runs: against a window hidden to the tray, one minimised, and one standing behind another, with the pointer left where it rests each time. The window comes forward in all three, the second launch ends on its own, and a window raised with nobody at the machine locks when its relock falls due.
 
-Cross-platform vault portability is verified by creating a vault on one OS, copying it to the other two, and unlocking with the password on each.
+Cross-platform vault portability: create a vault on one OS, copy it to the other two, and unlock with the password on each.
 
-The show-QR dialog is verified by scanning its output with at least three unrelated authenticators — Google Authenticator, Aegis or Raivo, and one desktop scanner — at the dialog's minimum size and on both a light and a dark system theme. Automated round-trip tests confirm the payload; only a real scanner confirms the rendering.
+The show-QR dialog scanned with at least three unrelated authenticators — Google Authenticator, Aegis or Raivo, and one desktop scanner — at the dialog's minimum size and on both a light and a dark system theme. Automated round-trip tests confirm the payload; only a real scanner confirms the rendering.
 
-Argon2id timing is measured on the lowest-specification target machine to confirm the parameter choice in §6.5.
+Argon2id timing on the lowest-specification target machine, confirming the parameter choice in §6.5.
 
-The access-control-list branch is verified on Windows, and only there. It is reached where a destination carries no POSIX modes, which on Linux is no ordinary mount: a FAT volume takes that branch and then offers no `AclFileAttributeView` either, so it exercises the refusal beside it rather than the entry being set. Two paths carry it — the vault store of §6.6 and the owner-only write of §9.9 — and both need a filesystem the JDK exposes that view on. A packaged build installed on Windows, with a vault created on an NTFS volume and an export written to one, is what reaches them.
-
-The tray is verified on each desktop for the click its platform names: a single left click on Windows, macOS and KDE Plasma, a double left click on GNOME, and the menu on the secondary click throughout. What no unit test reaches is whether the desktop draws the icon at the size it asked for, which is the defect that took the tray off `java.awt.SystemTray` in the first place.
+The access-control-list branch on Windows, and only there: a packaged build installed with a vault created on an NTFS volume and an export written to one.
 
 ---
 
 ## 14. Milestones
 
-**M1 — OTP core.** `Base32`, `Hmac` expect/actual, `Hotp`, `Totp`, `OtpAuthUri` covering both types, and the full test suite from §13.1. No UI. Deliverable: a green test run covering every RFC 4226 and RFC 6238 vector.
+**M1 — OTP core.** `Base32`, `Hmac` expect/actual, `Hotp`, `Totp`, `OtpAuthUri` covering both types. No UI. Deliverable: a green test run covering every RFC 4226 and RFC 6238 vector.
 
-**M2 — Vault format.** `crypto` expect/actual set, `VaultHeader`, `VaultBody`, `VaultEntry`, `SecurityPolicy` as a field of the body, `VaultCodec`, `VaultStore`, `VaultPaths`, `VaultError`, and the tests from §13.1 and §13.2. No UI. Deliverable: create, write, read and round-trip a vault from tests. The store's POSIX branch is exercised here; its access-control-list branch is reached on no ordinary Linux mount and is verified on Windows with the packaged artifacts, as §13.3 states.
+**M2 — Vault format.** The `crypto` expect/actual set, the models of §6, `VaultCodec`, `VaultStore`, `VaultPaths`, `VaultError`. No UI. Deliverable: create, write, read and round-trip a vault from tests. The store's POSIX branch is exercised here; its access-control-list branch is verified on Windows with the packaged artifacts, as §13.3 states.
 
-**M3a — Shell infrastructure.** `Preferences` and `PreferencesStore`, `ClipboardService`, the single-instance mechanism of §10.3, and tray availability with the fallback §10.2 describes. Deliverable: a preference file that survives a restart, a clipboard that clears only the string it placed, a lock file and loopback listener that answer whether another instance holds the vault, and a correct answer to whether this desktop has a tray. The role a launch takes from that mechanism is claimed by the shell of M4.
+**M3a — Shell infrastructure.** `Preferences` and `PreferencesStore`, `ClipboardService`, the single-instance mechanism of §10.3, and tray availability with the fallback §10.2 describes. Deliverable: a preference file that survives a restart, a clipboard that clears only the string it placed, a lock file and loopback listener that answer whether another instance holds the vault, and a correct answer to whether this desktop has a tray.
 
-**M3 — Session and unlocked UI.** `VaultSession` including `scheduleLock` and `cancelScheduledLock`, `SessionState`, `LockReason`, the code ticker, create-vault screen, unlock screen, account list with live TOTP codes and generate-on-request HOTP rows, the HOTP persist-before-display path, add-account by URI and manual entry, edit including counter, delete, and the secret disclosure gate stated at the head of §9, built as a component rather than at its one call site. Deliverable: a usable authenticator. Delete has no recovery path until export arrives in M4.
+**M3 — Session and unlocked UI.** `VaultSession` including `scheduleLock` and `cancelScheduledLock`, `SessionState`, `LockReason`, the code ticker, create-vault, unlock, account list with live TOTP codes and generate-on-request HOTP rows, the HOTP persist-before-display path, add by URI and manual entry, edit including counter, delete, and the disclosure gate built as a component rather than at its one call site. Deliverable: a usable authenticator.
 
-**M4 — Tray, lifecycle and settings.** Tray construction and menu, hide-to-tray, the relock triggers of §8.3, grace period, idle timeout, the lifecycle behaviour `SecurityPolicy` governs, the single-instance role taken at startup so that a second launch raises the first window and exits, and the settings screen of §9.8 including change master password, re-encrypt, and encrypted export. The raise half reads the window visibility this milestone introduces, and §10.3 requires it to raise without counting as user presence.
+**M4 — Tray, lifecycle and settings.** Tray construction and menu, hide-to-tray, the relock triggers of §8.3, grace period, idle timeout, the lifecycle behaviour `SecurityPolicy` governs, the single-instance role taken at startup so a second launch raises the first window and exits, and the settings screen of §9.8 including change master password, re-encrypt and encrypted export.
 
-**M4b — Errors narrowed to the operation that reports them.** A signature over the whole of `VaultError` admits every case any operation can produce, so a read admits the cases only a write reports and an operation on an existing entry admits the cases only a new one reports. A screen mapping such a signature carries a branch per case in the hierarchy, of which a handful are reachable; the compiler enforces that a branch exists and nothing holds its sentence to the operation it describes, which is how a message comes to name the wrong file or the wrong verb, and how the branch that would have caught it goes untested because no path reaches it.
+**M4b — Errors narrowed to the operation that reports them.** Each case declares the operations it belongs to, so a read and a write each get a sealed view over the cases they can produce, and `VaultStore`, `VaultCodec` and `VaultSession` return the view that fits. The message mappings of §9 follow: each `when` shrinks to the cases its screen's operation can reach, every branch is then one a test can drive, and a sentence naming a read cannot be reached by a write. Deliverable: every mapping admits only what the steps of its own operation report, each branch it carries is asserted, and the branches a view admits that its path cannot reach are the three §12 names and no others.
 
-Each case declares the operations it belongs to, so a read and a write each get a sealed view over the cases they can produce, and `VaultStore`, `VaultCodec` and `VaultSession` return the view that fits. §4's rule that distinct failures get distinct types, applied to the operation rather than only to the cause. The cases keep their names and their payloads; what changes is which of them a signature admits.
+**M5 — QR, plaintext export, packaging.** ZXing image decode for import and `QRCodeWriter` for the show-QR dialog (§9.7), plaintext export in both formats, import with duplicate detection, DMG/MSI/DEB configuration, and icons for all three platforms.
 
-The message mappings of §9 follow: each `when` shrinks to the cases its screen's operation can reach, every branch is then a branch a test can drive, and a sentence naming a read cannot be reached by a write. Deliverable: every mapping admits only what the steps of its own operation report, each branch it carries is asserted, and the branches a view admits that its path cannot reach are the three §12 names and no others.
+**M6 — The primary view.** The interface takes the shape §9 states: a small window that does not maximise (§10.1), a compact account list with a density choice and the code where the eye lands (§9.4), and the keyboard path from opening the window to a code on the clipboard.
 
-**M5 — QR, plaintext export, packaging.** ZXing image decode for import and `QRCodeWriter` for the show-QR dialog (§9.7), plaintext export, import with duplicate detection, DMG/MSI/DEB configuration, icons for all three platforms, and verification of the packaged artifacts on each OS.
+The appearance of §9.10 lands whole: the bundled face with tabular figures, the flat dark palette under a single accent with the light scheme drawn from the same tokens, an icon beside every control, and the generated account mark. The countdown sweeps continuously against the instant its period ends (§8.5) and states its expiry in more than colour.
 
-**M6 — the primary view.** The window a TOTP authenticator is used through is opened many times a day for a few seconds each, and the whole of an interaction is: appear, find one account, put its code on the clipboard, leave. This milestone makes the interface that shape. The window is small, resizable within bounds, minimises and does not maximise, since nothing it draws benefits from a full screen. The account list is compact, offers a density choice, and puts the code where the eye lands.
+The settings screen is rebuilt as a screen rather than a document (§9.8), and every destination is laid out for the window's width.
 
-A face is bundled for all three platforms rather than taken from each, so the application reads the same everywhere: the code keeps the monospace §13.2 asserts, and every other numeral — the counter, the countdown seconds — is set in tabular figures so a changing digit moves nothing beside it. The palette is a flat dark surface under a single accent, with the light scheme drawn from the same tokens.
-
-An account is identified by its issuer and account name and by a generated mark: the initial over a colour derived from the two names. No brand icon is shown and none is fetched. The issuer is a field of an `otpauth://` URI that anything can write, so a real company's mark beside an account would be the application vouching for a string nothing authenticates, and fetching one would tell whoever serves it what accounts the vault holds.
-
-The path from opening the window to a code on the clipboard is the measure: the search field takes focus as the window opens, the arrow keys move between accounts, and the keyboard reaches every action a pointer does — which is also the reordering §9.4 currently offers by drag alone. The countdown states its own expiry in more than colour, and a code changing is announced without interrupting what a screen reader is already saying.
-
-This milestone revises §7's theme rules, §9.1 and §9.4's account list, and §10.1's window. It follows M5 because it redraws every screen the milestones before it complete, and a screen redrawn before its behaviour exists is drawn twice.
+This milestone revises STYLE_GUIDE.md §7's theme rules, and §9.1, §9.4, §9.8, §9.10 and §10.1 here. It follows M5 because it redraws every screen the milestones before it complete, and a screen redrawn before its behaviour exists is drawn twice.
 
 M1 and M2 have no dependency on Compose and are fully testable headless. M3a touches neither the session nor the vault, so it is buildable and testable ahead of M3; every relock trigger in M4 resolves to a call on the session M3 builds, and every M5 item is an entry point added to a screen M3 or M4 already has. M4b sits between them because it edits every signature that reports a failure and every mapping that renders one: taken after M5 it would touch the QR dialog, plaintext export and import as well, and taken before M4 it would have no settings screen to narrow.
 
@@ -1273,9 +1139,7 @@ Figures quoted elsewhere in this document were taken on one machine, described h
 
 **Tray availability** (§10.2): `java.awt.SystemTray.isSupported()` returns true, with `sun.awt.X11.XToolkit` as the toolkit under a Wayland session by way of XWayland, and `ubuntu-appindicators@ubuntu.com` providing the StatusNotifierItem host. This measures a machine where the tray works; §10.2 covers the case where it does not, which the same call detects.
 
-**Compose tray API** (§10.1) was read from `ui-desktop-1.11.1.jar` with `javap` rather than from documentation for earlier versions.
-
-**Library compatibility** (§4.1): kotlinx-serialization-json 1.11.0 and kotlinx-datetime 0.8.0 compile against Kotlin 2.4.10 in this project's `:shared` module, verified with a source file exercising `@Serializable` round-tripping and the kotlinx-datetime calendar types rather than by resolution alone.
+**Library compatibility** (§4): kotlinx-serialization-json 1.11.0 and kotlinx-datetime 0.8.0 compile against Kotlin 2.4.10 in this project's `:shared` module, verified with a source file exercising `@Serializable` round-tripping and the kotlinx-datetime calendar types rather than by resolution alone.
 
 The measurements that constrain a choice are the Argon2 timings. Re-take them if the parameters in §6.5 change, or before assuming the unlock latency is acceptable on hardware materially slower than the reference machine.
 
@@ -1287,7 +1151,7 @@ The measurements that constrain a choice are the Argon2 timings. Re-take them if
 
 The password-only design requires typing the master password on every unlock, and §8.3 makes unlocks frequent by design — hiding to the tray discards the key. The intended improvement is an optional second unlock path backed by the operating system's credential store, reached through Touch ID on macOS, Windows Hello or the Windows user session on Windows, and the freedesktop Secret Service keyring on Linux.
 
-**Structure.** Envelope encryption already separates the KEK from the DEK. The keyring path stores a second copy of the DEK, so that either unlock path yields the same key and the body is never re-encrypted when the feature is toggled:
+**Structure.** Envelope encryption already separates the KEK from the DEK. The keyring path stores a second copy of the DEK, so either unlock path yields the same key and the body is never re-encrypted when the feature is toggled:
 
 ```
                     ┌──────────────────┐
@@ -1298,13 +1162,13 @@ The password-only design requires typing the master password on every unlock, an
   OS keyring entry ─────────────────────────► DEK (32 B) ──► AES-256-GCM ──► vault body
 ```
 
-The master password remains mandatory. The keyring is a convenience path, never the only one, so that a lost keyring entry, a re-enrolled fingerprint, or a move to another machine never renders the vault unopenable.
+The master password remains mandatory. The keyring is a convenience path, never the only one, so a lost keyring entry, a re-enrolled fingerprint or a move to another machine never renders the vault unopenable.
 
 ### 16.2 Consequences to state in the UI when this lands
 
 - Enabling keyring storage makes the platform authenticator sufficient to read every secret. The vault's security becomes the weaker of (master password, platform authenticator).
 - On Linux, the freedesktop Secret Service default `login` collection is readable by any application running as the same user once the keyring is unlocked (CVE-2018-19358). This is a property of the platform, not of TAuth, and it must be stated at the point where the user enables the feature.
-- On Windows without the Hello work in §16.6, and on Linux, no biometric or presence check occurs. The key is released to anyone with the user's logged-in session. The settings copy must name the actual protection ("Windows user account", "system keyring") rather than implying a fingerprint check.
+- On Windows without the Hello work in §16.6, and on Linux, no biometric or presence check occurs. The key is released to anyone with the user's logged-in session, so the settings copy must name the actual protection — "Windows user account", "system keyring" — rather than implying a fingerprint check.
 
 ### 16.3 File format impact
 
@@ -1372,9 +1236,10 @@ Keyring behaviour cannot be meaningfully unit-tested; it depends on a live platf
 ### 16.8 Other deferred items
 
 - **Rollback detection** (§2.2). Every vault TAuth writes stays authentic, so an older copy put back in place opens normally. Telling the current file from a past one needs a counter held where whoever can rewrite the vault cannot reach it, which on a single machine does not exist — a plaintext sidecar is rewritten in the same motion as the vault. It waits for a remote endpoint that can hold the counter.
-- **`OpenVault` giving up its parsed body** (§8.4) once the session has decoded every secret out of it, so that the base32 text ends at the decode rather than at the lock. The handle carries the DEK and the body together, and the session keeps it for the key, so dropping the body means a handle that answers for one and not the other, and a write path that rebuilds the body from the session's own state. Rebuilding re-encodes each secret from its decoded bytes, which is a different string from the one imported wherever the import carried padding, lowercase or whitespace — §6.4 stores the text as imported so that an export reproduces the original URI.
-- **Screen-region QR capture** (§9.5), pending a decision on the macOS Screen Recording prompt and a Wayland portal integration.
-- **Narrowed jlink module list** replacing `includeAllModules = true` (§4.3), once the packaged artifact is verified on each OS.
+- **`OpenVault` giving up its parsed body** (§8.4) once the session has decoded every secret out of it, so the base32 text ends at the decode rather than at the lock. The handle carries the DEK and the body together, and the session keeps it for the key, so dropping the body means a handle that answers for one and not the other, and a write path that rebuilds the body from the session's own state. Rebuilding re-encodes each secret from its decoded bytes, which is a different string from the one imported wherever the import carried padding, lowercase or whitespace — §6.4 stores the text as imported so that an export reproduces the original URI.
+- **Screen-region QR capture** (§9.5). It requires `java.awt.Robot` screen capture permission, which on macOS triggers a Screen Recording privacy prompt and on Wayland needs a portal integration.
+- **Narrowed jlink module list** replacing `includeAllModules = true` (§4.1), once the packaged artifact is verified on each OS.
+- **System accent-colour following on Windows** (§10.2).
 
 ---
 
@@ -1391,7 +1256,6 @@ Keyring behaviour cannot be meaningfully unit-tested; it depends on a live platf
 - [`javax.crypto.spec.GCMParameterSpec` javadoc](https://docs.oracle.com/javase/9/docs/api/javax/crypto/spec/GCMParameterSpec.html)
 - [Compose Multiplatform — Top-level windows management](https://kotlinlang.org/docs/multiplatform/compose-desktop-top-level-windows-management.html)
 - [Compose Multiplatform — Desktop-only API](https://kotlinlang.org/docs/multiplatform/compose-desktop-components.html)
-- [Compose Multiplatform — Menu, tray and notifications tutorial](https://github.com/JetBrains/compose-multiplatform/blob/master/tutorials/Tray_Notifications_MenuBar_new/README.md)
 - [Compose Multiplatform — Native distributions](https://kotlinlang.org/docs/multiplatform/compose-native-distribution.html)
 - [`java.awt.SystemTray` javadoc](https://docs.oracle.com/en/java/javase/21/docs/api/java.desktop/java/awt/SystemTray.html)
 - [AppIndicator and KStatusNotifierItem Support — GNOME extension](https://extensions.gnome.org/extension/615/appindicator-support/)
@@ -1399,7 +1263,7 @@ Keyring behaviour cannot be meaningfully unit-tested; it depends on a live platf
 - [ComposeNativeTray](https://github.com/kdroidFilter/ComposeNativeTray)
 - [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir/latest/)
 
-### Referenced by §16 (Future Improvements) only
+### Referenced by §16 only
 
 - [swiesend/secret-service — Secret Service API for Java](https://github.com/swiesend/secret-service)
 - [Apple — `SecAccessControlCreateWithFlags` and data protection keychain discussion](https://developer.apple.com/forums/thread/721649)

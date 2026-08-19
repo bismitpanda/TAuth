@@ -40,7 +40,6 @@ class WindowRaise internal constructor(private val monitor: InputMonitor) {
     // focus itself, so focus gained would report the raise as the arrival that ends it.
     private suspend fun awaitInput() {
         val input = Channel<Unit>(Channel.CONFLATED)
-        // The callback arrives on the toolkit's thread; the channel is what carries it to here.
         val subscription = monitor.listen { input.trySend(Unit) }
         try {
             input.receive()

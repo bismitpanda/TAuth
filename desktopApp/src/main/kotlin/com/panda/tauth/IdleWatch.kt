@@ -47,8 +47,6 @@ internal object AwtInputMonitor : InputMonitor {
     }
 }
 
-// The wait is a suspension rather than a timer thread, so the effect that owns it drops the interval
-// when the window leaves the screen instead of leaving a thread to report on a window that is gone.
 internal fun interface IdleDelay {
     suspend fun elapse(minutes: Int)
 }
@@ -75,7 +73,6 @@ class IdleWatch internal constructor(private val monitor: InputMonitor, private 
         // symbol is scanned with both hands on a phone.
         if (isSuppressed) return
         val input = Channel<Unit>(Channel.CONFLATED)
-        // The callback arrives on the toolkit's thread; the channel is what carries it to here.
         val subscription = monitor.listen { input.trySend(Unit) }
         try {
             var isIdle = false

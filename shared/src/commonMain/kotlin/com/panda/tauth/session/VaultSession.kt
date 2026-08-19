@@ -49,8 +49,6 @@ import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
-// The wait is a suspension rather than a timer thread, so cancelling the scope that owns it drops a
-// pending lock instead of leaving a thread to fire one at a session that has moved on.
 internal fun interface LockDelay {
     suspend fun elapse(seconds: Int)
 }
@@ -65,7 +63,6 @@ private class Attempt(val previous: SessionState, val epoch: Int)
 private fun VaultBody.replacing(entry: VaultEntry): VaultBody =
     copy(entries = entries.map { if (it.id == entry.id) entry else it })
 
-// The key material is private and no member hands it out: callers ask for an operation, not a key.
 // The scope belongs to the application, so shutting the application down cancels a pending lock.
 class VaultSession internal constructor(
     private val file: VaultFile,
@@ -147,18 +144,14 @@ class VaultSession internal constructor(
             commit(open, open.body.copy(policy = policy), Unit)
         }
 
-    // A copy of the vault file, for the caller to place where it likes. What leaves is the ciphertext
-    // the file already holds, so it carries no disclosure gate.
+    // What leaves is the ciphertext the file already holds, so this carries no disclosure gate.
     suspend fun exportEncrypted(): Outcome<ByteArray, VaultReadError> = withContext(Dispatchers.IO) {
-        // Behind the lock the session's writes take, so the copy is of the file its state describes.
         vaultWork.withLock { file.read() }
     }
 
     // Installs nothing: neither outcome replaces the data key, touches a decoded secret, bumps the
     // epoch or moves the published state, so a wrong answer at the gate is not a lock.
     suspend fun verifyPassword(password: CharArray): Outcome<Unit, PasswordGateError> = vaultWork.withLock {
-        // A closed vault has nothing to disclose, and answering here would turn the gate into an
-        // unlock that leaves the session locked.
         val header = exclusively(guard) { vault?.header } ?: return@withLock Outcome.Failure(VaultError.VaultClosed)
         withContext(Dispatchers.Default) { VaultCodec.verify(header, password) }
     }
@@ -168,8 +161,7 @@ class VaultSession internal constructor(
     suspend fun discloseUri(id: String, password: CharArray): Outcome<String, DiscloseError> =
         verifyPassword(password).flatMap { uriFor(id) }
 
-    // Every secret in the vault at once, which is the migration path §9.9 exists for. Checked first
-    // like the disclosure above, and reported through the gate's own view since it names no entry.
+    // Reported through the gate's own view rather than the disclosure's, since it names no entry.
     suspend fun disclosePlaintext(password: CharArray, format: ExportFormat): Outcome<String, PasswordGateError> =
         verifyPassword(password).flatMap { plaintextFor(format) }
 
@@ -236,7 +228,6 @@ class VaultSession internal constructor(
         if (remaining.size == open.body.entries.size) {
             return@onOpenVault Outcome.Failure(VaultError.NoSuchEntry)
         }
-        // The gap this leaves in the order is closed by the renumbering the write does.
         val outcome = commit(open, open.body.copy(entries = remaining), Unit)
         // The key is zeroed only once the file has stopped carrying the entry it belongs to. A write
         // that fails leaves that entry in the vault, and the session still generates its codes.
@@ -244,15 +235,12 @@ class VaultSession internal constructor(
         outcome
     }
 
-    // The index is a position in the list the account list draws, which is the entries in order.
     suspend fun moveEntry(id: String, toIndex: Int): Outcome<Unit, EntryChangeError> =
         onOpenVault(VaultError.VaultClosed) { open ->
             val ordered = open.body.entries.sortedBy { it.orderIndex }.toMutableList()
             val from = ordered.indexOfFirst { it.id == id }
             if (from < 0) return@onOpenVault Outcome.Failure(VaultError.NoSuchEntry)
             val moved = ordered.removeAt(from)
-            // A drop lands somewhere in the list it was dragged over, and an index past either end of
-            // it is that end.
             ordered.add(toIndex.coerceIn(0, ordered.size), moved)
             val renumbered = ordered.mapIndexed { index, entry -> entry.copy(orderIndex = index) }
             commit(open, open.body.copy(entries = renumbered), Unit)
@@ -264,8 +252,6 @@ class VaultSession internal constructor(
         onOpenVault(VaultError.VaultClosed) { open ->
             val entry = open.body.entries.find { it.id == id }
                 ?: return@onOpenVault Outcome.Failure(VaultError.NoSuchEntry)
-            // A counter belongs to a hotp entry and a period to a totp one, and the model admits no
-            // entry carrying both or neither.
             val counter = entry.counter ?: return@onOpenVault Outcome.Failure(
                 VaultError.InvalidEntry("only a hotp entry has a counter to advance"),
             )
@@ -274,7 +260,6 @@ class VaultSession internal constructor(
                 // server has already consumed. Editing the counter is how this entry moves again.
                 return@onOpenVault Outcome.Failure(VaultError.InvalidEntry("the counter is at its maximum"))
             }
-            // The key is lent for the length of the generation and never copied out of the block.
             val code = secrets[id]?.lendOrNull { key -> Hotp.generate(key, counter, entry.algorithm, entry.digits) }
                 ?: return@onOpenVault Outcome.Failure(VaultError.VaultClosed)
             commit(open, open.body.replacing(entry.copy(counter = counter + 1uL)), code)

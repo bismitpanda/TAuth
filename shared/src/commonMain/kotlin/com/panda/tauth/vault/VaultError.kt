@@ -5,8 +5,7 @@ sealed interface VaultError {
     // Absence established by looking. A failure to look is Io: this sends a caller to the create flow.
     data object NoVaultFile : VaultReadError
 
-    // Creation refuses a path that already holds a vault, because the write would replace every
-    // secret in it with those of a vault whose password the file's owner may never have entered.
+    // The write would replace every secret in the vault already there.
     data object VaultFileExists : VaultCreateError
 
     // The unwrap did not authenticate: a wrong password, or a salt or wrap block rewritten by
@@ -78,7 +77,6 @@ sealed interface VaultRewriteError : VaultError
 
 sealed interface EntryWriteError : VaultError
 
-// Storing an entry the vault does not hold yet, and changing one it does.
 sealed interface EntryAddError : EntryWriteError
 
 sealed interface EntryChangeError : EntryWriteError
@@ -102,7 +100,6 @@ sealed interface VaultReadError :
     VaultUnlockError,
     VaultRewriteError
 
-// Encoding a body and putting it on disk, which is every write the session makes through an open vault.
 sealed interface VaultCommitError :
     VaultCreateError,
     VaultRewriteError,
@@ -131,7 +128,6 @@ sealed interface VaultAdoptError :
     VaultUnlockError,
     VaultRewriteError
 
-// The check at the disclosure gate, and finding the entry it releases once the check has passed.
 sealed interface PasswordGateError : DiscloseError
 
 sealed interface EntryLookupError :

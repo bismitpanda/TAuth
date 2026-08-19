@@ -22,10 +22,8 @@ data class WindowPresence(
 sealed interface WindowReport {
     data class Trigger(val reason: LockReason) : WindowReport
 
-    // The window is back on the screen, which is what takes a scheduled relock back.
     data object Returned : WindowReport
 
-    // Two facts at once: the window is back, and it is unfocused.
     data object ReturnedUnfocused : WindowReport
 
     data object Raised : WindowReport

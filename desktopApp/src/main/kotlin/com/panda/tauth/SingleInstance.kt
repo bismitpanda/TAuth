@@ -43,7 +43,6 @@ private const val MAX_PORT_FILE_BYTES = 16
 private const val MIN_PORT = 1
 private const val MAX_PORT = 65535
 
-// The kernel chooses the port; the file is how the next launch learns it.
 private const val EPHEMERAL_PORT = 0
 
 // One connection is served at a time, so a peer that stalls delays the next launch's handshake by
@@ -82,7 +81,6 @@ private val PORT_FILE_WRITE = arrayOf<OpenOption>(
 // What a launch turned out to be. Primary and Unprotected both open a window; Superseded exits with
 // status 0, having handed its request to the instance that was already running.
 sealed interface InstanceRole {
-    // Holds the instance lock and answers SHOW for the life of the process.
     class Primary internal constructor(
         private val listener: ServerSocket,
         private val lock: HeldInstanceLock,
@@ -164,7 +162,6 @@ sealed interface InstanceRole {
         }
     }
 
-    // A running instance took the show request. This process opens no window.
     data object Superseded : InstanceRole
 
     // The window opens without single-instance service. Two live instances each hold their own

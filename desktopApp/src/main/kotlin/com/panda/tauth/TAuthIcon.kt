@@ -8,14 +8,13 @@ import com.panda.tauth.resources.Res
 import com.panda.tauth.resources.tauth
 import org.jetbrains.compose.resources.painterResource
 
-// The mark is drawn once, in the drawable this reads, and §4.3's packaged icons are cut from the
-// same file, so the tray, the title bar and the installer cannot disagree about it.
+// §4.1's packaged icons are cut from the drawable this reads, so the title bar and the installer
+// cannot disagree about the mark.
 @Composable
 internal fun tauthIcon(): Painter = ToFit(painterResource(Res.drawable.tauth))
 
-// The drawable carries the size of its own viewBox, and a tray asking for a smaller square draws
-// that many pixels of it rather than the whole. Claiming no size of its own is what makes the
-// drawing scale to the square it is given instead of being cropped to the corner of one.
+// The drawable carries its viewBox as an intrinsic size, and a window icon slot smaller than that
+// draws a corner of it. Claiming no size is what makes it scale to the square it is given.
 private class ToFit(private val mark: Painter) : Painter() {
     override val intrinsicSize: Size = Size.Unspecified
 

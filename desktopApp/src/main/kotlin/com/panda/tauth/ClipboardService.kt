@@ -18,8 +18,7 @@ import kotlin.time.Duration.Companion.seconds
 
 private val LOGGER = System.getLogger("com.panda.tauth.ClipboardService")
 
-// What a clear attempt did. A clipboard holding anything else is left alone rather than reported as
-// a failure: the user copying over TAuth's string is the outcome the equality check exists to reach.
+// A clipboard holding anything else is left alone rather than reported as a failure.
 enum class ClipboardClear {
     CLEARED,
     SUPERSEDED,
@@ -29,15 +28,11 @@ enum class ClipboardClear {
 // Never thrown; returned. Separate from VaultError because a clipboard failure says nothing about
 // the vault and must not reach a message written about one.
 sealed interface ClipboardError {
-    // The platform refused the operation, which AWT reports when another application holds the
-    // clipboard or when the toolkit has no display.
     data class Unavailable(val cause: Throwable) : ClipboardError
 
-    // The scope that would own the timed clear was already cancelled when the copy was asked for,
-    // so nothing was placed.
+    // The scope was already cancelled when the copy was asked for, so nothing was placed.
     data object ShuttingDown : ClipboardError
 
-    // A delay below zero would disable the timed clear in a call that appears to set one.
     data class InvalidDelay(val seconds: Int) : ClipboardError
 }
 
@@ -80,8 +75,6 @@ internal object AwtClipboard : SystemClipboard {
     }
 }
 
-// The wait is a suspension rather than a java.util.Timer, so cancelling the scope that owns the
-// coroutine stops a pending clear instead of leaving a thread to fire it later.
 internal fun interface ClearDelay {
     suspend fun elapse(seconds: Int)
 }
@@ -109,7 +102,6 @@ class ClipboardService internal constructor(
 
     private var pending: Job? = null
 
-    // Zero seconds disables the timed clear and is the user's to choose; a negative delay is refused.
     fun copy(text: String, clearAfterSeconds: Int): Outcome<Unit, ClipboardError> = lock.withLock {
         if (clearAfterSeconds < 0) {
             return@withLock Outcome.Failure(ClipboardError.InvalidDelay(clearAfterSeconds))
@@ -164,10 +156,7 @@ class ClipboardService internal constructor(
     private fun clearNow(): Outcome<ClipboardClear, ClipboardError> {
         val ours = placed ?: return Outcome.Success(ClipboardClear.NOTHING_PLACED)
         val current = when (val read = clipboard.readText()) {
-            // The clear is skipped and the string stays outstanding, so the pending timer or a
-            // later lock retries it.
             is Outcome.Failure -> return read
-
             is Outcome.Success -> read.value
         }
         if (current != ours) {

@@ -96,7 +96,7 @@ private fun documentRow(position: Int, element: JsonElement, newId: () -> String
     // The entry model's own refusal, which states the rule and never the value.
     ImportRow.Refused(position, e.message ?: UNREADABLE_ENTRY)
 } catch (_: SerializationException) {
-    // Unlike the above, this message quotes what it was reading.
+    // Discarded: a parser quotes the document it stopped in, and this one holds every secret.
     ImportRow.Refused(position, UNREADABLE_ENTRY)
 }
 
