@@ -27,11 +27,11 @@ import kotlin.test.assertNull
 
 // The component's own wording, repeated here as literals so a changed message fails the test that
 // names it rather than following it.
-private const val CONFIRM_LABEL = "Disclose"
+private const val CONFIRM_LABEL = "Show"
 private const val CANCEL_LABEL = "Cancel"
 private const val PROGRESS_LABEL = "Checking your password"
-private const val WRONG_PASSWORD_MESSAGE = "That password did not open the vault."
-private const val DAMAGED_FILE_MESSAGE = "The vault file is damaged, so nothing can be disclosed from it."
+private const val WRONG_PASSWORD_MESSAGE = "That password is not correct."
+private const val DAMAGED_FILE_MESSAGE = "The vault file is damaged, so nothing can be shown from it."
 
 // The component takes the statement as a parameter, so the sentence a caller supplies is the
 // sentence on screen.

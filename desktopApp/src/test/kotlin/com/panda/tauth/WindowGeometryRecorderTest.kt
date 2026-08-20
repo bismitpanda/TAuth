@@ -17,9 +17,9 @@ import kotlin.test.assertEquals
 
 // Three geometries, no two of them sharing every member: the window opens at one, is dragged to the
 // second and resized to the third.
-private val OPENED = WindowGeometry(width = 960, height = 720, x = 100, y = 50)
-private val MOVED = WindowGeometry(width = 960, height = 720, x = 400, y = 50)
-private val RESIZED = WindowGeometry(width = 1280, height = 900, x = 400, y = 50)
+private val OPENED = WindowGeometry(width = 600, height = 720, x = 100, y = 50)
+private val MOVED = WindowGeometry(width = 600, height = 720, x = 400, y = 50)
+private val RESIZED = WindowGeometry(width = 680, height = 800, x = 400, y = 50)
 
 private fun stateOf(geometry: WindowGeometry, isMinimized: Boolean = false): WindowState = WindowState(
     isMinimized = isMinimized,

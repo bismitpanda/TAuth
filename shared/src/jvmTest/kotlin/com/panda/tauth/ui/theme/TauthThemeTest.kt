@@ -119,11 +119,22 @@ class TauthThemeTest {
     }
 
     @Test
-    fun `the code readout style is monospace`() {
-        val (light, _) = compose.readBothModes {
-            MaterialTheme.typography.displaySmall.fontFamily ?: FontFamily.Default
+    fun `the code readout is set in a different family from the body text`() {
+        val (families, _) = compose.readBothModes {
+            MaterialTheme.typography.displaySmall.fontFamily to MaterialTheme.typography.bodyLarge.fontFamily
         }
 
-        assertEquals(FontFamily.Monospace, light)
+        assertNotEquals(families.second, families.first)
+    }
+
+    @Test
+    fun `every text slot is set in a bundled family`() {
+        val (families, _) = compose.readBothModes {
+            with(MaterialTheme.typography) {
+                listOf(displaySmall, titleMedium, bodyLarge, labelMedium, headlineSmall).map { it.fontFamily }
+            }
+        }
+
+        assertTrue(families.none { it == null || it == FontFamily.Default }, "$families")
     }
 }

@@ -101,9 +101,9 @@ class PreferencesStoreTest {
     }
 
     @Test
-    fun `a window width past any display yields the ceiling`() {
+    fun `a window width past the widest the window opens at yields that width`() {
         writeFile("""{"window":{"width":2147483647}}""")
-        assertEquals(16384, store.load().window.width)
+        assertEquals(720, store.load().window.width)
     }
 
     @Test
@@ -132,7 +132,7 @@ class PreferencesStoreTest {
             sortOrder = SortOrder.RECENTLY_ADDED,
             startMinimised = true,
             minimiseToTray = false,
-            window = WindowGeometry(width = 1024, height = 800, x = 12, y = -34),
+            window = WindowGeometry(width = 640, height = 800, x = 12, y = -34),
         )
         store.save(preferences)
         assertEquals(preferences, store.load())

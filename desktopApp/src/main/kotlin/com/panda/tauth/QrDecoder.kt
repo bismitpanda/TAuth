@@ -21,7 +21,7 @@ import javax.imageio.ImageIO
 
 internal const val SCAN_DIALOG_TITLE = "Choose an image holding a QR code"
 
-// §9.5's list. The dialog filters on these, and a file that is none of them decodes to no image.
+// The dialog filters on these, and a file that is none of them decodes to no image.
 internal val SCANNABLE_EXTENSIONS = listOf("png", "jpg", "jpeg", "gif", "bmp")
 
 private val LOGGER = System.getLogger("com.panda.tauth.QrDecoder")

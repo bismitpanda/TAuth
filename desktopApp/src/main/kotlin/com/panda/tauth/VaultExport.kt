@@ -52,7 +52,7 @@ internal suspend fun chooseExportDestination(owner: Frame? = null): Path? =
 
 internal const val IMPORT_DIALOG_TITLE = "Choose the accounts to import"
 
-// The ceiling §6.2 puts on a vault file: nothing that would fit in one arrives larger than this.
+// The ceiling the file format puts on a vault: nothing that would fit in one arrives larger.
 private const val MAX_IMPORT_BYTES = 16L * 1024 * 1024
 
 // A file the user declines is nothing to import and nothing to report. The text is read whole
@@ -62,7 +62,7 @@ internal suspend fun readImportSource(destination: suspend () -> Path?): Outcome
     return withContext(Dispatchers.IO) {
         try {
             // Refused by size before it is read rather than by OutOfMemoryError afterwards, which is
-            // an Error no Outcome carries. The ceiling is the one §6.2 puts on a vault.
+            // an Error no Outcome carries.
             if (Files.size(path) > MAX_IMPORT_BYTES) {
                 Outcome.Failure(VaultError.Corrupt("that file is larger than any export TAuth writes"))
             } else {

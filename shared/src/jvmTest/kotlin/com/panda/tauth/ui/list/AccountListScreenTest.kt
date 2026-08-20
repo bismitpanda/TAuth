@@ -10,12 +10,9 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
-import androidx.compose.ui.test.filterToOne
 import androidx.compose.ui.test.getBoundsInRoot
-import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onChildren
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -64,9 +61,11 @@ private const val QR_CLOSE = "Close"
 private const val DELETE = "Delete"
 private const val DELETE_CONFIRM = "Delete account"
 private const val DELETE_CANCEL = "Keep account"
-private const val DISCLOSE = "Disclose"
+private const val DISCLOSE = "Show"
 private const val SORT_ISSUER = "Issuer A–Z"
+private const val SORT_ISSUER_REVERSED = "Issuer Z–A"
 private const val SORT_MANUAL = "Manual order"
+private const val SORT_OLDEST = "Oldest first"
 private const val EMPTY_HEADING_TEXT = "No accounts yet"
 private const val EMPTY_BODY_TEXT =
     "Add an account by pasting the otpauth:// URI its provider gave you, by reading an image of the " +
@@ -149,7 +148,7 @@ class AccountListScreenTest {
     private val clipboard = FakeClipboard()
 
     private var visible: Set<String> = emptySet()
-    private var chosenSort: SortOrder? = null
+    private var chosenSort: Pair<SortOrder, Boolean>? = null
     private var edited: String? = null
     private var deleted: String? = null
     private var moved: Pair<String, Int>? = null
@@ -229,37 +228,78 @@ class AccountListScreenTest {
     }
 
     @Test
-    fun `the sort control reports the order that was chosen`() {
+    fun `the menu offers every ordering`() {
         show()
 
-        compose.onNodeWithText(SORT_ISSUER).performClick()
+        openSortMenu()
 
-        compose.runOnIdle { assertEquals(SortOrder.ISSUER, chosenSort) }
+        SortChoice.entries.forEach { compose.onNodeWithTag(sortChoiceTag(it.label)).assertExists() }
     }
 
-    // Which ordering is in force reads off the control itself. The selected flag is what a screen
-    // reader and a test can see; the filled treatment beside it is not observable here.
+    @Test
+    fun `choosing an ordering reports it`() {
+        show()
+
+        openSortMenu()
+        compose.onNodeWithTag(sortChoiceTag(SORT_ISSUER)).performClick()
+
+        compose.runOnIdle { assertEquals(SortOrder.ISSUER to false, chosenSort) }
+    }
+
+    @Test
+    fun `choosing the reversed ordering reports it turned round`() {
+        show()
+
+        openSortMenu()
+        compose.onNodeWithTag(sortChoiceTag(SORT_ISSUER_REVERSED)).performClick()
+
+        compose.runOnIdle { assertEquals(SortOrder.ISSUER to true, chosenSort) }
+    }
+
+    @Test
+    fun `choosing the oldest first reports the stored order turned round`() {
+        show()
+
+        openSortMenu()
+        compose.onNodeWithTag(sortChoiceTag(SORT_OLDEST)).performClick()
+
+        compose.runOnIdle { assertEquals(SortOrder.RECENTLY_ADDED to true, chosenSort) }
+    }
+
+    @Test
+    fun `the stored order is offered in one direction only`() {
+        show()
+
+        openSortMenu()
+
+        compose.runOnIdle {
+            assertEquals(1, SortChoice.entries.count { it.order == SortOrder.MANUAL })
+        }
+    }
+
+    @Test
+    fun `the control carries no ordering name of its own`() {
+        show(sortOrder = SortOrder.ISSUER, isSortDescending = true)
+
+        compose.onNodeWithTag(SORT_MENU_TAG).assertTextEquals()
+    }
+
     @Test
     fun `the ordering in force is the one marked selected`() {
         show(sortOrder = SortOrder.ISSUER)
 
-        compose.onNodeWithText(SORT_ISSUER).assertIsSelected()
+        openSortMenu()
+
+        compose.onNodeWithTag(sortChoiceTag(SORT_ISSUER)).assertIsSelected()
     }
 
     @Test
     fun `an ordering not in force is not marked selected`() {
         show(sortOrder = SortOrder.ISSUER)
 
-        compose.onNodeWithText(SORT_MANUAL).assertIsNotSelected()
-    }
+        openSortMenu()
 
-    // A disabled control reads as one that cannot be had, which is the opposite of what the current
-    // choice is.
-    @Test
-    fun `the ordering in force stays pressable`() {
-        show(sortOrder = SortOrder.ISSUER)
-
-        compose.onNodeWithText(SORT_ISSUER).assertIsEnabled()
+        compose.onNodeWithTag(sortChoiceTag(SORT_MANUAL)).assertIsNotSelected()
     }
 
     // Each ordering lays the three rows out in an order neither of the others produces, so a screen
@@ -292,7 +332,7 @@ class AccountListScreenTest {
     fun `the add button reports a request to add`() {
         show()
 
-        compose.onNodeWithText(ADD).performClick()
+        compose.onNodeWithContentDescription(ADD).performClick()
 
         compose.runOnIdle { assertEquals(1, adds) }
     }
@@ -301,7 +341,7 @@ class AccountListScreenTest {
     fun `the lock button reports a lock`() {
         show()
 
-        compose.onNodeWithText(LOCK).performClick()
+        compose.onNodeWithContentDescription(LOCK).performClick()
 
         compose.runOnIdle { assertEquals(1, locks) }
     }
@@ -379,7 +419,7 @@ class AccountListScreenTest {
     fun `pressing the generate control shows the code it returned`() {
         show()
 
-        compose.onNodeWithText(GENERATE).performClick()
+        compose.onNodeWithContentDescription(GENERATE).performClick()
 
         compose.onNodeWithText(HOTP_GROUPED).assertIsDisplayed()
     }
@@ -388,9 +428,9 @@ class AccountListScreenTest {
     fun `pressing the generate control disables it`() {
         show()
 
-        compose.onNodeWithText(GENERATE).performClick()
+        compose.onNodeWithContentDescription(GENERATE).performClick()
 
-        compose.onNodeWithText(GENERATE).assertIsNotEnabled()
+        compose.onNodeWithContentDescription(GENERATE).assertIsNotEnabled()
     }
 
     // The ticker computes no hotp code, so a map carrying one for an hotp id is a map the screen must
@@ -399,7 +439,7 @@ class AccountListScreenTest {
     fun `an hotp row copies the code it generated rather than one supplied for its id`() {
         show(codes = mapOf(TOTP.id to TotpCode(TOTP_CODE, 30, 30), HOTP.id to TotpCode(TOTP_CODE, 30, 30)))
 
-        compose.onNodeWithText(GENERATE).performClick()
+        compose.onNodeWithContentDescription(GENERATE).performClick()
         compose.onNodeWithText(HOTP_GROUPED).performClick()
 
         compose.runOnIdle { assertEquals(listOf(HOTP_CODE), clipboard.texts) }
@@ -411,8 +451,8 @@ class AccountListScreenTest {
     fun `a second press while the control is cooling down spends no counter value`() {
         show()
 
-        compose.onNodeWithText(GENERATE).performClick()
-        compose.onNodeWithText(GENERATE).performClick()
+        compose.onNodeWithContentDescription(GENERATE).performClick()
+        compose.onNodeWithContentDescription(GENERATE).performClick()
 
         compose.runOnIdle { assertEquals(1, generations) }
     }
@@ -421,17 +461,17 @@ class AccountListScreenTest {
     fun `the generate control comes back once the interval has passed`() {
         show()
 
-        compose.onNodeWithText(GENERATE).performClick()
+        compose.onNodeWithContentDescription(GENERATE).performClick()
         compose.mainClock.advanceTimeBy(COOLDOWN_OVERSHOOT_MILLIS)
 
-        compose.onNodeWithText(GENERATE).assertIsEnabled()
+        compose.onNodeWithContentDescription(GENERATE).assertIsEnabled()
     }
 
     @Test
     fun `the generated code stays on screen once the interval has passed`() {
         show()
 
-        compose.onNodeWithText(GENERATE).performClick()
+        compose.onNodeWithContentDescription(GENERATE).performClick()
         compose.mainClock.advanceTimeBy(COOLDOWN_OVERSHOOT_MILLIS)
 
         compose.onNodeWithText(HOTP_GROUPED).assertIsDisplayed()
@@ -441,8 +481,8 @@ class AccountListScreenTest {
     fun `collapsing the row takes the generated code off the screen`() {
         show()
 
-        compose.onNodeWithText(GENERATE).performClick()
-        compose.onNodeWithText("Hide code").performClick()
+        compose.onNodeWithContentDescription(GENERATE).performClick()
+        compose.onNodeWithContentDescription("Hide code").performClick()
 
         compose.onNodeWithText(HOTP_GROUPED).assertDoesNotExist()
     }
@@ -464,7 +504,7 @@ class AccountListScreenTest {
         generateAnswer = Outcome.Failure(VaultError.LockedByAnotherProcess("vault.lock"))
         show()
 
-        compose.onNodeWithText(GENERATE).performClick()
+        compose.onNodeWithContentDescription(GENERATE).performClick()
 
         compose.onNodeWithText(HOTP_GROUPED).assertDoesNotExist()
     }
@@ -474,9 +514,9 @@ class AccountListScreenTest {
         generateAnswer = Outcome.Failure(VaultError.LockedByAnotherProcess("vault.lock"))
         show()
 
-        compose.onNodeWithText(GENERATE).performClick()
+        compose.onNodeWithContentDescription(GENERATE).performClick()
 
-        compose.onNodeWithText(GENERATE).performClick()
+        compose.onNodeWithContentDescription(GENERATE).performClick()
 
         compose.runOnIdle { assertEquals(2, generations) }
     }
@@ -526,7 +566,7 @@ class AccountListScreenTest {
         openUriGate()
         confirmGateWith(WRONG_PASSWORD)
 
-        compose.onNodeWithText("That password did not open the vault.").assertIsDisplayed()
+        compose.onNodeWithText("That password is not correct.").assertIsDisplayed()
     }
 
     @Test
@@ -803,7 +843,7 @@ class AccountListScreenTest {
     }
 
     private fun openMenuOn(id: String) {
-        compose.onAllNodesWithText(MENU)[if (id == HOTP.id) 0 else 1].performClick()
+        compose.onAllNodesWithContentDescription(MENU)[if (id == HOTP.id) 0 else 1].performClick()
     }
 
     private fun openUriGate() {
@@ -818,10 +858,7 @@ class AccountListScreenTest {
 
     // The search field is on screen too, so the gate's field is reached through the gate's own tag.
     private fun confirmGateWith(password: String) {
-        compose.onNodeWithTag(DISCLOSURE_PASSWORD_TAG)
-            .onChildren()
-            .filterToOne(hasSetTextAction())
-            .performTextInput(password)
+        compose.onNodeWithTag(DISCLOSURE_PASSWORD_TAG).performTextInput(password)
         compose.onNodeWithText(DISCLOSE).performClick()
     }
 
@@ -872,13 +909,16 @@ class AccountListScreenTest {
     fun `a version the reader does not know shows its own message`() {
         show(error = VaultError.UnsupportedVersion(found = 2, supported = 1))
 
-        compose.onNodeWithText("The vault file is in a format this version of TAuth does not read.")
+        compose.onNodeWithText("This vault was made by a newer version of TAuth.")
             .assertIsDisplayed()
     }
+
+    private fun openSortMenu() = compose.onNodeWithTag(SORT_MENU_TAG).performClick()
 
     private fun show(
         entries: List<UnlockedEntry> = listOf(TOTP, HOTP),
         sortOrder: SortOrder = SortOrder.MANUAL,
+        isSortDescending: Boolean = false,
         clearSeconds: Int = CLEAR_SECONDS,
         codes: Map<String, TotpCode> = mapOf(TOTP.id to TotpCode(TOTP_CODE, 30, 30)),
         height: Dp = Dp.Unspecified,
@@ -891,6 +931,7 @@ class AccountListScreenTest {
                     codes = codes,
                     modifier = if (height == Dp.Unspecified) Modifier.fillMaxSize() else Modifier.height(height),
                     sortOrder = sortOrder,
+                    isSortDescending = isSortDescending,
                     clipboardClearSeconds = clearSeconds,
                     clipboard = clipboard,
                     qrEncoding = QrEncoding { text ->
@@ -898,7 +939,7 @@ class AccountListScreenTest {
                         FAKE_SYMBOL
                     },
                     error = error,
-                    onSortOrderChange = { chosenSort = it },
+                    onSortChange = { order, isDescending -> chosenSort = order to isDescending },
                     onVisibleChange = { visible = it },
                     onIdleLockSuppressed = { idleHolds += it },
                     onSaveQrImage = { symbol ->

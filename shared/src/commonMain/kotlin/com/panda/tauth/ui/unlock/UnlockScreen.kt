@@ -2,6 +2,7 @@ package com.panda.tauth.ui.unlock
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
@@ -12,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.testTag
@@ -25,7 +27,7 @@ import com.panda.tauth.vault.VaultError
 import com.panda.tauth.vault.VaultUnlockError
 
 private const val TITLE = "Unlock your vault"
-private const val PASSWORD_LABEL = "Master password"
+private const val PASSWORD_LABEL = "Password"
 private const val UNLOCK_LABEL = "Unlock"
 private const val PROGRESS_LABEL = "Checking your password"
 
@@ -70,8 +72,8 @@ fun UnlockScreen(
     }
 
     Column(
-        modifier = modifier.padding(spacing.large),
-        verticalArrangement = Arrangement.spacedBy(spacing.medium),
+        modifier = modifier.fillMaxSize().padding(spacing.large),
+        verticalArrangement = Arrangement.spacedBy(spacing.medium, Alignment.CenterVertically),
     ) {
         Text(TITLE, style = MaterialTheme.typography.headlineSmall)
         subtitle?.let { reported ->
@@ -107,20 +109,18 @@ fun UnlockScreen(
 }
 
 // A lock the user asked for and an exit lock need no explanation; what is left fired while the user's
-// attention was elsewhere. No else branch: a LockReason added elsewhere has to be judged here.
+// attention was elsewhere.
 private fun subtitleFor(reason: LockReason): String? = when (reason) {
     LockReason.Manual, LockReason.Exit -> null
-    LockReason.Idle -> "The vault locked itself after a period of inactivity."
-    LockReason.HiddenToTray -> "The vault locked when the window was hidden to the tray."
-    LockReason.Minimised -> "The vault locked when the window was minimised."
-    LockReason.FocusLost -> "The vault locked when the window lost focus."
+    LockReason.Idle -> "Locked automatically after a period of inactivity."
+    LockReason.HiddenToTray -> "Locked when the window was hidden to the tray."
+    LockReason.Minimised -> "Locked when the window was minimised."
+    LockReason.FocusLost -> "Locked when the window lost focus."
 }
 
-// No else branch, over the cases an unlock reports: a case joining that view has to be given a message
-// here before this compiles again.
 private fun messageFor(error: VaultUnlockError): String = when (error) {
     // Kept apart from the damage cases below: this one means retype, those mean the file.
-    is VaultError.WrongPassword -> "That password did not open the vault."
+    is VaultError.WrongPassword -> "That password is not correct."
 
     // The body authenticated and then failed to read, which is the same damaged file to the person
     // in front of it as a failed tag.
@@ -129,7 +129,7 @@ private fun messageFor(error: VaultUnlockError): String = when (error) {
 
     is VaultError.NoVaultFile -> "There is no vault file at this location."
 
-    is VaultError.UnsupportedVersion -> "The vault file is in a format this version of TAuth does not read."
+    is VaultError.UnsupportedVersion -> "This vault was made by a newer version of TAuth."
 
     is VaultError.Io -> "The vault file could not be read."
 

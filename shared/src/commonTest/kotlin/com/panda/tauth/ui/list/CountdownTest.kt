@@ -4,9 +4,11 @@ import com.panda.tauth.ui.theme.DarkTauthColors
 import com.panda.tauth.ui.theme.LightTauthColors
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 // The boundary is stated here as the literal five seconds rather than read from the constant the
-// function uses, so a change to that constant fails this rather than following it.
+// functions use, so a change to that constant fails this rather than following it.
 private const val EXPIRING_BOUNDARY = 5
 
 class CountdownTest {
@@ -30,6 +32,16 @@ class CountdownTest {
         assertEquals(LightTauthColors.countdownExpiring, countdownColor(1, LightTauthColors))
     }
 
+    @Test
+    fun `a code on the boundary reports itself expiring`() {
+        assertTrue(isExpiring(EXPIRING_BOUNDARY))
+    }
+
+    @Test
+    fun `a code above the boundary reports itself running`() {
+        assertFalse(isExpiring(EXPIRING_BOUNDARY + 1))
+    }
+
     // The sweep is the entry's own period, not the default. Two accounts at the same reading draw
     // different arcs, which is the whole reason a code carries the period it was generated under.
     @Test
@@ -45,6 +57,16 @@ class CountdownTest {
     @Test
     fun `a code with its whole period left fills the ring`() {
         assertEquals(1f, countdownFraction(secondsRemaining = 30, period = 30))
+    }
+
+    @Test
+    fun `a reading past the boundary fills nothing rather than sweeping backwards`() {
+        assertEquals(0f, countdownFraction(secondsRemaining = -1, period = 30))
+    }
+
+    @Test
+    fun `a reading longer than the period fills the ring and no more`() {
+        assertEquals(1f, countdownFraction(secondsRemaining = 45, period = 30))
     }
 
     // A totp entry carries no period only where the model would already have refused it, and a

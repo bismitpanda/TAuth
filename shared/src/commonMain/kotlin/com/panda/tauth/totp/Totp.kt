@@ -9,8 +9,7 @@ object Totp {
     // RFC 6238 §4.1: T0 is the Unix epoch.
     private const val T0_SECONDS = 0L
 
-    // RFC 6238 §4.2: T = floor((currentUnixSeconds - T0) / X). Errata 8672: T is 64-bit, and a
-    // 32-bit T fails in 2038.
+    // RFC 6238 §4.2, errata 8672: T is 64-bit. A 32-bit T fails in 2038.
     fun counterAt(epochSeconds: Long, period: Int): Long {
         require(period >= PERIOD_MIN) { "period must be at least $PERIOD_MIN" }
         return (epochSeconds - T0_SECONDS).floorDiv(period.toLong())

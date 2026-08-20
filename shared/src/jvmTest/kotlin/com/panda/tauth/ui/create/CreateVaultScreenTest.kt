@@ -23,8 +23,8 @@ import kotlin.test.assertNull
 
 // The screen's own wording, repeated here as literals so a changed message fails the test that
 // names it rather than following it.
-private const val ACKNOWLEDGE_LABEL = "I understand that losing my master password loses every stored secret"
-private const val NOTE_HEADING = "Your master password cannot be recovered"
+private const val ACKNOWLEDGE_LABEL = "I understand that if I lose my password, I lose every code stored here"
+private const val NOTE_HEADING = "Your password cannot be recovered"
 private const val CREATE_LABEL = "Create vault"
 
 class CreateVaultScreenTest {
@@ -247,7 +247,7 @@ class CreateVaultScreenTest {
     fun `a wrong password shows the password message`() {
         show(error = VaultError.WrongPassword)
 
-        compose.onNodeWithText("The vault was written but the password did not open it.").assertIsDisplayed()
+        compose.onNodeWithText("The vault was created but the password did not open it.").assertIsDisplayed()
     }
 
     @Test
@@ -269,7 +269,7 @@ class CreateVaultScreenTest {
     fun `a vault file gone by the read-back shows its own message`() {
         show(error = VaultError.NoVaultFile)
 
-        compose.onNodeWithText("The vault file was written but was gone when it was read back.")
+        compose.onNodeWithText("The vault was created but could not be found afterwards.")
             .assertIsDisplayed()
     }
 
@@ -291,7 +291,7 @@ class CreateVaultScreenTest {
     fun `a version the reader does not know shows its own message`() {
         show(error = VaultError.UnsupportedVersion(found = 2, supported = 1))
 
-        compose.onNodeWithText("The vault file is in a format this version of TAuth does not read.")
+        compose.onNodeWithText("This vault was made by a newer version of TAuth.")
             .assertIsDisplayed()
     }
 
@@ -314,7 +314,7 @@ class CreateVaultScreenTest {
     fun `an integrity failure does not show the password message`() {
         show(error = VaultError.IntegrityFailure)
 
-        compose.onNodeWithText("The vault was written but the password did not open it.").assertDoesNotExist()
+        compose.onNodeWithText("The vault was created but the password did not open it.").assertDoesNotExist()
     }
 
     private fun show(isBusy: Boolean = false, error: VaultCreateError? = null) {

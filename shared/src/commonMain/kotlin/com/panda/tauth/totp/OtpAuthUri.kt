@@ -112,8 +112,6 @@ data class OtpAuthUri(
         private const val WRAPPING_WHITESPACE = " \t\r\n"
 
         fun parse(input: String): Outcome<OtpAuthUri, UriParseError> {
-            // A paste carries the wrapping of the window it came from; only these four characters
-            // are shed, and only at the ends.
             val trimmed = input.trim { it in WRAPPING_WHITESPACE }
             if (!trimmed.startsWith(SCHEME, ignoreCase = true)) {
                 return Outcome.Failure(VaultError.MalformedUri("not an otpauth URI"))

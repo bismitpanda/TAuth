@@ -1,10 +1,7 @@
 package com.panda.tauth.ui.settings
 
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.filterToOne
-import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onChildren
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -29,7 +26,7 @@ import kotlin.test.assertNull
 // The flow's own wording, written out here so a changed label fails the test naming it.
 private const val CONTINUE = "Continue"
 private const val CANCEL = "Cancel"
-private const val DISCLOSE = "Disclose"
+private const val DISCLOSE = "Show"
 private const val JSON = "JSON"
 private const val URI_LIST = "otpauth:// URIs"
 
@@ -176,7 +173,7 @@ class PlaintextExportTest {
         compose.onNodeWithText(CONTINUE).performClick()
         confirmWith(WRONG_PASSWORD)
 
-        compose.onNodeWithText("That password did not open the vault.").assertIsDisplayed()
+        compose.onNodeWithText("That password is not correct.").assertIsDisplayed()
     }
 
     @Test
@@ -211,10 +208,7 @@ class PlaintextExportTest {
     }
 
     private fun confirmWith(password: String) {
-        compose.onNodeWithTag(DISCLOSURE_PASSWORD_TAG)
-            .onChildren()
-            .filterToOne(hasSetTextAction())
-            .performTextInput(password)
+        compose.onNodeWithTag(DISCLOSURE_PASSWORD_TAG).performTextInput(password)
         compose.onNodeWithText(DISCLOSE).performClick()
     }
 

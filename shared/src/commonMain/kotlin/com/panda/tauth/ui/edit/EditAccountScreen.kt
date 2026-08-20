@@ -3,7 +3,6 @@ package com.panda.tauth.ui.edit
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -27,7 +26,9 @@ import com.panda.tauth.totp.HashAlgorithm
 import com.panda.tauth.totp.OtpType
 import com.panda.tauth.ui.components.ChoiceRow
 import com.panda.tauth.ui.components.FormField
+import com.panda.tauth.ui.theme.ButtonLabel
 import com.panda.tauth.ui.theme.LocalSpacing
+import com.panda.tauth.ui.theme.TauthIcons
 import com.panda.tauth.vault.EntryChangeError
 import com.panda.tauth.vault.EntryEdit
 import com.panda.tauth.vault.EntryEditDraft
@@ -76,7 +77,7 @@ fun EditAccountScreen(
     val edit = (resolved as? Outcome.Success)?.value
 
     Column(
-        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(spacing.large),
+        modifier = modifier.verticalScroll(rememberScrollState()).padding(spacing.large),
         verticalArrangement = Arrangement.spacedBy(spacing.medium),
     ) {
         Text(EDIT_TITLE, style = MaterialTheme.typography.headlineSmall)
@@ -116,7 +117,9 @@ fun EditAccountScreen(
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(spacing.small)) {
-            Button(onClick = { edit?.let(onSave) }, enabled = edit != null && !isBusy) { Text(EDIT_SAVE_LABEL) }
+            Button(onClick = { edit?.let(onSave) }, enabled = edit != null && !isBusy) {
+                ButtonLabel(TauthIcons.save, EDIT_SAVE_LABEL)
+            }
             TextButton(onClick = onCancel, enabled = !isBusy) { Text(CANCEL_LABEL) }
         }
         if (isBusy) {
@@ -194,8 +197,6 @@ private fun UnlockedEntry.toDraft(): EntryEditDraft = EntryEditDraft(
     counter = counter?.toString().orEmpty(),
 )
 
-// No else branch, over the cases a change to an entry reports: a case joining that view has to be given
-// a message here before this compiles again.
 private fun problemFor(error: EntryChangeError): String = when (error) {
     is VaultError.InvalidEntry -> "The change was refused: ${error.detail}."
     is VaultError.NoSuchEntry -> "That account is no longer in the vault."
@@ -203,5 +204,5 @@ private fun problemFor(error: EntryChangeError): String = when (error) {
     is VaultError.LockedByAnotherProcess -> "Another TAuth process is holding the vault file."
     is VaultError.Io -> "The vault file could not be written."
     is VaultError.TooLarge -> "The vault is larger than the file format allows."
-    is VaultError.UnsupportedVersion -> "The vault file is in a format this version of TAuth does not read."
+    is VaultError.UnsupportedVersion -> "This vault was made by a newer version of TAuth."
 }

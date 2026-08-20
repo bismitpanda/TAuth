@@ -15,13 +15,13 @@ data class TauthColors(
 )
 
 val LightTauthColors: TauthColors = TauthColors(
-    countdown = Color(0xFF2F5DA8),
+    countdown = Color(0xFF4A6100),
     countdownExpiring = Color(0xFFB26A00),
 )
 
 val DarkTauthColors: TauthColors = TauthColors(
-    countdown = Color(0xFFADC6FF),
-    countdownExpiring = Color(0xFFFFB74D),
+    countdown = Accent,
+    countdownExpiring = Color(0xFFFFA726),
 )
 
 // No default set: a composable drawing outside TauthTheme has no Material scheme to sit these

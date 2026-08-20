@@ -8,7 +8,9 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -24,6 +26,8 @@ import com.panda.tauth.session.VaultSession
 import com.panda.tauth.settings.SecurityPolicy
 import com.panda.tauth.settings.SortOrder
 import com.panda.tauth.settings.Theme
+import com.panda.tauth.ui.list.SORT_MENU_TAG
+import com.panda.tauth.ui.list.sortChoiceTag
 import com.panda.tauth.ui.settings.CONFIRM_PASSWORD_TAG
 import com.panda.tauth.ui.settings.CURRENT_PASSWORD_TAG
 import com.panda.tauth.ui.settings.NEW_PASSWORD_TAG
@@ -62,7 +66,7 @@ private val FIXED_CLOCK = object : Clock {
 
 private const val CREATE_TITLE = "Create your vault"
 private const val CREATE_LABEL = "Create vault"
-private const val ACKNOWLEDGE_LABEL = "I understand that losing my master password loses every stored secret"
+private const val ACKNOWLEDGE_LABEL = "I understand that if I lose my password, I lose every code stored here"
 private const val UNLOCK_TITLE = "Unlock your vault"
 private const val LIST_TITLE = "Accounts"
 private const val ADD_TITLE_TEXT = "Add an account"
@@ -94,12 +98,12 @@ private const val WAIT_SECONDS = 30L
 // rather than following it.
 private const val SETTINGS_BUTTON = "Settings"
 private const val BACK_LABEL = "Back to accounts"
-private const val CHANGE_PASSWORD_BUTTON = "Change master password"
+private const val CHANGE_PASSWORD_BUTTON = "Change password"
 private const val EXPORT_BUTTON = "Export an encrypted copy"
 private const val THEME_DARK_BUTTON = "Dark"
 private const val SORT_ISSUER_BUTTON = "Issuer A–Z"
-private const val SORT_RECENT_BUTTON = "Recently added"
-private const val WRONG_PASSWORD_MESSAGE = "That password did not open the vault, so nothing was changed."
+private const val SORT_NEWEST_BUTTON = "Newest first"
+private const val WRONG_PASSWORD_MESSAGE = "That password is not correct, so nothing was changed."
 private const val READ_FAILED_MESSAGE = "No copy was made: there is no vault file at this location."
 
 private const val NEW_PASSWORD = "a rather different passphrase"
@@ -204,7 +208,7 @@ class TAuthAppTest {
         unlock()
         waitForText(LIST_TITLE)
 
-        compose.onNodeWithText(LOCK_LABEL_TEXT).performClick()
+        compose.onNodeWithContentDescription(LOCK_LABEL_TEXT).performClick()
 
         waitForText(UNLOCK_TITLE)
     }
@@ -215,7 +219,7 @@ class TAuthAppTest {
         unlock()
         waitForText(LIST_TITLE)
 
-        compose.onNodeWithText(ADD_LABEL_TEXT).performClick()
+        compose.onNodeWithContentDescription(ADD_LABEL_TEXT).performClick()
 
         waitForText(ADD_TITLE_TEXT)
     }
@@ -225,7 +229,7 @@ class TAuthAppTest {
         show(MemoryVaultFile(VAULT))
         unlock()
         waitForText(LIST_TITLE)
-        compose.onNodeWithText(ADD_LABEL_TEXT).performClick()
+        compose.onNodeWithContentDescription(ADD_LABEL_TEXT).performClick()
         waitForText(ADD_TITLE_TEXT)
 
         compose.onNodeWithText(CANCEL_LABEL_TEXT).performClick()
@@ -238,7 +242,7 @@ class TAuthAppTest {
         val session = show(MemoryVaultFile(VAULT))
         unlock()
         waitForText(LIST_TITLE)
-        compose.onNodeWithText(ADD_LABEL_TEXT).performClick()
+        compose.onNodeWithContentDescription(ADD_LABEL_TEXT).performClick()
         waitForText(ADD_TITLE_TEXT)
 
         compose.runOnIdle { session.lock(LockReason.Manual) }
@@ -253,7 +257,7 @@ class TAuthAppTest {
         val session = show(MemoryVaultFile(VAULT))
         unlock()
         waitForText(LIST_TITLE)
-        compose.onNodeWithText(ADD_LABEL_TEXT).performClick()
+        compose.onNodeWithContentDescription(ADD_LABEL_TEXT).performClick()
         waitForText(ADD_TITLE_TEXT)
         compose.runOnIdle { session.lock(LockReason.Manual) }
         waitForText(UNLOCK_TITLE)
@@ -270,7 +274,7 @@ class TAuthAppTest {
         show(MemoryVaultFile(VAULT))
         unlock()
         waitForText(LIST_TITLE)
-        compose.onNodeWithText(ADD_LABEL_TEXT).performClick()
+        compose.onNodeWithContentDescription(ADD_LABEL_TEXT).performClick()
         waitForText(ADD_TITLE_TEXT)
 
         compose.onNodeWithTag(ADD_URI_TAG).performTextInput(PASTED_URI)
@@ -288,7 +292,7 @@ class TAuthAppTest {
         show(file)
         unlock()
         waitForText(LIST_TITLE)
-        compose.onNodeWithText(ADD_LABEL_TEXT).performClick()
+        compose.onNodeWithContentDescription(ADD_LABEL_TEXT).performClick()
         waitForText(ADD_TITLE_TEXT)
 
         compose.onNodeWithTag(ADD_URI_TAG).performTextInput(PASTED_URI)
@@ -305,7 +309,7 @@ class TAuthAppTest {
         unlock()
         waitForText(LIST_TITLE)
 
-        compose.onAllNodesWithText(MENU_LABEL)[0].performClick()
+        compose.onAllNodesWithContentDescription(MENU_LABEL)[0].performClick()
         compose.onNodeWithText(EDIT_LABEL).performClick()
 
         waitForText(EDIT_TITLE)
@@ -317,7 +321,7 @@ class TAuthAppTest {
         show(file)
         unlock()
         waitForText(LIST_TITLE)
-        compose.onAllNodesWithText(MENU_LABEL)[0].performClick()
+        compose.onAllNodesWithContentDescription(MENU_LABEL)[0].performClick()
         compose.onNodeWithText(EDIT_LABEL).performClick()
         waitForText(EDIT_TITLE)
 
@@ -337,7 +341,7 @@ class TAuthAppTest {
         unlock()
         waitForText(LIST_TITLE)
 
-        compose.onAllNodesWithText(MENU_LABEL)[0].performClick()
+        compose.onAllNodesWithContentDescription(MENU_LABEL)[0].performClick()
         compose.onNodeWithText(DELETE_LABEL).performClick()
         compose.onNodeWithText(DELETE_CONFIRM_LABEL).performClick()
 
@@ -349,12 +353,12 @@ class TAuthAppTest {
         show(MemoryVaultFile(VAULT, isWritable = false))
         unlock()
         waitForText(LIST_TITLE)
-        compose.onAllNodesWithText(MENU_LABEL)[0].performClick()
+        compose.onAllNodesWithContentDescription(MENU_LABEL)[0].performClick()
         compose.onNodeWithText(DELETE_LABEL).performClick()
         compose.onNodeWithText(DELETE_CONFIRM_LABEL).performClick()
         waitForText(WRITE_REFUSED_MESSAGE)
 
-        compose.onNodeWithText(ADD_LABEL_TEXT).performClick()
+        compose.onNodeWithContentDescription(ADD_LABEL_TEXT).performClick()
         waitForText(ADD_TITLE_TEXT)
 
         compose.onNodeWithText(WRITE_REFUSED_MESSAGE).assertDoesNotExist()
@@ -367,7 +371,7 @@ class TAuthAppTest {
         unlock()
         waitForText(LIST_TITLE)
 
-        compose.onNodeWithText(SETTINGS_BUTTON).performClick()
+        compose.onNodeWithContentDescription(SETTINGS_BUTTON).performClick()
 
         waitForText(SETTINGS_HEADER)
     }
@@ -526,7 +530,8 @@ class TAuthAppTest {
         unlock()
         waitForText(LIST_TITLE)
 
-        compose.onNodeWithText(SORT_RECENT_BUTTON).assertIsSelected()
+        compose.onNodeWithTag(SORT_MENU_TAG).performClick()
+        compose.onNodeWithTag(sortChoiceTag(SORT_NEWEST_BUTTON)).assertIsSelected()
     }
 
     @Test
@@ -536,7 +541,8 @@ class TAuthAppTest {
         unlock()
         waitForText(LIST_TITLE)
 
-        compose.onNodeWithText(SORT_ISSUER_BUTTON).performClick()
+        compose.onNodeWithTag(SORT_MENU_TAG).performClick()
+        compose.onNodeWithTag(sortChoiceTag(SORT_ISSUER_BUTTON)).performClick()
 
         compose.waitUntil(WAIT_MILLIS) { preferences.last != null }
         assertEquals(SortOrder.ISSUER, preferences.last?.sortOrder)
@@ -594,7 +600,7 @@ class TAuthAppTest {
 
     private fun openSettings() {
         waitForText(LIST_TITLE)
-        compose.onNodeWithText(SETTINGS_BUTTON).performClick()
+        compose.onNodeWithContentDescription(SETTINGS_BUTTON).performClick()
         waitForText(SETTINGS_HEADER)
     }
 
@@ -609,7 +615,7 @@ class TAuthAppTest {
     private fun tapSetting(text: String) = compose.onNodeWithText(text).performScrollTo().performClick()
 
     private fun typeSetting(tag: String, text: String) =
-        compose.onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag(tag)))
+        compose.onNode(hasSetTextAction() and (hasTestTag(tag) or hasAnyAncestor(hasTestTag(tag))))
             .performScrollTo()
             .performTextInput(text)
 

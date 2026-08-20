@@ -13,8 +13,7 @@ internal object JvmShutdownHooks : ShutdownHooks {
         try {
             Runtime.getRuntime().addShutdownHook(hook)
         } catch (_: IllegalStateException) {
-            // The shutdown is already under way, and the throw is the whole answer: a runtime on its
-            // way down takes no hook.
+            // The shutdown is already under way, and the throw is the whole answer.
         }
     }
 }

@@ -38,7 +38,9 @@ The rule for where code goes, in order:
 
 1. If it is pure logic with no platform API, it goes in `commonMain`. This is the default and most code lands here.
 2. If it needs a platform API, define an `expect` declaration in `commonMain` and the `actual` in `jvmMain`. The `expect` declaration carries the KDoc if any; the `actual` does not repeat it.
-3. Only code that is inherently the desktop application shell — window, tray, single-instance, AWT clipboard, file dialogs — belongs in `:desktopApp`.
+3. Only code that is inherently the desktop application shell — window, tray, single-instance, starting at login, AWT clipboard, file dialogs — belongs in `:desktopApp`.
+
+Rule 3 is decided first and takes its concern whole. A concern that belongs to the desktop shell keeps its pure parts with it: the text of a freedesktop desktop entry and the argv handed to `reg.exe` are `String` and `List` operations with no platform import, and putting them in `commonMain` on rule 1 alone would move Windows registry syntax into the module that has to stay portable. Rules 1 and 2 sort what is left. The test is what the code is *about*, not which APIs it happens to call: `VaultPaths` resolves a path for the vault, which every target has, so it is rule 2; `LoginItem` writes a record only a desktop session reads, so it is rule 3 along with the record text it writes.
 
 `expect`/`actual` is for platform primitives (AEAD, KDF, HMAC, CSPRNG, base64, filesystem), not for feature switching. An `expect` declaration with one `actual` that differs by behaviour rather than by platform capability is an interface in disguise; use an interface.
 
@@ -92,22 +94,29 @@ Distinct failures get distinct types. `WrongPassword` and `IntegrityFailure` are
 - No business logic in composables. Code generation, formatting and validation live in `:shared` outside `ui/` and are called from there.
 - `remember` for values that are expensive and derived; `derivedStateOf` when a computed value depends on other state and would otherwise recompose too often.
 - Never launch work in composition. Use `LaunchedEffect` with a key that genuinely identifies the work.
-- Colours, spacing and typography come from the theme. No hardcoded `Color(0xFF...)` or raw `.dp` spacing constants in screen code; add a theme token instead. Two things are drawn outside the theme and carry their own colours, each saying so in a comment: §9.7's QR dialog, which is dark-on-light regardless of theme, and the shell's tray and window icon, which the desktop draws on surfaces no composition reaches. The QR dialog holds its minimum size the same way and for the same reason: a theme free to shrink the symbol is free to make it unscannable, so that measurement sits beside the symbol rather than in the palette.
+- Colours, spacing and typography come from the theme. No hardcoded `Color(0xFF...)` or raw `.dp` spacing constants in screen code; add a theme token instead. Two things are drawn outside the theme and carry their own colours, each saying so in a comment: the QR dialog, which is dark-on-light regardless of theme so that it stays scannable, and the shell's tray and window icon, which the desktop draws on surfaces no composition reaches. The QR dialog holds its minimum size the same way and for the same reason: a theme free to shrink the symbol is free to make it unscannable, so that measurement sits beside the symbol rather than in the palette.
 
 ## 8. Comments and documentation
 
 Comments are the exception, not the norm. Names, types and structure carry the meaning.
 
+**Comment the trap.** A comment exists to stop the next reader making a wrong change. It earns its place by naming the trap: the obvious alternative that is wrong, a behaviour nothing at the call site reveals, a constant whose value cannot be derived. `Char.isWhitespace` is wider than the four characters a paste adds; a `Set` lookup would leave the password in the heap as a `String`; focus is the wrong signal for a raise that asks for focus itself; the frame lands past the tick, so the constant is 1100 and not 1000. Each stops an edit that would otherwise look like an improvement.
+
+**The test is whether it prevents an edit, not whether it explains a decision.** A note recording why a dependency was not taken, or what an upstream project does not publish, prevents nothing — nobody reading that file is about to reverse it — and it rots on its own. Delete it.
+
+**Cut everything that follows from the trap.** The consequence, the restatement of the line below, the derivation, the second sentence that says the first again. `// RFC 6238 §4.2` earns its place; the formula after it is the code. `// nothing here decodes a secret` earns its place; "padding and case are what differ" is the `uppercase()` and the filter. A comment's second sentence is suspect by default: read it and ask what it adds that the first sentence and the code do not.
+
+**A rule this project already states is not a comment.** AGENTS.md declares the non-negotiable invariants and the threat model; this guide states the conventions; the tests state the behaviour. Nonce freshness, AAD reuse, KEK zeroing, the no-`String`-for-secrets rule, and a `when` over a sealed hierarchy having no `else` are stated once in those documents and never again at the sites that obey them, however many sites that is.
+
+This does not make every documented fact off limits. A rule the code *obeys* needs no comment. A trap at this *site* still does, even where a document covers the same ground: the policy lives inside the encrypted body so that an edit is detected rather than obeyed, and whoever is about to move it to the plaintext preferences file is reading the class, not the threat model.
+
+**A comment does not cite a project document by section number.** Section numbers move; a comment naming one goes stale silently and sends the next reader somewhere that no longer says what it claimed. Name the thing itself, or state the fact and let the document be found by search. External specifications are the exception, because their numbering is frozen.
+
 - No KDoc requirement, including on public declarations. A function whose name and signature explain it gets no doc comment.
-- Write a comment when the code cannot say it itself: a non-obvious invariant, an ordering requirement, a workaround for a platform defect, or a reason that would otherwise be lost.
-- **Comment every security-critical invariant.** These are not self-evident from the code and breaking one is silent:
-  - why a nonce is generated fresh on every write,
-  - why the header bytes read from disk are reused verbatim as AAD instead of re-serialised,
-  - why the KEK is zeroed immediately after unwrapping,
-  - why a secret is held as `ByteArray` and never converted to `String`.
-- Cite the external spec where code implements one: `// RFC 4226 §5.3`, `// RFC 6238 errata 8672: T is 64-bit`. Cite only documents that are immutable and independently hosted, so the pointer stays true.
-- A comment stands on its own. A citation is a footnote to a statement, never the statement itself; a comment whose whole content is a cross-reference says nothing once the target moves.
-- Never restate the code (`// increment the counter`). Never leave commented-out code; git has it.
+- Two lines is the ceiling. A comment needing a third is telling you the code under it is wrong; fix the code.
+- Never restate the code (`// increment the counter`), the declaration it sits on, or a test's own name. Such a comment is deleted, not shortened.
+- Cite the external spec where code implements one: `// RFC 4226 §5.3`, `// RFC 6238 errata 8672: T is 64-bit`. Cite only documents that are immutable and independently hosted, so the pointer stays true. A citation is a footnote to a statement, never the statement itself.
+- Never leave commented-out code; git has it.
 - `TODO(...)` must name what unblocks it. A bare `// TODO` is noise.
 
 ## 9. Security-critical code
@@ -130,6 +139,12 @@ These rules override convenience and are not subject to local judgment.
 - No mocking framework. Dependencies are constructor-injected interfaces with hand-written fakes; a fixed `Clock` for time, a temp directory for the filesystem.
 - Tests do not read or write outside a temp directory, and do not touch the real vault path.
 - Tests are deterministic. No `Random` without a fixed seed, no reliance on wall-clock time, no sleeps — advance an injected clock instead.
+- Expected values are written out in the test, never derived from the code under test. A rebuilt expectation agrees with whatever the code happened to do.
+- A fixture holds every field off its default, so a subject that draws its own values disagrees in every field rather than in none.
+- Composition tests run on `Dispatchers.Unconfined`, which resumes on the thread that caused it, so an assertion reads a settled subject without joining anything.
+- A control carrying only an icon is found by its content description; one carrying text is found by its text.
+
+These four are conventions, not discoveries. They are stated here once and not re-explained at each site that follows them.
 
 ## 11. Gradle
 

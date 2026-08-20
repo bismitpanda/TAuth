@@ -24,7 +24,7 @@ internal class ScanState {
     var notice: String? by mutableStateOf(null)
         private set
 
-    // More than one account in one image is the case §9.5 asks a selection list for.
+    // More than one account in one image; which was meant is the user's to say.
     var choices: List<OtpAuthUri> by mutableStateOf(emptyList())
         private set
 

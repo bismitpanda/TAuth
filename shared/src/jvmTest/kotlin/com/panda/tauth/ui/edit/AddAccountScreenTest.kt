@@ -61,6 +61,22 @@ class AddAccountScreenTest {
     }
 
     @Test
+    fun `the preview takes no room before anything is entered`() {
+        show()
+
+        compose.onNodeWithTag(PREVIEW_TAG).assertDoesNotExist()
+    }
+
+    @Test
+    fun `the preview appears once something is entered`() {
+        show()
+
+        compose.onNodeWithTag(URI_FIELD_TAG).performTextInput(TOTP_URI)
+
+        compose.onNodeWithTag(PREVIEW_TAG).assertExists()
+    }
+
+    @Test
     fun `the save button is disabled before anything is entered`() {
         show()
 
@@ -404,7 +420,7 @@ class AddAccountScreenTest {
     fun `a version the reader does not know shows its own message`() {
         show(error = VaultError.UnsupportedVersion(found = 2, supported = 1))
 
-        compose.onNodeWithText("The vault file is in a format this version of TAuth does not read.")
+        compose.onNodeWithText("This vault was made by a newer version of TAuth.")
             .assertIsDisplayed()
     }
 
@@ -500,8 +516,6 @@ class AddAccountScreenTest {
         compose.onNodeWithTag(SCAN_PROBLEM_TAG).assertTextEquals("That image could not be read.")
     }
 
-    // §9.5's selection list: the account is named by its issuer and account name, and the choice is
-    // the user's.
     @Test
     fun `several accounts in an image are offered by name`() {
         show(scanning = { Outcome.Success(listOf(TOTP_URI, HOTP_URI)) })

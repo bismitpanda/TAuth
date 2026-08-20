@@ -16,7 +16,7 @@ import kotlin.test.assertTrue
 
 // Two geometries differing in width, height and whether they carry a position, so no assertion below
 // rests on one fixture's members.
-private val PLACED = WindowGeometry(width = 1024, height = 800, x = 12, y = -34)
+private val PLACED = WindowGeometry(width = 704, height = 800, x = 12, y = -34)
 private val UNPLACED = WindowGeometry(width = 640, height = 480)
 
 private fun stateOf(
@@ -52,7 +52,7 @@ class ShellWindowTest {
 
     @Test
     fun `the window opens at the stored size`() {
-        assertEquals(DpSize(1024.dp, 800.dp), windowStateFor(PLACED, StartupWindow.VISIBLE).size)
+        assertEquals(DpSize(704.dp, 800.dp), windowStateFor(PLACED, StartupWindow.VISIBLE).size)
     }
 
     @Test
@@ -98,16 +98,16 @@ class ShellWindowTest {
 
     @Test
     fun `a moved window records its position`() {
-        val recorded = recordedGeometry(stateOf(1024, 800, WindowPosition((-5).dp, 300.dp)), UNPLACED)
+        val recorded = recordedGeometry(stateOf(704, 800, WindowPosition((-5).dp, 300.dp)), UNPLACED)
 
-        assertEquals(WindowGeometry(width = 1024, height = 800, x = -5, y = 300), recorded)
+        assertEquals(WindowGeometry(width = 704, height = 800, x = -5, y = 300), recorded)
     }
 
     @Test
     fun `a window the platform has yet to place keeps the stored position`() {
-        val recorded = recordedGeometry(stateOf(1024, 800), PLACED)
+        val recorded = recordedGeometry(stateOf(704, 800), PLACED)
 
-        assertEquals(WindowGeometry(width = 1024, height = 800, x = 12, y = -34), recorded)
+        assertEquals(WindowGeometry(width = 704, height = 800, x = 12, y = -34), recorded)
     }
 
     @Test
@@ -143,10 +143,10 @@ class ShellWindowTest {
     }
 
     @Test
-    fun `a width past any display records the ceiling`() {
+    fun `a width past the widest the window opens at records that width`() {
         val recorded = assertNotNull(recordedGeometry(stateOf(99_999, 800), PLACED))
 
-        assertEquals(16384, recorded.width)
+        assertEquals(720, recorded.width)
     }
 
     @Test

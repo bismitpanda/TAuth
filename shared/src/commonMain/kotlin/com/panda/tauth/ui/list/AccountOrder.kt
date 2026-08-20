@@ -12,17 +12,21 @@ fun matchesQuery(entry: UnlockedEntry, query: String): Boolean {
 }
 
 // Manual order is the one the vault stores; the other two are views over it and write nothing.
-fun sorted(entries: List<UnlockedEntry>, order: SortOrder): List<UnlockedEntry> = when (order) {
-    SortOrder.MANUAL -> entries.sortedBy { it.orderIndex }
+fun sorted(entries: List<UnlockedEntry>, order: SortOrder, isDescending: Boolean = false): List<UnlockedEntry> {
+    val named = when (order) {
+        SortOrder.MANUAL -> entries.sortedBy { it.orderIndex }
 
-    // An entry with no issuer takes its place by the name it does show.
-    SortOrder.ISSUER -> entries.sortedWith(
-        compareBy<UnlockedEntry, String>(String.CASE_INSENSITIVE_ORDER) { it.issuer ?: it.accountName }
-            .thenBy(String.CASE_INSENSITIVE_ORDER) { it.accountName },
-    )
+        SortOrder.ISSUER -> entries.sortedWith(
+            compareBy<UnlockedEntry, String>(String.CASE_INSENSITIVE_ORDER) { it.issuer ?: it.accountName }
+                .thenBy(String.CASE_INSENSITIVE_ORDER) { it.accountName },
+        )
 
-    SortOrder.RECENTLY_ADDED -> entries.sortedByDescending { it.createdAt }
+        SortOrder.RECENTLY_ADDED -> entries.sortedByDescending { it.createdAt }
+    }
+    return if (isDescending && order.hasDirection) named.reversed() else named
 }
+
+val SortOrder.hasDirection: Boolean get() = this != SortOrder.MANUAL
 
 fun dropIndex(from: Int, draggedPixels: Float, rowPitchPixels: Float, count: Int): Int {
     if (rowPitchPixels <= 0f || count <= 0) return from

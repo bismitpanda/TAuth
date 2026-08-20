@@ -45,7 +45,6 @@ class ScanStateTest {
         assertEquals(emptyList(), scan.choices)
     }
 
-    // §9.5's selection list: which of them the user meant is theirs to say.
     @Test
     fun `several accounts in an image are offered as a choice`() {
         read(listOf(GITHUB, ZENDESK))

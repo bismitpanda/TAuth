@@ -186,8 +186,6 @@ class ImportRowTest {
         assertEquals(2, rowsOf("$GITHUB_URI\n$ZENDESK_URI\n").accepted(emptySet()).size)
     }
 
-    // §9.9's skip-or-add-anyway: the vault already holding it is the reason to leave it out, and the
-    // choice to add it is the user's alone.
     @Test
     fun `an account the vault holds is left out until it is chosen`() {
         val existing = totpEntry(accountName = "alice").copy(issuer = "GitHub")

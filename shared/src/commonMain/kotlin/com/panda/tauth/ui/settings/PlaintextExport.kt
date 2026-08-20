@@ -52,8 +52,8 @@ internal fun formatLabel(format: ExportFormat): String = when (format) {
     ExportFormat.URI_LIST -> PLAINTEXT_URI_LIST_LABEL
 }
 
-// The whole vault in the clear, so it carries §9's gate like the other two disclosures and states
-// what it is first. The text is held no longer than the write that consumes it.
+// The whole vault in the clear, so it carries the password gate the other two disclosures carry. The
+// text is held no longer than the write that consumes it.
 @Composable
 internal fun PlaintextExport(
     isRequested: Boolean,

@@ -67,8 +67,7 @@ sealed interface VaultError {
     data class LockedByAnotherProcess(val path: String) : VaultWriteError
 }
 
-// An operation's view holds the cases it produces; a step's view holds what that step produces and
-// names the operations it reaches, so an operation's cases are the union of its steps.
+// An operation's view holds the cases it produces; a step's view names the operations it reaches.
 sealed interface VaultCreateError : VaultError
 
 sealed interface VaultUnlockError : VaultError

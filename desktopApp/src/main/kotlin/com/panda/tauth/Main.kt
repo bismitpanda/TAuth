@@ -68,9 +68,13 @@ private fun runTAuth(role: InstanceRole) = application {
     var isVisible by remember(startupLifecycle) { mutableStateOf(isVisibleAtStartup(startupLifecycle.startup)) }
     var shownBy by remember { mutableStateOf(ShowSource.USER) }
     val quit = { lockThenExit(session::lock, ::exitApplication) }
+    val launcher = remember { currentLauncher() }
+    val loginItem = remember { loginItemFor() }
     // Whether the tray settings are offered is the lifecycle's answer, so the screen and the window
     // read one answer rather than each asking the toolkit.
-    val shell = remember(paths, lifecycle.canConfigureTray) { shellSettings(paths, lifecycle.canConfigureTray) }
+    val shell = remember(paths, lifecycle.canConfigureTray, launcher) {
+        shellSettings(paths, lifecycle.canConfigureTray, launcher)
+    }
     val idleWatch = remember { IdleWatch() }
     val exitLock = remember(session) { ExitLock(session::lock) }
     val primary = role as? InstanceRole.Primary
@@ -86,6 +90,8 @@ private fun runTAuth(role: InstanceRole) = application {
 
     RecordGeometry(scope, windowState, preferences)
 
+    HoldLoginItem(loginItem, launcher, preferences)
+
     TAuthTray(
         isShown = lifecycle.isTrayShown,
         onShow = { isVisible = true },
@@ -99,6 +105,7 @@ private fun runTAuth(role: InstanceRole) = application {
         state = windowState,
         title = APPLICATION_NAME,
         icon = tauthIcon(),
+        resizable = false,
     ) {
         val windowInfo = LocalWindowInfo.current
         val sessionState by session.state.collectAsState()
@@ -109,17 +116,10 @@ private fun runTAuth(role: InstanceRole) = application {
             WindowPresence(isVisible, windowState.isMinimized, windowInfo.isWindowFocused, shownBy)
         }
 
-        LaunchedEffect(windowRaise, primary) {
-            val requests = primary?.showRequests ?: return@LaunchedEffect
-            windowRaise.raiseOnRequest(
-                requests = requests,
-                onRaise = {
-                    isVisible = true
-                    windowState.isMinimized = false
-                    window.raiseToFront()
-                },
-                onShownBy = { shownBy = it },
-            )
+        RaiseOnRequest(windowRaise, primary, onShownBy = { shownBy = it }) {
+            isVisible = true
+            windowState.isMinimized = false
+            window.raiseToFront()
         }
 
         // Keyed on the interval and the hold as well as the window, so a lock, an unlock or a hold
@@ -163,6 +163,27 @@ private fun WatchPresence(
     }
 }
 
+@Composable
+private fun RaiseOnRequest(
+    raise: WindowRaise,
+    primary: InstanceRole.Primary?,
+    onShownBy: (ShowSource) -> Unit,
+    onRaise: () -> Unit,
+) {
+    LaunchedEffect(raise, primary) {
+        val requests = primary?.showRequests ?: return@LaunchedEffect
+        raise.raiseOnRequest(requests = requests, onRaise = onRaise, onShownBy = onShownBy)
+    }
+}
+
+@Composable
+private fun HoldLoginItem(item: LoginItem, launcher: String?, preferences: PreferencesState) {
+    val isEnabled = preferences.value.startAtLogin
+    LaunchedEffect(item, launcher, isEnabled) {
+        withContext(Dispatchers.IO) { applyLoginItem(isEnabled, item, launcher) }
+    }
+}
+
 // The window's own state is where its geometry lives, and the file holds what a sample of it settles
 // on. The write goes through the preference holder, so it carries whatever else was chosen since.
 @Composable
@@ -178,18 +199,20 @@ private fun RecordGeometry(scope: CoroutineScope, windowState: WindowState, pref
 }
 
 // What the settings screen reports on and reaches the desktop through.
-private fun shellSettings(paths: VaultPaths, canConfigureTray: Boolean): ShellSettings = ShellSettings(
-    vaultLocation = paths.vaultFile.toString(),
-    version = applicationVersion(),
-    licence = LICENCE_NOTICE,
-    canConfigureTray = canConfigureTray,
-    onReveal = { revealInFileManager(paths.vaultFile) },
-    onExport = { bytes -> exportVault(bytes) { chooseExportDestination() } },
-    onExportPlaintext = { text, format ->
-        exportPlaintext(text, format) { name -> chooseSaveDestination(PLAINTEXT_DIALOG_TITLE, name) }
-    },
-    onChooseImport = { readImportSource { chooseImportSource() } },
-)
+private fun shellSettings(paths: VaultPaths, canConfigureTray: Boolean, launcher: String?): ShellSettings =
+    ShellSettings(
+        vaultLocation = paths.vaultFile.toString(),
+        version = applicationVersion(),
+        licence = LICENCE_NOTICE,
+        canConfigureTray = canConfigureTray,
+        canStartAtLogin = isPackagedLauncher(launcher),
+        onReveal = { revealInFileManager(paths.vaultFile) },
+        onExport = { bytes -> exportVault(bytes) { chooseExportDestination() } },
+        onExportPlaintext = { text, format ->
+            exportPlaintext(text, format) { name -> chooseSaveDestination(PLAINTEXT_DIALOG_TITLE, name) }
+        },
+        onChooseImport = { readImportSource { chooseImportSource() } },
+    )
 
 // A window behind another one, or on the desktop the user has left, is not back on screen for having
 // been made visible.

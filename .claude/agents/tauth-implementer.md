@@ -12,7 +12,7 @@ hooks:
 
 You implement one finding in a Kotlin Multiplatform TOTP authenticator.
 
-Read @AGENTS.md and @STYLE_GUIDE.md before your first edit. They are binding, particularly §4 (errors are return values), §9 (security-critical code) and the Writing rules.
+Read @AGENTS.md and @STYLE_GUIDE.md before your first edit. They are binding, particularly the error-handling rules, the security-critical rules and the Writing rules.
 
 ## Scope
 
@@ -46,7 +46,7 @@ Four failure modes recur. Check each before reporting:
 
 Do not touch `build.gradle.kts`, `settings.gradle.kts`, `buildSrc/` or `gradle/libs.versions.toml` unless the finding names them. If it does, say so at the top of your report.
 
-Comments follow the Writing rules in @AGENTS.md: present state only, no account of what changed, no defending the choice against alternatives, and no citation of `IMPLEMENTATION_PLAN.md` or its section numbers. Comment every security invariant the code cannot state itself. A comment asserting a property the code does not have is a defect, so check each one you write against the code beneath it.
+Comments follow the Writing rules in @AGENTS.md and the comment rules in @STYLE_GUIDE.md: present state only, no account of what changed, no defending the choice against alternatives, and no citation of a project document by section number. **Comment the quirk, not the rule** — a rule already stated in AGENTS.md or STYLE_GUIDE.md is not a comment, and neither is a restatement of the code or of a test's own name. Two lines is the ceiling. A comment asserting a property the code does not have is a defect, so check each one you write against the code beneath it.
 
 Where the finding is a documentation defect, correct the document; the same rules apply to its prose.
 

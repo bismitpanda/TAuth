@@ -26,7 +26,7 @@ complexity:
 
 exceptions:
   TooGenericExceptionCaught:
-    # STYLE_GUIDE.md §4: JDK exceptions are caught at the boundary and converted
+    # STYLE_GUIDE.md, error handling: JDK exceptions are caught at the boundary and converted
     # to a VaultError. Catching broadly is correct there, but must be deliberate.
     active: true
   SwallowedException:
@@ -39,7 +39,7 @@ naming:
     # @Composable functions are PascalCase by convention.
     ignoreAnnotated: ['Composable']
   MatchingDeclarationName:
-    # STYLE_GUIDE.md §2: platform source sets use the source-set suffix, so
+    # STYLE_GUIDE.md, naming: platform source sets use the source-set suffix, so
     # Platform.jvm.kt holds JvmPlatform. detekt's default list omits 'jvm'.
     # Upstream PR detekt/detekt#9438 expands these defaults; drop this override once
     # it ships in a release we depend on.
@@ -65,7 +65,7 @@ style:
       - value: 'kotlin.random.*'
         reason: 'crypto and vault draw randomness from SecureRandom alone'
   MagicNumber:
-    # STYLE_GUIDE.md §2: cryptographic sizes are named constants.
+    # STYLE_GUIDE.md, naming: cryptographic sizes are named constants.
     ignorePropertyDeclaration: true
     ignoreCompanionObjectPropertyDeclaration: true
     ignoreAnnotation: true
@@ -82,12 +82,12 @@ style:
     excludeGuardClauses: true
   UnusedImport:
     # A dead import is failed by ktlint's no-unused-imports in .editorconfig; this rule
-    # needs the type resolution detekt does not run here (STYLE_GUIDE.md §1).
+    # needs the type resolution detekt does not run here (STYLE_GUIDE.md, formatting).
     active: true
 
 potential-bugs:
   UnsafeCallOnNullableType:
-    # STYLE_GUIDE.md §5: !! does not appear outside tests.
+    # STYLE_GUIDE.md, nullability: !! does not appear outside tests.
     active: true
   LateinitUsage:
     active: true

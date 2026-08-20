@@ -8,27 +8,31 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.panda.tauth.Outcome
+import com.panda.tauth.session.UnlockedEntry
 import com.panda.tauth.totp.OtpAuthUri
 import com.panda.tauth.totp.OtpType
-import com.panda.tauth.totp.groupedCode
+import com.panda.tauth.totp.Totp
+import com.panda.tauth.totp.TotpCode
 import com.panda.tauth.totp.previewCode
+import com.panda.tauth.ui.list.AccountFace
 import com.panda.tauth.ui.theme.LocalSpacing
 import com.panda.tauth.vault.DraftError
 import com.panda.tauth.vault.VaultError
+import kotlin.time.Instant
 
 internal const val PREVIEW_TAG = "entry-preview"
 internal const val PREVIEW_CODE_TAG = "entry-preview-code"
 internal const val PREVIEW_PROBLEM_TAG = "entry-preview-problem"
 
 internal const val PREVIEW_HEADING = "Preview"
-internal const val COUNTER_PREFIX = "Starting counter "
-internal const val PERIOD_SUFFIX = "-second period"
+internal const val STARTING_COUNTER_PREFIX = "Starting counter "
 
-// A pasted URI and a typed form arrive as the same resolved account. The sample code is worked out
-// without writing anything, so confirming an hotp account spends no counter value.
+private const val PREVIEW_ENTRY_ID = "entry-preview"
+
 @Composable
 internal fun EntryPreview(
     resolved: Outcome<OtpAuthUri, DraftError>?,
@@ -36,54 +40,66 @@ internal fun EntryPreview(
     modifier: Modifier = Modifier,
 ) {
     val spacing = LocalSpacing.current
-    Surface(
+    if (resolved == null) return
+    Column(
         modifier = modifier.fillMaxWidth().testTag(PREVIEW_TAG),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = MaterialTheme.shapes.medium,
+        verticalArrangement = Arrangement.spacedBy(spacing.extraSmall),
     ) {
-        Column(
-            modifier = Modifier.padding(spacing.medium),
-            verticalArrangement = Arrangement.spacedBy(spacing.extraSmall),
-        ) {
-            Text(PREVIEW_HEADING, style = MaterialTheme.typography.titleMedium)
-            when (resolved) {
-                null -> Unit
+        Text(PREVIEW_HEADING, style = MaterialTheme.typography.labelLarge)
+        when (resolved) {
+            is Outcome.Failure -> Text(
+                draftProblemFor(resolved.error),
+                modifier = Modifier.testTag(PREVIEW_PROBLEM_TAG),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
 
-                is Outcome.Failure -> Text(
-                    draftProblemFor(resolved.error),
-                    modifier = Modifier.testTag(PREVIEW_PROBLEM_TAG),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
-                )
-
-                is Outcome.Success -> Resolved(resolved.value, epochSeconds)
-            }
+            is Outcome.Success -> Resolved(resolved.value, epochSeconds)
         }
     }
 }
 
-// Emits siblings into the caller's Column rather than a node of its own, so it takes no modifier.
 @Composable
 private fun Resolved(uri: OtpAuthUri, epochSeconds: Long) {
-    Text(uri.accountName, style = MaterialTheme.typography.bodyMedium)
-    uri.issuer?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-    Text(uri.type.uriAuthority.uppercase(), style = MaterialTheme.typography.labelMedium)
-    Text("${uri.algorithm.name}, ${uri.digits} digits", style = MaterialTheme.typography.labelMedium)
-    when (uri.type) {
-        OtpType.TOTP -> uri.period?.let { Text("$it$PERIOD_SUFFIX", style = MaterialTheme.typography.labelMedium) }
-        OtpType.HOTP -> uri.counter?.let { Text("$COUNTER_PREFIX$it", style = MaterialTheme.typography.labelMedium) }
-    }
-    previewCode(uri, epochSeconds)?.let {
-        Text(
-            groupedCode(it),
-            modifier = Modifier.testTag(PREVIEW_CODE_TAG),
-            style = MaterialTheme.typography.displaySmall,
+    val entry = remember(uri) { previewEntry(uri) }
+    val shown = remember(uri, epochSeconds) { previewCode(uri, epochSeconds) }
+    val code = remember(uri, shown, epochSeconds) { previewTotpCode(uri, shown, epochSeconds) }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface,
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        AccountFace(
+            entry = entry,
+            code = code,
+            shown = shown,
+            modifier = Modifier.padding(LocalSpacing.current.medium),
+            counterPrefix = STARTING_COUNTER_PREFIX,
+            codeTag = PREVIEW_CODE_TAG,
         )
     }
 }
 
-// No else branch, over the cases resolving a draft reports: a case joining that view has to be given a
-// sentence here before this compiles again.
+// The account has no place in a vault yet, so the fields a vault would give it stand at nothing.
+private fun previewEntry(uri: OtpAuthUri): UnlockedEntry = UnlockedEntry(
+    id = PREVIEW_ENTRY_ID,
+    type = uri.type,
+    accountName = uri.accountName,
+    createdAt = Instant.DISTANT_PAST,
+    issuer = uri.issuer,
+    algorithm = uri.algorithm,
+    digits = uri.digits,
+    period = uri.period,
+    counter = uri.counter,
+    orderIndex = 0,
+)
+
+private fun previewTotpCode(uri: OtpAuthUri, shown: String?, epochSeconds: Long): TotpCode? {
+    if (uri.type != OtpType.TOTP || shown == null) return null
+    val period = uri.period ?: return null
+    return TotpCode(shown, Totp.secondsRemaining(epochSeconds, period), period)
+}
+
 internal fun draftProblemFor(error: DraftError): String = when (error) {
     is VaultError.MalformedUri -> "That is not an account this reads: ${error.detail}."
     is VaultError.InvalidSecret -> "The secret is not usable: ${error.detail}."

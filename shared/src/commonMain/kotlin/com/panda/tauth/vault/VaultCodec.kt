@@ -41,8 +41,6 @@ class OpenVault internal constructor(body: VaultBody, internal val header: Vault
     override fun toString(): String = "OpenVault(entries=${body.entries.size}, closed=$isClosed)"
 }
 
-// Every nonce is drawn fresh from secureRandomBytes on every write, and no function in this file
-// takes one as a parameter. Reusing a nonce with one key across two plaintexts breaks GCM completely.
 object VaultCodec {
     fun create(password: CharArray, body: VaultBody = VaultBody()): Outcome<ByteArray, VaultAssembleError> {
         val salt = secureRandomBytes(ARGON2_SALT_BYTES)

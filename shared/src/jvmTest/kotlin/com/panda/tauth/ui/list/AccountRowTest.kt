@@ -1,11 +1,14 @@
 package com.panda.tauth.ui.list
 
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertRangeInfoEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -17,6 +20,7 @@ import com.panda.tauth.ui.totpRow
 import org.junit.Rule
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 // The row's own wording, repeated here as literals so a changed label fails the test that names it
 // rather than following it.
@@ -38,6 +42,15 @@ private const val COUNTER_ZERO_GROUPED = "755 224"
 private const val TOTP_CODE = "287082"
 private const val TOTP_GROUPED = "287 082"
 
+private fun codeAt(secondsLeft: Int, period: Int = 30, code: String = TOTP_CODE): TotpCode =
+    TotpCode(code, secondsLeft, period)
+
+private const val HALF_A_TICK_MILLIS = 500L
+
+// Frames land on their own boundaries, so a sweep read at exactly one tick is a frame short of the
+// end of it. Past the tick is where the animation has settled on the value it was given.
+private const val PAST_A_TICK_MILLIS = 1_100L
+
 class AccountRowTest {
     @get:Rule
     val compose = createComposeRule()
@@ -51,28 +64,28 @@ class AccountRowTest {
 
     @Test
     fun `a totp row shows its issuer`() {
-        show(totpRow(), code = TotpCode(TOTP_CODE, 30, 30))
+        show(totpRow(), code = codeAt(30))
 
         compose.onNodeWithText("GitHub").assertIsDisplayed()
     }
 
     @Test
     fun `a totp row shows its account name`() {
-        show(totpRow(), code = TotpCode(TOTP_CODE, 30, 30))
+        show(totpRow(), code = codeAt(30))
 
         compose.onNodeWithText("alice").assertIsDisplayed()
     }
 
     @Test
     fun `a totp row shows the code in two groups`() {
-        show(totpRow(), code = TotpCode(TOTP_CODE, 30, 30))
+        show(totpRow(), code = codeAt(30))
 
         compose.onNodeWithText(TOTP_GROUPED).assertIsDisplayed()
     }
 
     @Test
     fun `an eight-digit totp row groups its code in fours`() {
-        show(totpRow(digits = 8), code = TotpCode("94287082", 30, 30))
+        show(totpRow(digits = 8), code = codeAt(30, code = "94287082"))
 
         compose.onNodeWithText("9428 7082").assertIsDisplayed()
     }
@@ -80,7 +93,7 @@ class AccountRowTest {
     @Test
     fun `a countdown above the boundary reports a running code`() {
         val entry = totpRow()
-        show(entry, code = TotpCode(TOTP_CODE, 6, 30))
+        show(entry, code = codeAt(6))
 
         compose.onNodeWithTag(countdownTag(entry.id)).assertContentDescriptionEquals(RING_RUNNING)
     }
@@ -88,7 +101,7 @@ class AccountRowTest {
     @Test
     fun `a countdown on the boundary reports an expiring code`() {
         val entry = totpRow()
-        show(entry, code = TotpCode(TOTP_CODE, 5, 30))
+        show(entry, code = codeAt(5))
 
         compose.onNodeWithTag(countdownTag(entry.id)).assertContentDescriptionEquals(RING_EXPIRING)
     }
@@ -98,7 +111,7 @@ class AccountRowTest {
     @Test
     fun `a thirty-second account halfway through its period sweeps half the ring`() {
         val entry = totpRow(period = 30)
-        show(entry, code = TotpCode(TOTP_CODE, 15, 30))
+        show(entry, code = codeAt(15))
 
         compose.onNodeWithTag(countdownTag(entry.id))
             .assertRangeInfoEquals(ProgressBarRangeInfo(0.5f, 0f..1f))
@@ -107,15 +120,66 @@ class AccountRowTest {
     @Test
     fun `a sixty-second account at the same reading sweeps a quarter of the ring`() {
         val entry = totpRow(period = 60)
-        show(entry, code = TotpCode(TOTP_CODE, 15, 60))
+        show(entry, code = codeAt(15, period = 60))
 
         compose.onNodeWithTag(countdownTag(entry.id))
             .assertRangeInfoEquals(ProgressBarRangeInfo(0.25f, 0f..1f))
     }
 
     @Test
+    fun `the ring sweeps part way between two ticks`() {
+        val entry = totpRow(period = 30)
+        val code = mutableStateOf(codeAt(30))
+        compose.mainClock.autoAdvance = false
+        compose.setContent { TauthTheme { AccountRow(entry = entry, code = code.value) } }
+        compose.mainClock.advanceTimeByFrame()
+
+        code.value = codeAt(29)
+        compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeBy(HALF_A_TICK_MILLIS)
+
+        val swept = sweptFraction(entry.id)
+        assertTrue(swept > 29f / 30f && swept < 1f, "$swept did not stop between the two ticks")
+    }
+
+    @Test
+    fun `the ring is whole again the moment the period turns over`() {
+        val entry = totpRow(period = 30)
+        val code = mutableStateOf(codeAt(1))
+        compose.mainClock.autoAdvance = false
+        compose.setContent { TauthTheme { AccountRow(entry = entry, code = code.value) } }
+        compose.mainClock.advanceTimeByFrame()
+
+        code.value = codeAt(30)
+        compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeByFrame()
+
+        assertEquals(1f, sweptFraction(entry.id))
+    }
+
+    @Test
+    fun `the ring arrives at the fraction the tick reported`() {
+        val entry = totpRow(period = 30)
+        val code = mutableStateOf(codeAt(30))
+        compose.mainClock.autoAdvance = false
+        compose.setContent { TauthTheme { AccountRow(entry = entry, code = code.value) } }
+        compose.mainClock.advanceTimeByFrame()
+
+        code.value = codeAt(15)
+        compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeBy(PAST_A_TICK_MILLIS)
+
+        assertEquals(0.5f, sweptFraction(entry.id))
+    }
+
+    private fun sweptFraction(id: String): Float = compose.onNodeWithTag(countdownTag(id))
+        .fetchSemanticsNode()
+        .config[SemanticsProperties.ProgressBarRangeInfo]
+        .current
+
+    @Test
     fun `tapping the code reports a copy`() {
-        show(totpRow(), code = TotpCode(TOTP_CODE, 30, 30))
+        show(totpRow(), code = codeAt(30))
 
         compose.onNodeWithText(TOTP_GROUPED).performClick()
 
@@ -157,7 +221,7 @@ class AccountRowTest {
     fun `the generate control reports a generation`() {
         show(hotpRow())
 
-        compose.onNodeWithText(GENERATE).performClick()
+        compose.onNodeWithContentDescription(GENERATE).performClick()
 
         compose.runOnIdle { assertEquals(1, generations) }
     }
@@ -166,14 +230,14 @@ class AccountRowTest {
     fun `the generate control is disabled while it is cooling down`() {
         show(hotpRow(), isGenerateEnabled = false)
 
-        compose.onNodeWithText(GENERATE).assertIsNotEnabled()
+        compose.onNodeWithContentDescription(GENERATE).assertIsNotEnabled()
     }
 
     @Test
     fun `a disabled generate control reports nothing when pressed`() {
         show(hotpRow(), isGenerateEnabled = false)
 
-        compose.onNodeWithText(GENERATE).performClick()
+        compose.onNodeWithContentDescription(GENERATE).performClick()
 
         compose.runOnIdle { assertEquals(0, generations) }
     }
@@ -182,7 +246,7 @@ class AccountRowTest {
     fun `hiding a generated code reports the collapse`() {
         show(hotpRow(), generatedCode = COUNTER_ZERO_CODE)
 
-        compose.onNodeWithText(HIDE).performClick()
+        compose.onNodeWithContentDescription(HIDE).performClick()
 
         compose.runOnIdle { assertEquals(1, hides) }
     }
@@ -191,12 +255,12 @@ class AccountRowTest {
     fun `a row with no code offers nothing to hide`() {
         show(hotpRow())
 
-        compose.onNodeWithText(HIDE).assertDoesNotExist()
+        compose.onNodeWithContentDescription(HIDE).assertDoesNotExist()
     }
 
     @Test
     fun `the overflow menu reports an edit`() {
-        show(totpRow(), code = TotpCode(TOTP_CODE, 30, 30))
+        show(totpRow(), code = codeAt(30))
 
         openMenu()
         compose.onNodeWithText(EDIT).performClick()
@@ -206,7 +270,7 @@ class AccountRowTest {
 
     @Test
     fun `the overflow menu reports a URI request`() {
-        show(totpRow(), code = TotpCode(TOTP_CODE, 30, 30))
+        show(totpRow(), code = codeAt(30))
 
         openMenu()
         compose.onNodeWithText(COPY_URI).performClick()
@@ -216,7 +280,7 @@ class AccountRowTest {
 
     @Test
     fun `the overflow menu reports a delete`() {
-        show(totpRow(), code = TotpCode(TOTP_CODE, 30, 30))
+        show(totpRow(), code = codeAt(30))
 
         openMenu()
         compose.onNodeWithText(DELETE).performClick()
@@ -226,7 +290,7 @@ class AccountRowTest {
 
     @Test
     fun `the overflow menu copies the code on screen`() {
-        show(totpRow(), code = TotpCode(TOTP_CODE, 30, 30))
+        show(totpRow(), code = codeAt(30))
 
         openMenu()
         compose.onNodeWithText(COPY_CODE).performClick()
@@ -247,12 +311,12 @@ class AccountRowTest {
 
     @Test
     fun `a notice the caller supplied is on screen`() {
-        show(totpRow(), code = TotpCode(TOTP_CODE, 30, 30), notice = "Code copied")
+        show(totpRow(), code = codeAt(30), notice = "Code copied")
 
         compose.onNodeWithText("Code copied").assertIsDisplayed()
     }
 
-    private fun openMenu() = compose.onNodeWithText(MENU).performClick()
+    private fun openMenu() = compose.onNodeWithContentDescription(MENU).performClick()
 
     private fun show(
         entry: UnlockedEntry,

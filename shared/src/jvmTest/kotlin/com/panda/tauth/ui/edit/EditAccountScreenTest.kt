@@ -356,7 +356,7 @@ class EditAccountScreenTest {
     fun `a version the reader does not know shows its own message`() {
         show(totpRow(), error = VaultError.UnsupportedVersion(found = 2, supported = 1))
 
-        compose.onNodeWithText("The vault file is in a format this version of TAuth does not read.")
+        compose.onNodeWithText("This vault was made by a newer version of TAuth.")
             .performScrollTo()
             .assertIsDisplayed()
     }

@@ -2,19 +2,24 @@ package com.panda.tauth.ui.list
 
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -27,7 +32,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
@@ -46,6 +62,7 @@ import com.panda.tauth.ui.qr.QrSymbol
 import com.panda.tauth.ui.qr.ShowQrDialog
 import com.panda.tauth.ui.settings.FileWriteError
 import com.panda.tauth.ui.theme.LocalSpacing
+import com.panda.tauth.ui.theme.TauthIcons
 import com.panda.tauth.vault.DiscloseError
 import com.panda.tauth.vault.EntryChangeError
 import com.panda.tauth.vault.VaultError
@@ -60,8 +77,13 @@ internal const val SETTINGS_LABEL = "Settings"
 internal const val LOCK_LABEL = "Lock"
 
 internal const val SORT_MANUAL_LABEL = "Manual order"
-internal const val SORT_ISSUER_LABEL = "Issuer A–Z"
-internal const val SORT_RECENT_LABEL = "Recently added"
+internal const val SORT_ISSUER_ASCENDING_LABEL = "Issuer A–Z"
+internal const val SORT_ISSUER_DESCENDING_LABEL = "Issuer Z–A"
+internal const val SORT_NEWEST_LABEL = "Newest first"
+internal const val SORT_OLDEST_LABEL = "Oldest first"
+
+internal const val SORT_LABEL = "Sort accounts"
+internal const val SORT_MENU_TAG = "sort-menu"
 
 internal const val EMPTY_HEADING = "No accounts yet"
 internal const val EMPTY_BODY =
@@ -73,11 +95,28 @@ internal const val DELETE_CANCEL_LABEL = "Keep account"
 
 internal const val LIST_ERROR_TAG = "list-error"
 
-// No else branch: an ordering added elsewhere has to be given a label here before this compiles again.
-private fun sortLabel(order: SortOrder): String = when (order) {
-    SortOrder.MANUAL -> SORT_MANUAL_LABEL
-    SortOrder.ISSUER -> SORT_ISSUER_LABEL
-    SortOrder.RECENTLY_ADDED -> SORT_RECENT_LABEL
+internal fun sortChoiceTag(label: String): String = "sort-$label"
+
+enum class SortChoice(val order: SortOrder, val isDescending: Boolean, val label: String) {
+    MANUAL(SortOrder.MANUAL, false, SORT_MANUAL_LABEL),
+    ISSUER_ASCENDING(SortOrder.ISSUER, false, SORT_ISSUER_ASCENDING_LABEL),
+    ISSUER_DESCENDING(SortOrder.ISSUER, true, SORT_ISSUER_DESCENDING_LABEL),
+    NEWEST_FIRST(SortOrder.RECENTLY_ADDED, false, SORT_NEWEST_LABEL),
+    OLDEST_FIRST(SortOrder.RECENTLY_ADDED, true, SORT_OLDEST_LABEL),
+    ;
+
+    companion object {
+        fun of(order: SortOrder, isDescending: Boolean): SortChoice =
+            entries.firstOrNull { it.order == order && it.isDescending == isDescending }
+                ?: entries.first { it.order == order }
+    }
+}
+
+@Composable
+private fun sortIcon(choice: SortChoice): Painter = when (choice) {
+    SortChoice.MANUAL -> TauthIcons.sortManual
+    SortChoice.ISSUER_ASCENDING, SortChoice.ISSUER_DESCENDING -> TauthIcons.sortIssuer
+    SortChoice.NEWEST_FIRST, SortChoice.OLDEST_FIRST -> TauthIcons.sortRecent
 }
 
 internal fun disclosureStatement(entry: UnlockedEntry): String =
@@ -106,11 +145,12 @@ fun AccountListScreen(
     codes: Map<String, TotpCode>,
     modifier: Modifier = Modifier,
     sortOrder: SortOrder = SortOrder.MANUAL,
+    isSortDescending: Boolean = false,
     clipboardClearSeconds: Int = 0,
     clipboard: ClipboardCopy = ClipboardCopy { _, _ -> CopyResult.REFUSED },
     qrEncoding: QrEncoding = QrEncoding { null },
     error: EntryChangeError? = null,
-    onSortOrderChange: (SortOrder) -> Unit = {},
+    onSortChange: (SortOrder, Boolean) -> Unit = { _, _ -> },
     onVisibleChange: (Set<String>) -> Unit = {},
     onIdleLockSuppressed: (Boolean) -> Unit = {},
     // Absent where the composition has no desktop under it to write a file to.
@@ -138,10 +178,14 @@ fun AccountListScreen(
 
     var query by remember { mutableStateOf("") }
     var pendingDelete by remember { mutableStateOf<UnlockedEntry?>(null) }
+    var selected by remember { mutableStateOf(0) }
+    val searchFocus = remember { FocusRequester() }
 
-    val shown = remember(entries, query, sortOrder) {
-        sorted(entries.filter { matchesQuery(it, query) }, sortOrder)
+    val shown = remember(entries, query, sortOrder, isSortDescending) {
+        sorted(entries.filter { matchesQuery(it, query) }, sortOrder, isSortDescending)
     }
+
+    val selectedIndex = rememberSelection(selected, shown.size, searchFocus, listState)
 
     // The ticker cannot see which rows are on screen, so the list says.
     val visibleIds by remember(listState) {
@@ -149,62 +193,56 @@ fun AccountListScreen(
     }
     LaunchedEffect(visibleIds) { onVisibleChange(visibleIds) }
 
-    val callbacks = RowCallbacks(
-        // Selected by type, as the row selects what it draws. Reading the ticker first would copy a
-        // code an hotp row is not showing, should one ever arrive under its id.
-        onCopyCode = { entry ->
-            val current = if (entry.type == OtpType.TOTP) codes[entry.id]?.code else rows.generated[entry.id]
-            current?.let { rows.copy(scope, entry.id, CODE_SUBJECT, it, clipboard, clipboardClearSeconds) }
-        },
-        onGenerate = { id -> rows.generate(scope, id, onGenerate) },
-        onHideCode = rows::hideCode,
+    val callbacks = rowCallbacks(
+        rows = rows,
+        scope = scope,
+        codes = codes,
+        clipboard = clipboard,
+        clearSeconds = clipboardClearSeconds,
+        copyGate = copyGate,
+        qrGate = qrGate,
+        onGenerate = onGenerate,
         onEdit = onEdit,
-        onCopyUri = copyGate::ask,
-        onShowQr = qrGate::ask,
-        onDelete = { entry -> pendingDelete = entry },
+        onDelete = { pendingDelete = it },
         onMove = onMove,
     )
 
     Column(
-        modifier = modifier.fillMaxSize().padding(spacing.medium),
+        modifier = modifier
+            .fillMaxSize()
+            .padding(spacing.medium)
+            .listKeys(
+                isReorderable = sortOrder == SortOrder.MANUAL && query.isBlank(),
+                index = selectedIndex,
+                shown = shown,
+                hasQuery = query.isNotEmpty(),
+                onSelect = { selected = it },
+                onCopy = callbacks.onCopyCode,
+                onMove = onMove,
+                onClearQuery = { query = "" },
+            ),
         verticalArrangement = Arrangement.spacedBy(spacing.small),
     ) {
         Header(
             query = query,
             sortOrder = sortOrder,
+            isSortDescending = isSortDescending,
+            searchFocus = searchFocus,
             onQueryChange = { query = it },
-            onSortOrderChange = onSortOrderChange,
+            onSortChange = onSortChange,
             onAdd = onAdd,
             onSettings = onSettings,
             onLock = onLock,
         )
         ListError(error)
-        if (entries.isEmpty()) {
-            EmptyState(onAdd = onAdd)
-        } else {
-            AccountList(
-                shown = shown,
-                listState = listState,
-                codes = codes,
-                rows = rows,
-                // A drop is a position in the whole vault, so it can only be read off a list that is
-                // showing the whole vault in the order the vault stores it.
-                isDragEnabled = sortOrder == SortOrder.MANUAL && query.isBlank(),
-                callbacks = callbacks,
-            )
-        }
+        Body(entries, shown, listState, codes, rows, selectedIndex, callbacks, sortOrder, query, onAdd)
     }
 
-    pendingDelete?.let { entry ->
-        DeleteConfirmation(
-            entry = entry,
-            onConfirm = {
-                pendingDelete = null
-                onDelete(entry.id)
-            },
-            onDismiss = { pendingDelete = null },
-        )
-    }
+    DeleteConfirmationFor(
+        entry = pendingDelete,
+        onSettled = { pendingDelete = null },
+        onDelete = onDelete,
+    )
 
     Disclosures(
         copyGate = copyGate,
@@ -311,12 +349,158 @@ private fun QrDisclosure(
 }
 
 @Composable
+private fun rememberSelection(selected: Int, count: Int, searchFocus: FocusRequester, listState: LazyListState): Int {
+    val index = selected.coerceIn(0, (count - 1).coerceAtLeast(0))
+    LaunchedEffect(Unit) { searchFocus.requestFocus() }
+    LaunchedEffect(index) { if (count > 0) listState.scrollToItem(index) }
+    return index
+}
+
+@Suppress("LongParameterList")
+@Composable
+private fun Body(
+    entries: List<UnlockedEntry>,
+    shown: List<UnlockedEntry>,
+    listState: LazyListState,
+    codes: Map<String, TotpCode>,
+    rows: RowState,
+    selectedIndex: Int,
+    callbacks: RowCallbacks,
+    sortOrder: SortOrder,
+    query: String,
+    onAdd: () -> Unit,
+) {
+    if (entries.isEmpty()) {
+        EmptyState(onAdd = onAdd)
+    } else {
+        AccountList(
+            shown = shown,
+            listState = listState,
+            codes = codes,
+            rows = rows,
+            isDragEnabled = sortOrder == SortOrder.MANUAL && query.isBlank(),
+            selectedIndex = selectedIndex,
+            callbacks = callbacks,
+        )
+    }
+}
+
+@Composable
+private fun DeleteConfirmationFor(entry: UnlockedEntry?, onSettled: () -> Unit, onDelete: (String) -> Unit) {
+    entry?.let {
+        DeleteConfirmation(
+            entry = it,
+            onConfirm = {
+                onSettled()
+                onDelete(it.id)
+            },
+            onDismiss = onSettled,
+        )
+    }
+}
+
+@Suppress("LongParameterList")
+private fun rowCallbacks(
+    rows: RowState,
+    scope: CoroutineScope,
+    codes: Map<String, TotpCode>,
+    clipboard: ClipboardCopy,
+    clearSeconds: Int,
+    copyGate: DisclosureState<UnlockedEntry, DiscloseError>,
+    qrGate: DisclosureState<UnlockedEntry, DiscloseError>,
+    onGenerate: suspend (String) -> Outcome<String, EntryChangeError>,
+    onEdit: (String) -> Unit,
+    onDelete: (UnlockedEntry) -> Unit,
+    onMove: (String, Int) -> Unit,
+): RowCallbacks = RowCallbacks(
+    onCopyCode = { entry ->
+        val current = if (entry.type == OtpType.TOTP) codes[entry.id]?.code else rows.generated[entry.id]
+        current?.let { rows.copy(scope, entry.id, CODE_SUBJECT, it, clipboard, clearSeconds) }
+    },
+    onGenerate = { id -> rows.generate(scope, id, onGenerate) },
+    onHideCode = rows::hideCode,
+    onEdit = onEdit,
+    onCopyUri = copyGate::ask,
+    onShowQr = qrGate::ask,
+    onDelete = onDelete,
+    onMove = onMove,
+)
+
+@Suppress("LongParameterList")
+private fun Modifier.listKeys(
+    isReorderable: Boolean,
+    index: Int,
+    shown: List<UnlockedEntry>,
+    hasQuery: Boolean,
+    onSelect: (Int) -> Unit,
+    onCopy: (UnlockedEntry) -> Unit,
+    onMove: (String, Int) -> Unit,
+    onClearQuery: () -> Unit,
+): Modifier = onPreviewKeyEvent { event ->
+    onListKey(
+        event = event,
+        isReorderable = isReorderable,
+        index = index,
+        count = shown.size,
+        hasQuery = hasQuery,
+        onSelect = onSelect,
+        onCopy = { shown.getOrNull(index)?.let(onCopy) },
+        onMove = { to -> shown.getOrNull(index)?.let { onMove(it.id, to) } },
+        onClearQuery = onClearQuery,
+    )
+}
+
+@Suppress("LongParameterList")
+private fun onListKey(
+    event: KeyEvent,
+    isReorderable: Boolean,
+    index: Int,
+    count: Int,
+    hasQuery: Boolean,
+    onSelect: (Int) -> Unit,
+    onCopy: () -> Unit,
+    onMove: (Int) -> Unit,
+    onClearQuery: () -> Unit,
+): Boolean {
+    if (event.type != KeyEventType.KeyDown || count == 0) return false
+    val step = when (event.key) {
+        Key.DirectionDown -> 1
+        Key.DirectionUp -> -1
+        else -> 0
+    }
+    return when {
+        step != 0 && event.isAltPressed -> {
+            if (isReorderable) onMove((index + step).coerceIn(0, count - 1))
+            isReorderable
+        }
+
+        step != 0 -> {
+            onSelect((index + step).coerceIn(0, count - 1))
+            true
+        }
+
+        event.key == Key.Enter -> {
+            onCopy()
+            true
+        }
+
+        event.key == Key.Escape && hasQuery -> {
+            onClearQuery()
+            true
+        }
+
+        else -> false
+    }
+}
+
+@Composable
 private fun AccountList(
     shown: List<UnlockedEntry>,
     listState: LazyListState,
     codes: Map<String, TotpCode>,
     rows: RowState,
     isDragEnabled: Boolean,
+    selectedIndex: Int,
     callbacks: RowCallbacks,
     modifier: Modifier = Modifier,
 ) {
@@ -328,6 +512,7 @@ private fun AccountList(
         itemsIndexed(shown, key = { _, entry -> entry.id }) { index, entry ->
             AccountRow(
                 entry = entry,
+                isSelected = index == selectedIndex,
                 code = codes[entry.id],
                 generatedCode = rows.generated[entry.id],
                 isGenerateEnabled = entry.id !in rows.coolingDown,
@@ -359,8 +544,10 @@ private fun AccountList(
 private fun Header(
     query: String,
     sortOrder: SortOrder,
+    searchFocus: FocusRequester,
     onQueryChange: (String) -> Unit,
-    onSortOrderChange: (SortOrder) -> Unit,
+    isSortDescending: Boolean,
+    onSortChange: (SortOrder, Boolean) -> Unit,
     onAdd: () -> Unit,
     onSettings: () -> Unit,
     onLock: () -> Unit,
@@ -370,17 +557,52 @@ private fun Header(
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(spacing.small)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(spacing.small)) {
             Text(TITLE, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
-            Button(onClick = onAdd) { Text(ADD_LABEL) }
-            Button(onClick = onSettings) { Text(SETTINGS_LABEL) }
-            Button(onClick = onLock) { Text(LOCK_LABEL) }
+            ActionIcon(TauthIcons.add, ADD_LABEL, onAdd)
+            ActionIcon(TauthIcons.settings, SETTINGS_LABEL, onSettings)
+            ActionIcon(TauthIcons.lock, LOCK_LABEL, onLock)
         }
-        SearchField(query = query, onQueryChange = onQueryChange)
-        Row(horizontalArrangement = Arrangement.spacedBy(spacing.small)) {
-            SortOrder.entries.forEach { option ->
-                SortChoice(
-                    label = sortLabel(option),
-                    isSelected = sortOrder == option,
-                    onSelect = { onSortOrderChange(option) },
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(spacing.small),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SearchField(
+                query = query,
+                searchFocus = searchFocus,
+                onQueryChange = onQueryChange,
+                modifier = Modifier.weight(1f),
+            )
+            SortMenu(sortOrder = sortOrder, isSortDescending = isSortDescending, onSortChange = onSortChange)
+        }
+    }
+}
+
+@Composable
+private fun SortMenu(
+    sortOrder: SortOrder,
+    isSortDescending: Boolean,
+    onSortChange: (SortOrder, Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var isOpen by remember { mutableStateOf(false) }
+    val chosen = SortChoice.of(sortOrder, isSortDescending)
+
+    Box(modifier = modifier) {
+        IconButton(onClick = { isOpen = true }, modifier = Modifier.testTag(SORT_MENU_TAG)) {
+            Icon(TauthIcons.sortManual, contentDescription = SORT_LABEL)
+        }
+        DropdownMenu(expanded = isOpen, onDismissRequest = { isOpen = false }) {
+            SortChoice.entries.forEach { option ->
+                val isChosen = option == chosen
+                DropdownMenuItem(
+                    text = { Text(option.label) },
+                    leadingIcon = { Icon(sortIcon(option), contentDescription = null) },
+                    trailingIcon = { if (isChosen) Icon(TauthIcons.check, contentDescription = null) },
+                    modifier = Modifier.testTag(sortChoiceTag(option.label)).semantics { selected = isChosen },
+                    onClick = {
+                        isOpen = false
+                        onSortChange(option.order, option.isDescending)
+                    },
                 )
             }
         }
@@ -388,12 +610,25 @@ private fun Header(
 }
 
 @Composable
-private fun SearchField(query: String, onQueryChange: (String) -> Unit, modifier: Modifier = Modifier) {
+internal fun ActionIcon(icon: Painter, label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    IconButton(onClick = onClick, modifier = modifier) {
+        Icon(icon, contentDescription = label)
+    }
+}
+
+@Composable
+private fun SearchField(
+    query: String,
+    searchFocus: FocusRequester,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     OutlinedTextField(
         value = query,
         onValueChange = onQueryChange,
-        modifier = modifier.fillMaxWidth().testTag(SEARCH_TAG),
+        modifier = modifier.fillMaxWidth().focusRequester(searchFocus).testTag(SEARCH_TAG),
         placeholder = { Text(SEARCH_PLACEHOLDER) },
+        leadingIcon = { Icon(TauthIcons.search, contentDescription = null) },
         singleLine = true,
         textStyle = MaterialTheme.typography.bodyLarge,
     )
@@ -408,17 +643,6 @@ private fun ListError(error: EntryChangeError?, modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.error,
         )
-    }
-}
-
-// The chosen ordering stays pressable: a disabled control reads as the one option that cannot be had.
-@Composable
-private fun SortChoice(label: String, isSelected: Boolean, onSelect: () -> Unit, modifier: Modifier = Modifier) {
-    val marked = modifier.semantics { selected = isSelected }
-    if (isSelected) {
-        Button(onClick = onSelect, modifier = marked) { Text(label) }
-    } else {
-        OutlinedButton(onClick = onSelect, modifier = marked) { Text(label) }
     }
 }
 
@@ -454,8 +678,6 @@ private fun DeleteConfirmation(
     )
 }
 
-// No else branch, over the cases a change to an entry reports: a case joining that view has to be
-// given a message here before this compiles again.
 private fun messageFor(error: EntryChangeError): String = when (error) {
     is VaultError.NoSuchEntry -> "That account is no longer in the vault."
     is VaultError.InvalidEntry -> "The change was refused: ${error.detail}."
@@ -463,7 +685,7 @@ private fun messageFor(error: EntryChangeError): String = when (error) {
     is VaultError.LockedByAnotherProcess -> "Another TAuth process is holding the vault file."
     is VaultError.Io -> "The vault file could not be written."
     is VaultError.TooLarge -> "The vault is larger than the file format allows."
-    is VaultError.UnsupportedVersion -> "The vault file is in a format this version of TAuth does not read."
+    is VaultError.UnsupportedVersion -> "This vault was made by a newer version of TAuth."
 }
 
 private fun dragModifier(

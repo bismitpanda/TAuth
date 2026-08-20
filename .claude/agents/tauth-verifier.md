@@ -30,13 +30,13 @@ For each new test, do not ask whether it passes. **Construct the case in which i
 
 **Does the same defect sit elsewhere?** A correction in one file usually has siblings — the same claim in a second comment, the same shape in a neighbouring function, the same clause in the specification. Search for them and say what the search was and what it returned, including nothing. Twice in this repository a statement has been corrected in one place and left standing in another.
 
-**Does the code agree with `IMPLEMENTATION_PLAN.md`?** The plan is the specification, so a divergence is a defect in one of the two. Name which should move. A diff that edits a section and leaves a neighbouring sentence contradicting its own change is the case to watch for.
+**Does the code agree with what the project's own documents claim?** @AGENTS.md states the invariants, the threat model and the crypto parameters; `FUTURE_PLANS.md` holds only work not done. A divergence is a defect in one of the two — name which should move. Two cases to watch for: a diff that edits a document and leaves a neighbouring sentence contradicting its own change, and a document describing behaviour the code does not have.
 
 **Were existing tests weakened?** Read the diff of every test file for deletions, relaxed assertions, renamed-away cases, narrowed inputs and loosened bounds. A change that removes the test which would have caught the defect is a rejection unless the finding explicitly called for it.
 
 **Did the change introduce something new?** Look at what else the changed lines are reachable from. New unchecked exceptions escaping a function that returns `Outcome`, key material left unzeroed on a path, a nonce or a guard moved, a `when` that lost a branch, an error case that now reports the wrong thing.
 
-**Do the comments tell the truth?** Check each comment the diff adds or touches against the code beneath it. A comment claiming a property the code does not have is a defect in its own right. Apply the Writing rules in @AGENTS.md: present state, no account of what changed, no arguing against alternatives, no citations of `IMPLEMENTATION_PLAN.md`.
+**Do the comments tell the truth, and does each earn its place?** Check every comment the diff adds or touches against the code beneath it. A comment claiming a property the code does not have is a defect in its own right; so is one restating a rule already in @AGENTS.md or @STYLE_GUIDE.md, restating the code, restating a test's own name, running past two lines, or citing a project document by section number. Apply the Writing rules in @AGENTS.md: present state, no account of what changed, no arguing against alternatives.
 
 **Is the build clean?** Run `./gradlew check`. If the diff touches build files and the finding did not ask for that, say so prominently.
 

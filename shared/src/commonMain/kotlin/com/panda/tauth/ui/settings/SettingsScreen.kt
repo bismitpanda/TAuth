@@ -2,6 +2,7 @@ package com.panda.tauth.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,7 +11,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -21,16 +24,14 @@ import androidx.compose.ui.platform.testTag
 import com.panda.tauth.password.MIN_MASTER_PASSWORD_LENGTH
 import com.panda.tauth.settings.Preferences
 import com.panda.tauth.settings.SecurityPolicy
-import com.panda.tauth.settings.SortOrder
 import com.panda.tauth.settings.Theme
 import com.panda.tauth.ui.components.ChoiceRow
 import com.panda.tauth.ui.components.PasswordField
 import com.panda.tauth.ui.components.PasswordFieldState
 import com.panda.tauth.ui.components.ToggleRow
-import com.panda.tauth.ui.list.SORT_ISSUER_LABEL
-import com.panda.tauth.ui.list.SORT_MANUAL_LABEL
-import com.panda.tauth.ui.list.SORT_RECENT_LABEL
+import com.panda.tauth.ui.theme.ButtonLabel
 import com.panda.tauth.ui.theme.LocalSpacing
+import com.panda.tauth.ui.theme.TauthIcons
 import com.panda.tauth.vault.ImportReadError
 import com.panda.tauth.vault.VaultError
 import com.panda.tauth.vault.VaultReadError
@@ -41,20 +42,20 @@ internal const val SETTINGS_BACK_LABEL = "Back to accounts"
 
 // The plaintext-versus-vault distinction is stated here and nowhere else on the screen.
 internal const val SETTINGS_HEADER =
-    "Appearance and tray settings are kept in a plaintext file that anything running as you can " +
-        "rewrite. Everything governing when the vault locks is kept inside the vault, and changing " +
-        "one of those needs your master password."
+    "Appearance and tray settings are kept in a plain file that any program running as you can " +
+        "change. Settings that control when the vault locks are kept inside the vault, and changing " +
+        "one needs your password."
 
-internal const val SECURITY_HEADING = "Security"
-internal const val CURRENT_PASSWORD_LABEL = "Current master password"
-internal const val NEW_PASSWORD_LABEL = "New master password"
-internal const val CONFIRM_PASSWORD_LABEL = "Confirm new master password"
-internal const val CHANGE_PASSWORD_LABEL = "Change master password"
-internal const val ROTATE_PASSWORD_LABEL = "Master password"
+internal const val SECURITY_HEADING = "Password"
+internal const val ENCRYPTION_HEADING = "Encryption key"
+internal const val CURRENT_PASSWORD_LABEL = "Current password"
+internal const val NEW_PASSWORD_LABEL = "New password"
+internal const val CONFIRM_PASSWORD_LABEL = "Confirm new password"
+internal const val CHANGE_PASSWORD_LABEL = "Change password"
+internal const val ROTATE_PASSWORD_LABEL = "Password"
 internal const val ROTATE_LABEL = "Re-encrypt vault"
 internal const val ROTATE_NOTE =
-    "Re-encrypting draws a new key for the vault body and rewrites the file under it. A key that has " +
-        "leaked opens only the copies made before the rewrite."
+    "Draws a new key and rewrites the file under it, so a leaked key opens only older copies."
 
 internal const val LOCKING_HEADING = "Locking"
 internal const val IDLE_LABEL = "Lock after this long without input"
@@ -67,17 +68,22 @@ internal const val CLIPBOARD_LABEL = "Clear a copied code after"
 
 internal const val APPEARANCE_HEADING = "Appearance"
 internal const val THEME_LABEL = "Theme"
-internal const val SORT_ORDER_LABEL = "Account order"
 internal const val THEME_SYSTEM_LABEL = "System"
 internal const val THEME_LIGHT_LABEL = "Light"
 internal const val THEME_DARK_LABEL = "Dark"
 
 internal const val TRAY_HEADING = "Tray"
 internal const val MINIMISE_TO_TRAY_LABEL = "Close to the tray instead of quitting"
-internal const val START_MINIMISED_LABEL = "Start with the window out of the way"
 internal const val NO_TRAY_NOTE =
     "This desktop offers no system tray, so a window sent to one would leave TAuth running with " +
         "nothing to bring it back."
+
+internal const val STARTUP_HEADING = "Startup"
+internal const val START_AT_LOGIN_LABEL = "Start TAuth when I log in"
+internal const val START_MINIMISED_LABEL = "Start with the window out of the way"
+internal const val NO_LAUNCHER_NOTE =
+    "Starting at login needs an installed copy of TAuth to point at, which a build run from source " +
+        "does not provide."
 
 internal const val DATA_HEADING = "Data"
 internal const val LOCATION_LABEL = "Vault file"
@@ -85,37 +91,35 @@ internal const val REVEAL_LABEL = "Show in file manager"
 internal const val EXPORT_LABEL = "Export an encrypted copy"
 internal const val PLAINTEXT_EXPORT_LABEL = "Export accounts unencrypted"
 internal const val PLAINTEXT_EXPORT_NOTE =
-    "The unencrypted export is the way accounts move to another authenticator. Anything that can read " +
-        "the file it writes can generate the codes."
+    "Anything that can read the file it writes can generate the codes."
 
 internal const val SETTINGS_PLAINTEXT_PROBLEM_TAG = "settings-plaintext-problem"
 
 internal const val IMPORT_LABEL = "Import accounts"
 internal const val IMPORT_NOTE =
-    "An import reads an unencrypted export or a list of otpauth:// URIs, and shows what it found " +
-        "before anything is added."
+    "Reads an unencrypted export or a list of otpauth:// URIs, and shows what it found first."
 
 internal const val SETTINGS_IMPORT_PROBLEM_TAG = "settings-import-problem"
 
 internal const val EXPORT_NOTE =
-    "The copy is the vault file itself and the master password that opens this vault opens it. " +
-        "TAuth keeps no backup of its own, and a deleted account is recovered from an export or not " +
-        "at all."
+    "The copy is the vault file itself, and the same password opens it."
 
 internal const val ABOUT_HEADING = "About"
 internal const val VERSION_LABEL = "Version"
 internal const val LICENCE_LABEL = "Licence"
 internal const val PROTECTS_NOTE =
     "The vault file is encrypted whole, so a copy taken from a disk, a backup or a synced folder is " +
-        "unreadable without your master password, and a changed byte is detected rather than " +
-        "decrypted. Locking zeroes the key held in memory."
+        "unreadable without your password, and any tampering is detected rather than decrypted. " +
+        "Locking wipes the key from memory."
 internal const val PROTECTS_NOT_NOTE =
     "It protects nothing against code running as you while the vault is open, a keylogger, a screen " +
-        "capture, or a vault file replaced with an older copy of itself. Your master password cannot " +
-        "be recovered, and losing it loses every secret in the vault."
+        "capture, or a vault file replaced with an older copy of itself. Your password cannot be " +
+        "recovered, and losing it loses every code in the vault."
+internal const val BACKUP_NOTE =
+    "TAuth keeps no backup of its own. A deleted account is recovered from an export or not at all."
 internal const val CLOCK_NOTE =
-    "Codes are read off this computer's clock, which TAuth does not correct against a time server. A " +
-        "clock out by more than an account's period produces codes the other side rejects."
+    "Codes come from this computer's clock, which TAuth does not set for you. If the clock is off by " +
+        "more than a code's lifetime, the codes will be rejected."
 
 internal const val SETTINGS_HEADER_TAG = "settings-header"
 internal const val SETTINGS_PROBLEM_TAG = "settings-problem"
@@ -129,6 +133,7 @@ internal const val MINIMISE_LOCK_TAG = "settings-lock-on-minimise"
 internal const val FOCUS_LOSS_TAG = "settings-lock-on-focus-loss"
 internal const val MINIMISE_TO_TRAY_TAG = "settings-minimise-to-tray"
 internal const val START_MINIMISED_TAG = "settings-start-minimised"
+internal const val START_AT_LOGIN_TAG = "settings-start-at-login"
 
 // Minutes, and zero for a vault that never locks on its own.
 private val IDLE_OPTIONS = listOf(0, 1, 5, 15)
@@ -155,18 +160,10 @@ private fun graceOptionLabel(seconds: Int): String = when (seconds) {
 
 private fun clipboardOptionLabel(seconds: Int): String = if (seconds == 0) CLIPBOARD_OFF_LABEL else "$seconds s"
 
-// No else branch: a theme added elsewhere has to be given a label here before this compiles again.
 private fun themeLabel(theme: Theme): String = when (theme) {
     Theme.SYSTEM -> THEME_SYSTEM_LABEL
     Theme.LIGHT -> THEME_LIGHT_LABEL
     Theme.DARK -> THEME_DARK_LABEL
-}
-
-// No else branch: an ordering added elsewhere has to be given a label here before this compiles again.
-private fun sortOrderLabel(order: SortOrder): String = when (order) {
-    SortOrder.MANUAL -> SORT_MANUAL_LABEL
-    SortOrder.ISSUER -> SORT_ISSUER_LABEL
-    SortOrder.RECENTLY_ADDED -> SORT_RECENT_LABEL
 }
 
 // The policy shown is the one the session publishes, which moves only once the vault file holds it,
@@ -184,9 +181,9 @@ fun SettingsScreen(
     importError: ImportReadError? = null,
     onPolicyChange: (SecurityPolicy) -> Unit = {},
     onThemeChange: (Theme) -> Unit = {},
-    onSortOrderChange: (SortOrder) -> Unit = {},
     onMinimiseToTrayChange: (Boolean) -> Unit = {},
     onStartMinimisedChange: (Boolean) -> Unit = {},
+    onStartAtLoginChange: (Boolean) -> Unit = {},
     onChangePassword: (CharArray, CharArray) -> Unit = { _, _ -> },
     onRotate: (CharArray) -> Unit = {},
     onExport: () -> Unit = {},
@@ -202,7 +199,7 @@ fun SettingsScreen(
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(spacing.small)) {
             Text(SETTINGS_TITLE, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
-            TextButton(onClick = onBack, enabled = isEnabled) { Text(SETTINGS_BACK_LABEL) }
+            TextButton(onClick = onBack, enabled = isEnabled) { ButtonLabel(TauthIcons.back, SETTINGS_BACK_LABEL) }
         }
         Text(
             SETTINGS_HEADER,
@@ -223,17 +220,19 @@ fun SettingsScreen(
         SecurityGroup(isEnabled = isEnabled, onChangePassword = onChangePassword, onRotate = onRotate)
         LockingGroup(policy = policy, isEnabled = isEnabled, onPolicyChange = onPolicyChange)
         ClipboardGroup(policy = policy, isEnabled = isEnabled, onPolicyChange = onPolicyChange)
-        AppearanceGroup(
-            preferences = preferences,
-            isEnabled = isEnabled,
-            onThemeChange = onThemeChange,
-            onSortOrderChange = onSortOrderChange,
-        )
+        AppearanceGroup(preferences = preferences, isEnabled = isEnabled, onThemeChange = onThemeChange)
         TrayGroup(
             preferences = preferences,
             canConfigureTray = shell.canConfigureTray,
             isEnabled = isEnabled,
             onMinimiseToTrayChange = onMinimiseToTrayChange,
+        )
+        StartupGroup(
+            preferences = preferences,
+            canConfigureTray = shell.canConfigureTray,
+            canStartAtLogin = shell.canStartAtLogin,
+            isEnabled = isEnabled,
+            onStartAtLoginChange = onStartAtLoginChange,
             onStartMinimisedChange = onStartMinimisedChange,
         )
         DataGroup(
@@ -251,12 +250,32 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun Group(heading: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+private fun Group(heading: String, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     val spacing = LocalSpacing.current
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(spacing.small)) {
-        Text(heading, style = MaterialTheme.typography.titleMedium)
-        content()
+        Text(
+            heading,
+            modifier = Modifier.padding(horizontal = spacing.small),
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+        ) {
+            Column(
+                modifier = Modifier.padding(spacing.medium),
+                verticalArrangement = Arrangement.spacedBy(spacing.medium),
+                content = content,
+            )
+        }
     }
+}
+
+@Composable
+private fun Note(text: String) {
+    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable
@@ -306,14 +325,19 @@ private fun SecurityGroup(
         }
     }
 
-    Group(SECURITY_HEADING, modifier) {
-        MaskedField(CURRENT_PASSWORD_LABEL, current, CURRENT_PASSWORD_TAG, isEnabled, change)
-        MaskedField(NEW_PASSWORD_LABEL, next, NEW_PASSWORD_TAG, isEnabled, change)
-        MaskedField(CONFIRM_PASSWORD_LABEL, confirmation, CONFIRM_PASSWORD_TAG, isEnabled, change)
-        Button(onClick = change, enabled = canChange) { Text(CHANGE_PASSWORD_LABEL) }
-        Text(ROTATE_NOTE, style = MaterialTheme.typography.bodySmall)
-        MaskedField(ROTATE_PASSWORD_LABEL, rotation, ROTATE_PASSWORD_TAG, isEnabled, rotate)
-        Button(onClick = rotate, enabled = canRotate) { Text(ROTATE_LABEL) }
+    val spacing = LocalSpacing.current
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(spacing.large)) {
+        Group(SECURITY_HEADING) {
+            MaskedField(CURRENT_PASSWORD_LABEL, current, CURRENT_PASSWORD_TAG, isEnabled, change)
+            MaskedField(NEW_PASSWORD_LABEL, next, NEW_PASSWORD_TAG, isEnabled, change)
+            MaskedField(CONFIRM_PASSWORD_LABEL, confirmation, CONFIRM_PASSWORD_TAG, isEnabled, change)
+            Button(onClick = change, enabled = canChange) { ButtonLabel(TauthIcons.password, CHANGE_PASSWORD_LABEL) }
+        }
+        Group(ENCRYPTION_HEADING) {
+            Note(ROTATE_NOTE)
+            MaskedField(ROTATE_PASSWORD_LABEL, rotation, ROTATE_PASSWORD_TAG, isEnabled, rotate)
+            Button(onClick = rotate, enabled = canRotate) { ButtonLabel(TauthIcons.generate, ROTATE_LABEL) }
+        }
     }
 }
 
@@ -405,7 +429,6 @@ private fun AppearanceGroup(
     preferences: Preferences,
     isEnabled: Boolean,
     onThemeChange: (Theme) -> Unit,
-    onSortOrderChange: (SortOrder) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Group(APPEARANCE_HEADING, modifier) {
@@ -417,14 +440,6 @@ private fun AppearanceGroup(
             onSelect = onThemeChange,
             enabled = isEnabled,
         )
-        ChoiceRow(
-            label = SORT_ORDER_LABEL,
-            options = SortOrder.entries,
-            selected = preferences.sortOrder,
-            optionLabel = ::sortOrderLabel,
-            onSelect = onSortOrderChange,
-            enabled = isEnabled,
-        )
     }
 }
 
@@ -434,12 +449,11 @@ private fun TrayGroup(
     canConfigureTray: Boolean,
     isEnabled: Boolean,
     onMinimiseToTrayChange: (Boolean) -> Unit,
-    onStartMinimisedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Group(TRAY_HEADING, modifier) {
         if (!canConfigureTray) {
-            Text(NO_TRAY_NOTE, style = MaterialTheme.typography.bodySmall)
+            Note(NO_TRAY_NOTE)
         }
         ToggleRow(
             label = MINIMISE_TO_TRAY_LABEL,
@@ -448,12 +462,36 @@ private fun TrayGroup(
             tag = MINIMISE_TO_TRAY_TAG,
             enabled = isEnabled && canConfigureTray,
         )
+    }
+}
+
+@Composable
+private fun StartupGroup(
+    preferences: Preferences,
+    canConfigureTray: Boolean,
+    canStartAtLogin: Boolean,
+    isEnabled: Boolean,
+    onStartAtLoginChange: (Boolean) -> Unit,
+    onStartMinimisedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Group(STARTUP_HEADING, modifier) {
+        if (!canStartAtLogin) {
+            Note(NO_LAUNCHER_NOTE)
+        }
+        ToggleRow(
+            label = START_AT_LOGIN_LABEL,
+            isChecked = preferences.startAtLogin,
+            onCheckedChange = onStartAtLoginChange,
+            tag = START_AT_LOGIN_TAG,
+            enabled = isEnabled && canStartAtLogin,
+        )
         ToggleRow(
             label = START_MINIMISED_LABEL,
             isChecked = preferences.startMinimised,
             onCheckedChange = onStartMinimisedChange,
             tag = START_MINIMISED_TAG,
-            enabled = isEnabled && canConfigureTray,
+            enabled = isEnabled && canConfigureTray && !preferences.startAtLogin,
         )
     }
 }
@@ -472,63 +510,59 @@ private fun DataGroup(
 ) {
     val spacing = LocalSpacing.current
     Group(DATA_HEADING, modifier) {
-        Text(LOCATION_LABEL, style = MaterialTheme.typography.labelLarge)
-        Text(
-            shell.vaultLocation,
-            modifier = Modifier.testTag(SETTINGS_LOCATION_TAG),
-            style = MaterialTheme.typography.bodySmall,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(spacing.small)) {
-            TextButton(onClick = shell.onReveal, enabled = isEnabled) { Text(REVEAL_LABEL) }
-            Button(onClick = onExport, enabled = isEnabled) { Text(EXPORT_LABEL) }
-            TextButton(onClick = onPlaintextExport, enabled = isEnabled) { Text(PLAINTEXT_EXPORT_LABEL) }
-            TextButton(onClick = onImport, enabled = isEnabled) { Text(IMPORT_LABEL) }
-        }
-        // Beside the control that asked for the copy, since what it reports is the destination the
-        // user picked rather than anything about the vault.
-        exportError?.let { failure ->
+        Column(verticalArrangement = Arrangement.spacedBy(spacing.extraSmall)) {
+            Text(LOCATION_LABEL, style = MaterialTheme.typography.labelLarge)
             Text(
-                messageFor(failure),
-                modifier = Modifier.testTag(SETTINGS_EXPORT_PROBLEM_TAG),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
+                shell.vaultLocation,
+                modifier = Modifier.testTag(SETTINGS_LOCATION_TAG),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            TextButton(onClick = shell.onReveal, enabled = isEnabled) {
+                ButtonLabel(TauthIcons.reveal, REVEAL_LABEL)
+            }
         }
-        // Its own slot: the two exports fail over different destinations and one says nothing about
-        // the other's.
-        plaintextError?.let { failure ->
-            Text(
-                plaintextMessageFor(failure),
-                modifier = Modifier.testTag(SETTINGS_PLAINTEXT_PROBLEM_TAG),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-            )
+        HorizontalDivider()
+        Action(EXPORT_NOTE, exportError?.let(::messageFor), SETTINGS_EXPORT_PROBLEM_TAG) {
+            Button(onClick = onExport, enabled = isEnabled) { ButtonLabel(TauthIcons.export, EXPORT_LABEL) }
         }
-        // A read that failed has no preview to report itself on, so it reports here.
-        importError?.let { failure ->
-            Text(
-                importMessageFor(failure),
-                modifier = Modifier.testTag(SETTINGS_IMPORT_PROBLEM_TAG),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-            )
+        Action(PLAINTEXT_EXPORT_NOTE, plaintextError?.let(::plaintextMessageFor), SETTINGS_PLAINTEXT_PROBLEM_TAG) {
+            TextButton(onClick = onPlaintextExport, enabled = isEnabled) {
+                ButtonLabel(TauthIcons.warning, PLAINTEXT_EXPORT_LABEL)
+            }
         }
-        Text(EXPORT_NOTE, style = MaterialTheme.typography.bodySmall)
-        Text(PLAINTEXT_EXPORT_NOTE, style = MaterialTheme.typography.bodySmall)
-        Text(IMPORT_NOTE, style = MaterialTheme.typography.bodySmall)
+        Action(IMPORT_NOTE, importError?.let(::importMessageFor), SETTINGS_IMPORT_PROBLEM_TAG) {
+            TextButton(onClick = onImport, enabled = isEnabled) { ButtonLabel(TauthIcons.import, IMPORT_LABEL) }
+        }
     }
 }
 
-// No else branch, over the cases reading a file to import reports: the file is one TAuth did not
-// necessarily write, so what is damaged here is that file rather than the vault.
+// Each failure sits under the control that asked for it: the three write to destinations the user
+// picked separately, so one says nothing about the others'.
+@Composable
+private fun Action(note: String, problem: String?, tag: String, control: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(LocalSpacing.current.extraSmall)) {
+        control()
+        Note(note)
+        problem?.let {
+            Text(
+                it,
+                modifier = Modifier.testTag(tag),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+    }
+}
+
+// The file is one TAuth did not necessarily write, so what is damaged here is that file, not the vault.
 private fun importMessageFor(error: ImportReadError): String = when (error) {
     is VaultError.Corrupt -> "Nothing was imported: ${error.detail}."
     is VaultError.Io -> "That file could not be read, so nothing was imported."
     is VaultError.VaultClosed -> "The vault locked before the file was read, so nothing was imported."
 }
 
-// No else branch, over the cases writing a file reports: nothing about the vault reaches this, since
-// the accounts were read out of an open one.
+// Nothing about the vault reaches this: the accounts were read out of an open one.
 private fun plaintextMessageFor(error: FileWriteError): String = when (error) {
     is ExportError.NotRestricted ->
         "That location cannot keep the accounts to you alone, so nothing was written there."
@@ -541,9 +575,10 @@ private fun AboutGroup(shell: ShellSettings, modifier: Modifier = Modifier) {
     Group(ABOUT_HEADING, modifier) {
         Text("$VERSION_LABEL: ${shell.version}", style = MaterialTheme.typography.bodyMedium)
         Text("$LICENCE_LABEL: ${shell.licence}", style = MaterialTheme.typography.bodyMedium)
-        Text(PROTECTS_NOTE, style = MaterialTheme.typography.bodySmall)
-        Text(PROTECTS_NOT_NOTE, style = MaterialTheme.typography.bodySmall)
-        Text(CLOCK_NOTE, style = MaterialTheme.typography.bodySmall)
+        Note(PROTECTS_NOTE)
+        Note(PROTECTS_NOT_NOTE)
+        Note(BACKUP_NOTE)
+        Note(CLOCK_NOTE)
     }
 }
 
@@ -559,19 +594,15 @@ private fun messageFor(error: VaultExportError): String = when (error) {
     is ExportError.Io -> "The copy could not be written to that location. The vault is unchanged."
 }
 
-// No else branch, over the cases a read reports: reading the vault is all an export asks of it, so a
-// case joining that view has to be given a message here before this compiles again.
 private fun readProblem(error: VaultReadError): String = when (error) {
     is VaultError.NoVaultFile -> "there is no vault file at this location."
     is VaultError.Corrupt -> "the vault file is damaged."
     is VaultError.Io -> "the vault file could not be read."
 }
 
-// No else branch, over the cases a rewrite of the whole file reports: a case joining that view has to
-// be given a message here before this compiles again.
 private fun messageFor(error: VaultRewriteError): String = when (error) {
     // Kept apart from the damage cases below: this one means retype, those mean the file.
-    is VaultError.WrongPassword -> "That password did not open the vault, so nothing was changed."
+    is VaultError.WrongPassword -> "That password is not correct, so nothing was changed."
 
     is VaultError.VaultClosed -> "The vault locked during the change. Unlock to see where it stands."
 
@@ -586,7 +617,7 @@ private fun messageFor(error: VaultRewriteError): String = when (error) {
     is VaultError.IntegrityFailure, is VaultError.Corrupt, is VaultError.InvalidSecret ->
         "The vault file is damaged."
 
-    is VaultError.UnsupportedVersion -> "The vault file is in a format this version of TAuth does not read."
+    is VaultError.UnsupportedVersion -> "This vault was made by a newer version of TAuth."
 
     is VaultError.NoVaultFile -> "There is no vault file at this location."
 }

@@ -15,6 +15,7 @@ class ShellSettings(
     // A composition the shell has told nothing offers no tray settings, since a tray it cannot
     // confirm is one the window has no way back from.
     val canConfigureTray: Boolean = false,
+    val canStartAtLogin: Boolean = false,
     val onReveal: () -> Unit = {},
     // The bytes are the vault's own ciphertext, so what leaves is what the file already holds. A
     // destination the user declines writes nothing and reports no failure.

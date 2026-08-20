@@ -30,12 +30,12 @@ import kotlin.test.assertNull
 // names it rather than following it.
 private const val UNLOCK_LABEL = "Unlock"
 private const val PROGRESS_LABEL = "Checking your password"
-private const val WRONG_PASSWORD_MESSAGE = "That password did not open the vault."
+private const val WRONG_PASSWORD_MESSAGE = "That password is not correct."
 private const val DAMAGED_FILE_MESSAGE = "The vault file is damaged and cannot be opened."
-private const val IDLE_SUBTITLE = "The vault locked itself after a period of inactivity."
-private const val FOCUS_LOST_SUBTITLE = "The vault locked when the window lost focus."
-private const val HIDDEN_TO_TRAY_SUBTITLE = "The vault locked when the window was hidden to the tray."
-private const val MINIMISED_SUBTITLE = "The vault locked when the window was minimised."
+private const val IDLE_SUBTITLE = "Locked automatically after a period of inactivity."
+private const val FOCUS_LOST_SUBTITLE = "Locked when the window lost focus."
+private const val HIDDEN_TO_TRAY_SUBTITLE = "Locked when the window was hidden to the tray."
+private const val MINIMISED_SUBTITLE = "Locked when the window was minimised."
 
 class UnlockScreenTest {
     @get:Rule
@@ -191,7 +191,7 @@ class UnlockScreenTest {
     fun `a version the reader does not know shows its own message`() {
         show(error = VaultError.UnsupportedVersion(found = 2, supported = 1))
 
-        compose.onNodeWithText("The vault file is in a format this version of TAuth does not read.")
+        compose.onNodeWithText("This vault was made by a newer version of TAuth.")
             .assertIsDisplayed()
     }
 

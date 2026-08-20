@@ -16,7 +16,7 @@ fun TauthTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable 
     ) {
         MaterialTheme(
             colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme,
-            typography = TauthTypography,
+            typography = tauthTypography(),
         ) {
             // MaterialTheme carries tokens and paints nothing, so without this every screen sits on
             // whatever the window draws rather than on the scheme's own background.

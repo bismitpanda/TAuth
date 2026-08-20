@@ -69,7 +69,7 @@ class IdleWatch internal constructor(private val monitor: InputMonitor, private 
         // A window off the screen belongs to the hide trigger, whose own timer is already standing,
         // and an interval of no length leaves no stretch of quiet to observe.
         if (!isVisible || timeoutMinutes <= 0) return
-        // Quiet is what this reads, and a screen being read rather than typed at is quiet: §9.7's
+        // Quiet is what this reads, and a screen being read rather than typed at is quiet: a QR
         // symbol is scanned with both hands on a phone.
         if (isSuppressed) return
         val input = Channel<Unit>(Channel.CONFLATED)

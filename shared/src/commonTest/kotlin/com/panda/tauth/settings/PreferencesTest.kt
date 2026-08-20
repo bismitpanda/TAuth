@@ -34,13 +34,49 @@ class PreferencesTest {
     }
 
     @Test
+    fun `starting at login defaults to off`() {
+        assertFalse(Preferences().startAtLogin)
+    }
+
+    @Test
+    fun `starting at login takes the window out of the way with it`() {
+        assertTrue(Preferences().withStartAtLogin(true).startMinimised)
+    }
+
+    @Test
+    fun `starting at login is what the setting records`() {
+        assertTrue(Preferences().withStartAtLogin(true).startAtLogin)
+    }
+
+    @Test
+    fun `no longer starting at login leaves the window choice where it stood`() {
+        val stored = Preferences(startAtLogin = true, startMinimised = true)
+
+        assertTrue(stored.withStartAtLogin(false).startMinimised)
+    }
+
+    @Test
+    fun `no longer starting at login clears the setting`() {
+        val stored = Preferences(startAtLogin = true, startMinimised = true)
+
+        assertFalse(stored.withStartAtLogin(false).startAtLogin)
+    }
+
+    @Test
+    fun `no longer starting at login leaves a window that was never out of the way alone`() {
+        val stored = Preferences(startAtLogin = true, startMinimised = false)
+
+        assertFalse(stored.withStartAtLogin(false).startMinimised)
+    }
+
+    @Test
     fun `minimising to the tray defaults to on`() {
         assertTrue(Preferences().minimiseToTray)
     }
 
     @Test
-    fun `the window defaults to 960 wide`() {
-        assertEquals(960, Preferences().window.width)
+    fun `the window defaults to 560 wide`() {
+        assertEquals(560, Preferences().window.width)
     }
 
     @Test
@@ -92,8 +128,8 @@ class PreferencesTest {
     }
 
     @Test
-    fun `a window width past any display reads as the ceiling`() {
-        assertEquals(16384, read("""{"window":{"width":2147483647}}""").window.width)
+    fun `a window width past the widest the window opens at reads as that width`() {
+        assertEquals(720, read("""{"window":{"width":2147483647}}""").window.width)
     }
 
     @Test
@@ -102,13 +138,13 @@ class PreferencesTest {
     }
 
     @Test
-    fun `a window height past any display reads as the ceiling`() {
-        assertEquals(16384, read("""{"window":{"height":2147483647}}""").window.height)
+    fun `a window height past the tallest the window opens at reads as that height`() {
+        assertEquals(900, read("""{"window":{"height":2147483647}}""").window.height)
     }
 
     @Test
     fun `a stored position within reach of a display is kept`() {
-        assertEquals(WindowGeometry(960, 720, 120, 40), read("""{"window":{"x":120,"y":40}}""").window)
+        assertEquals(WindowGeometry(560, 720, 120, 40), read("""{"window":{"x":120,"y":40}}""").window)
     }
 
     @Test
@@ -144,8 +180,9 @@ class PreferencesTest {
             theme = Theme.DARK,
             sortOrder = SortOrder.RECENTLY_ADDED,
             startMinimised = true,
+            startAtLogin = true,
             minimiseToTray = false,
-            window = WindowGeometry(width = 1024, height = 800, x = 12, y = -34),
+            window = WindowGeometry(width = 640, height = 800, x = 12, y = -34),
         )
         assertEquals(preferences, read(write(preferences)))
     }
@@ -153,7 +190,18 @@ class PreferencesTest {
     @Test
     fun `the written document carries every preference`() {
         val keys = preferencesJson.parseToJsonElement(write(Preferences())).jsonObject.keys
-        assertEquals(setOf("theme", "sortOrder", "startMinimised", "minimiseToTray", "window"), keys)
+        assertEquals(
+            setOf(
+                "theme",
+                "sortOrder",
+                "sortDescending",
+                "startMinimised",
+                "startAtLogin",
+                "minimiseToTray",
+                "window",
+            ),
+            keys,
+        )
     }
 
     @Test

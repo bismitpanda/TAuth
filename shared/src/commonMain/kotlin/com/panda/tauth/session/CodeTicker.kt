@@ -52,12 +52,11 @@ class CodeTicker internal constructor(
     }
 
     private fun codeFor(entry: UnlockedEntry, epochSeconds: Long): TotpCode? {
-        // Advancing an hotp counter on a timer would spend a code the user never asked to see, and a
-        // period guessed for a totp entry carrying none would show a code no server is computing.
+        // Advancing an hotp counter on a timer would spend a code nobody asked to see, and a period
+        // guessed for a totp entry carrying none would show a code no server is computing.
         if (entry.type != OtpType.TOTP) return null
         val period = entry.period ?: return null
-        // The key is lent for the length of the generation and never copied out, so a lock arriving
-        // mid-tick waits for this rather than zeroing the array under it.
+        // The key is lent rather than copied out, so a lock arriving mid-tick waits for this.
         val code = session.withSecret(entry.id) { secret ->
             Totp.generate(secret, epochSeconds, entry.algorithm, entry.digits, period)
         } ?: return null

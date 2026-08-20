@@ -24,8 +24,8 @@ data class PlaintextExport(
     @SerialName(PLAINTEXT_ENTRIES) val entries: List<VaultEntry> = emptyList(),
 )
 
-// The secrets are already base32 text in the body this reads, which §16.8 records as the reason they
-// outlive their decode; nothing here converts a key to a String that was not one already.
+// The secrets are already base32 text in the body this reads, so nothing here converts a key to a
+// String that was not one already.
 internal fun VaultBody.exported(format: ExportFormat): String {
     val ordered = entries.sortedBy { it.orderIndex }
     return when (format) {

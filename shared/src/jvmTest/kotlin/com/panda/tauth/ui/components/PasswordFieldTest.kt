@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -56,7 +57,7 @@ class PasswordFieldTest {
         compose.setContent { TauthTheme { PasswordField(state) } }
         compose.onNode(hasSetTextAction()).performTextInput(TYPED)
 
-        compose.onNodeWithText("Show").performClick()
+        compose.onNodeWithContentDescription("Show").performClick()
 
         compose.onNodeWithText(TYPED).assertIsDisplayed()
     }

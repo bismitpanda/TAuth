@@ -68,8 +68,13 @@ compose.desktop {
             packageName = "TAuth"
             packageVersion = "1.0.0"
             description = "A desktop authenticator for time-based one-time codes"
-            vendor = "TAuth"
-            copyright = "TAuth contributors"
+            vendor = "Bismit Panda"
+            copyright = "Copyright 2026 Bismit Panda"
+            licenseFile.set(rootProject.file("LICENSE"))
+
+            // The OFL requires its text to travel with the fonts, which are bundled inside the jar.
+            // licenseFile takes one file, so this rides along beside the application instead.
+            appResourcesRootDir.set(project.layout.projectDirectory.dir("resources"))
 
             // Traded against installer size: a stripped runtime fails at the module a code path
             // reaches only on one platform, and the failure lands on the user rather than the build.
@@ -82,7 +87,7 @@ compose.desktop {
             linux {
                 iconFile.set(icons.file("tauth.png"))
                 packageName = "tauth"
-                debMaintainer = "tauth@localhost"
+                debMaintainer = "contact@bismitpanda.com"
                 menuGroup = "Utility"
                 appCategory = "utils"
             }

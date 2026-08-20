@@ -8,8 +8,8 @@ import com.panda.tauth.resources.Res
 import com.panda.tauth.resources.tauth
 import org.jetbrains.compose.resources.painterResource
 
-// §4.1's packaged icons are cut from the drawable this reads, so the title bar and the installer
-// cannot disagree about the mark.
+// The packaged icons are cut from the drawable this reads, so the title bar and the installer cannot
+// disagree about the mark.
 @Composable
 internal fun tauthIcon(): Painter = ToFit(painterResource(Res.drawable.tauth))
 

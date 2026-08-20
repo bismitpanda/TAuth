@@ -28,11 +28,11 @@ import com.panda.tauth.vault.VaultError
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-const val DISCLOSURE_TITLE = "Confirm your master password"
-const val DISCLOSURE_CONFIRM_LABEL = "Disclose"
+const val DISCLOSURE_TITLE = "Confirm your password"
+const val DISCLOSURE_CONFIRM_LABEL = "Show"
 const val DISCLOSURE_CANCEL_LABEL = "Cancel"
 
-private const val PASSWORD_LABEL = "Master password"
+private const val PASSWORD_LABEL = "Password"
 private const val PROGRESS_LABEL = "Checking your password"
 
 // Carried by the statement whenever the gate is on screen, so its absence is as observable as its
@@ -182,14 +182,12 @@ class DisclosureState<T, E : VaultError> {
     }
 }
 
-// No else branch, over the cases a disclosure reports: a case joining that view has to be given a
-// message here before this compiles again.
 private fun messageFor(error: DiscloseError): String = when (error) {
     // Kept apart from the damaged case below: this one means retype, that one means the file.
-    is VaultError.WrongPassword -> "That password did not open the vault."
+    is VaultError.WrongPassword -> "That password is not correct."
 
     // The check reads the header the open vault holds, so what is damaged here is that header.
-    is VaultError.Corrupt -> "The vault file is damaged, so nothing can be disclosed from it."
+    is VaultError.Corrupt -> "The vault file is damaged, so nothing can be shown from it."
 
     is VaultError.VaultClosed -> "The vault locked while your password was being checked."
 

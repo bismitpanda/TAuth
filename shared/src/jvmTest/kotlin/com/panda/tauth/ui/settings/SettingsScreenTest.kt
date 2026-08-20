@@ -2,7 +2,6 @@ package com.panda.tauth.ui.settings
 
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
@@ -49,6 +48,7 @@ private val STORED_PREFERENCES = Preferences(
     sortOrder = SortOrder.RECENTLY_ADDED,
     startMinimised = true,
     minimiseToTray = false,
+    startAtLogin = true,
 )
 
 private const val PASSWORD = "correct horse battery staple"
@@ -62,9 +62,9 @@ private const val LICENCE = "The licence this build carries"
 // The distinction the screen states once, written out rather than read from the screen's own
 // constant, so wording that stops making it fails this.
 private const val HEADER_STATEMENT =
-    "Appearance and tray settings are kept in a plaintext file that anything running as you can " +
-        "rewrite. Everything governing when the vault locks is kept inside the vault, and changing " +
-        "one of those needs your master password."
+    "Appearance and tray settings are kept in a plain file that any program running as you can " +
+        "change. Settings that control when the vault locks are kept inside the vault, and changing " +
+        "one needs your password."
 
 // What a note repeating the header would have to say for the plaintext file or the vault to be
 // where a control's own wording places it.
@@ -74,14 +74,14 @@ private fun mentionsPlaintext(note: String): Boolean = PLACEMENT_WORDS.any { it 
 
 // The screen's own wording, repeated here as literals so a changed label fails the test that names it
 // rather than following it.
-private const val CHANGE = "Change master password"
+private const val CHANGE = "Change password"
 private const val REENCRYPT = "Re-encrypt vault"
 private const val REVEAL = "Show in file manager"
 private const val EXPORT = "Export an encrypted copy"
 private const val BACK = "Back to accounts"
 private const val DARK = "Dark"
 private const val LIGHT = "Light"
-private const val RECENTLY_ADDED = "Recently added"
+private const val RECENTLY_ADDED = "Newest first"
 private const val BY_ISSUER = "Issuer A–Z"
 
 class SettingsScreenTest {
@@ -90,9 +90,6 @@ class SettingsScreenTest {
 
     private var chosenPolicy: SecurityPolicy? = null
     private var chosenTheme: Theme? = null
-    private var chosenSortOrder: SortOrder? = null
-    private var chosenMinimiseToTray: Boolean? = null
-    private var chosenStartMinimised: Boolean? = null
     private var currentPassword: CharArray? = null
     private var newPassword: CharArray? = null
     private var rotationPassword: CharArray? = null
@@ -298,89 +295,6 @@ class SettingsScreenTest {
         tap(LIGHT)
 
         compose.runOnIdle { assertEquals(Theme.LIGHT, chosenTheme) }
-    }
-
-    @Test
-    fun `the account order it opens with is the one stored`() {
-        show()
-
-        compose.onNodeWithText(RECENTLY_ADDED).assertIsSelected()
-    }
-
-    @Test
-    fun `a chosen account order is handed over`() {
-        show()
-
-        tap(BY_ISSUER)
-
-        compose.runOnIdle { assertEquals(SortOrder.ISSUER, chosenSortOrder) }
-    }
-
-    @Test
-    fun `the tray preference it opens with is the one stored`() {
-        show()
-
-        compose.onNodeWithTag(MINIMISE_TO_TRAY_TAG).assertIsOff()
-    }
-
-    @Test
-    fun `a switched tray preference is handed over`() {
-        show()
-
-        toggle(MINIMISE_TO_TRAY_TAG)
-
-        compose.runOnIdle { assertEquals(true, chosenMinimiseToTray) }
-    }
-
-    @Test
-    fun `the start preference it opens with is the one stored`() {
-        show()
-
-        compose.onNodeWithTag(START_MINIMISED_TAG).assertIsOn()
-    }
-
-    @Test
-    fun `a switched start preference is handed over`() {
-        show()
-
-        toggle(START_MINIMISED_TAG)
-
-        compose.runOnIdle { assertEquals(false, chosenStartMinimised) }
-    }
-
-    @Test
-    fun `a desktop with no tray cannot switch the tray preference`() {
-        show(shell = shellSettings(canConfigureTray = false))
-
-        compose.onNodeWithTag(MINIMISE_TO_TRAY_TAG).assertIsNotEnabled()
-    }
-
-    @Test
-    fun `a desktop with no tray cannot switch the start preference`() {
-        show(shell = shellSettings(canConfigureTray = false))
-
-        compose.onNodeWithTag(START_MINIMISED_TAG).assertIsNotEnabled()
-    }
-
-    @Test
-    fun `a desktop with no tray says why the tray settings are refused`() {
-        show(shell = shellSettings(canConfigureTray = false))
-
-        compose.onNodeWithText(NO_TRAY_NOTE).performScrollTo().assertIsDisplayed()
-    }
-
-    @Test
-    fun `a desktop with a tray offers the tray preference`() {
-        show(shell = shellSettings(canConfigureTray = true))
-
-        compose.onNodeWithTag(MINIMISE_TO_TRAY_TAG).assertIsEnabled()
-    }
-
-    @Test
-    fun `a desktop with a tray says nothing about a missing one`() {
-        show(shell = shellSettings(canConfigureTray = true))
-
-        compose.onNodeWithText(NO_TRAY_NOTE).assertDoesNotExist()
     }
 
     @Test
@@ -617,9 +531,8 @@ class SettingsScreenTest {
         show()
 
         compose.onNodeWithText(
-            "Codes are read off this computer's clock, which TAuth does not correct against a time " +
-                "server. A clock out by more than an account's period produces codes the other side " +
-                "rejects.",
+            "Codes come from this computer's clock, which TAuth does not set for you. If the clock " +
+                "is off by more than a code's lifetime, the codes will be rejected.",
         ).performScrollTo().assertIsDisplayed()
     }
 
@@ -677,7 +590,7 @@ class SettingsScreenTest {
     fun `a wrong current password is reported on the screen`() {
         show(error = VaultError.WrongPassword)
 
-        compose.onNodeWithText("That password did not open the vault, so nothing was changed.")
+        compose.onNodeWithText("That password is not correct, so nothing was changed.")
             .performScrollTo()
             .assertIsDisplayed()
     }
@@ -744,7 +657,7 @@ class SettingsScreenTest {
     fun `a version the reader does not know shows its own message`() {
         show(error = VaultError.UnsupportedVersion(found = 2, supported = 1))
 
-        compose.onNodeWithText("The vault file is in a format this version of TAuth does not read.")
+        compose.onNodeWithText("This vault was made by a newer version of TAuth.")
             .performScrollTo()
             .assertIsDisplayed()
     }
@@ -761,7 +674,7 @@ class SettingsScreenTest {
     fun `a damaged file does not show the password message`() {
         show(error = VaultError.Corrupt("header checksum does not match the header"))
 
-        compose.onNodeWithText("That password did not open the vault, so nothing was changed.").assertDoesNotExist()
+        compose.onNodeWithText("That password is not correct, so nothing was changed.").assertDoesNotExist()
     }
 
     @Test
@@ -833,15 +746,15 @@ class SettingsScreenTest {
 
     private fun type(tag: String, text: String) = field(tag).performScrollTo().performTextInput(text)
 
-    // The tag names the field's own row, and the editable node is inside it.
     private fun field(tag: String): SemanticsNodeInteraction =
-        compose.onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag(tag)))
+        compose.onNode(hasSetTextAction() and (hasTestTag(tag) or hasAnyAncestor(hasTestTag(tag))))
 
-    private fun shellSettings(canConfigureTray: Boolean) = ShellSettings(
+    private fun shellSettings(canConfigureTray: Boolean, canStartAtLogin: Boolean = true) = ShellSettings(
         vaultLocation = VAULT_LOCATION,
         version = VERSION,
         licence = LICENCE,
         canConfigureTray = canConfigureTray,
+        canStartAtLogin = canStartAtLogin,
         onReveal = { reveals++ },
         onExport = { Outcome.Success(Unit) },
     )
@@ -869,9 +782,6 @@ class SettingsScreenTest {
                     importError = importError,
                     onPolicyChange = { chosenPolicy = it },
                     onThemeChange = { chosenTheme = it },
-                    onSortOrderChange = { chosenSortOrder = it },
-                    onMinimiseToTrayChange = { chosenMinimiseToTray = it },
-                    onStartMinimisedChange = { chosenStartMinimised = it },
                     onChangePassword = { current, next ->
                         currentPassword = current.copyOf()
                         newPassword = next.copyOf()

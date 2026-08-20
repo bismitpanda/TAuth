@@ -13,7 +13,7 @@ import kotlin.time.Instant
 sealed interface ImportRow {
     val position: Int
 
-    // The vault already holding this account is not a refusal: §9.9 offers it anyway.
+    // The vault already holding this account is not a refusal; it is offered anyway.
     data class Account(override val position: Int, val entry: VaultEntry, val isDuplicate: Boolean) : ImportRow
 
     // The detail states the rule rather than the value, since the value is a credential and this
@@ -21,8 +21,8 @@ sealed interface ImportRow {
     data class Refused(override val position: Int, val detail: String) : ImportRow
 }
 
-// What the user accepted. A duplicate is left out unless its position was chosen, which is §9.9's
-// skip-or-add-anyway; a row the reader refused has no account to add whatever is chosen.
+// A duplicate is left out unless its position was chosen; a row the reader refused has no account to
+// add whatever is chosen.
 fun List<ImportRow>.accepted(addAnyway: Set<Int>): List<VaultEntry> = filterIsInstance<ImportRow.Account>()
     .filter { !it.isDuplicate || it.position in addAnyway }
     .map { it.entry }
@@ -31,8 +31,7 @@ private const val DOCUMENT_OPENING = '{'
 
 private const val UNREADABLE_ENTRY = "this account is not in a shape TAuth reads"
 
-// The base32 an account was stored under is kept as it was typed, so two spellings of one key are one
-// account. Padding and case are what differ between them; nothing here decodes a secret.
+// Two spellings of one key are one account, and nothing here decodes a secret to establish that.
 private fun normalisedSecret(secret: String): String = secret.uppercase().filterNot { it == '=' || it.isWhitespace() }
 
 // Holds a secret, so it says nothing about itself. It exists to be compared and never to be read.
@@ -119,8 +118,6 @@ private fun uriRow(position: Int, line: String, now: Instant, newId: () -> Strin
         )
     }
 
-// No else branch, over the cases a parse reports: a case joining that view has to be given a detail
-// here before this compiles again.
 private fun detailOf(error: UriParseError): String = when (error) {
     is VaultError.MalformedUri -> error.detail
     is VaultError.InvalidSecret -> error.detail

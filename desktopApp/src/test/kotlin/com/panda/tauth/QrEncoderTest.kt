@@ -22,7 +22,7 @@ import kotlin.test.assertTrue
 // Base32 of the RFC 4226 seed "12345678901234567890", which is 160 bits.
 private const val SECRET = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
 
-// Nineteen characters, a colon and forty-four: the label length §13.1 holds the symbol version to.
+// Nineteen characters, a colon and forty-four: the longest label the symbol version has to carry.
 private const val LONG_ISSUER = "Example Corporation"
 private const val LONG_ACCOUNT = "alice.smith@corporate.department.example.com"
 

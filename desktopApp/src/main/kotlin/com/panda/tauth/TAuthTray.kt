@@ -6,7 +6,7 @@ import com.panda.tauth.resources.tauth
 import dev.nucleusframework.composenativetray.tray.api.Tray
 
 // The desktop draws this menu, not Compose, so what it offers is the item, the divider and the
-// label: §10.1's three actions and nothing a theme would have to reach.
+// label, and nothing a theme would have to reach.
 @Composable
 fun TAuthTray(isShown: Boolean, onShow: () -> Unit, onLock: () -> Unit, onQuit: () -> Unit) {
     if (!isShown) return

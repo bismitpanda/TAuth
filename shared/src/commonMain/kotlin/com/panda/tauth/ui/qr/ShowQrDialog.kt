@@ -32,7 +32,9 @@ import com.panda.tauth.totp.OtpType
 import com.panda.tauth.ui.list.describe
 import com.panda.tauth.ui.settings.ExportError
 import com.panda.tauth.ui.settings.FileWriteError
+import com.panda.tauth.ui.theme.ButtonLabel
 import com.panda.tauth.ui.theme.LocalSpacing
+import com.panda.tauth.ui.theme.TauthIcons
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.seconds
 
@@ -55,8 +57,6 @@ const val QR_IDENTITY_TAG = "qr-identity"
 const val QR_COUNTER_TAG = "qr-counter"
 const val QR_SAVE_PROBLEM_TAG = "qr-save-problem"
 
-// No else branch, over the cases writing a file reports: a case joining that view has to be given a
-// message here before this compiles again.
 private fun messageFor(error: FileWriteError): String = when (error) {
     is ExportError.NotRestricted ->
         "That location cannot keep the image to you alone, so nothing was written there."
@@ -64,13 +64,13 @@ private fun messageFor(error: FileWriteError): String = when (error) {
     is ExportError.Io -> "The image could not be written to that location."
 }
 
-// STYLE_GUIDE.md §7: the symbol carries its own colours whatever the theme. Inverting the modules
-// for a dark theme breaks a large fraction of scanners.
+// Outside the theme on purpose: inverting the modules for a dark theme breaks a large fraction of
+// scanners.
 private val QR_LIGHT = Color.White
 private val QR_DARK = Color.Black
 
-// IMPLEMENTATION_PLAN.md §9.7. Held here rather than in the theme because a theme free to shrink it
-// is free to make the symbol unscannable.
+// Beside the symbol rather than in the theme, because a theme free to shrink it is free to make it
+// unscannable.
 private val QR_MINIMUM_SIZE = 240.dp
 
 private const val QR_IDLE_SECONDS = 60
@@ -146,9 +146,9 @@ fun ShowQrDialog(
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(spacing.small)) {
                 onSaveImage?.let { save ->
-                    TextButton(onClick = save, enabled = !isSaving) { Text(QR_SAVE_LABEL) }
+                    TextButton(onClick = save, enabled = !isSaving) { ButtonLabel(TauthIcons.save, QR_SAVE_LABEL) }
                 }
-                TextButton(onClick = onCopyUri) { Text(QR_COPY_URI_LABEL) }
+                TextButton(onClick = onCopyUri) { ButtonLabel(TauthIcons.copy, QR_COPY_URI_LABEL) }
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(QR_CLOSE_LABEL) } },

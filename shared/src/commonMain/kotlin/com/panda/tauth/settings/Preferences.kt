@@ -41,25 +41,27 @@ data class WindowGeometry(
     val y: Int? = null,
 ) {
     companion object {
-        const val DEFAULT_WIDTH = 960
+        const val DEFAULT_WIDTH = 560
         const val DEFAULT_HEIGHT = 720
 
-        // The floors keep a window the user can act in. The ceilings sit above any display
-        // arrangement, so a stored extent stays inside what a window toolkit can be given.
         const val MIN_WIDTH = 480
         const val MIN_HEIGHT = 360
-        const val MAX_EXTENT = 16384
+        const val MAX_WIDTH = 720
+        const val MAX_HEIGHT = 900
+
         const val MAX_COORDINATE = 16384
     }
 }
 
-// Plaintext and read before any password, so anything running as the user can rewrite it. Nothing
-// here governs when the vault locks; a value out of range is coerced rather than refused.
+// Plaintext and rewritable by anything running as the user, so nothing here governs when the vault
+// locks.
 @Serializable
 data class Preferences(
     val theme: Theme = Theme.SYSTEM,
     val sortOrder: SortOrder = SortOrder.MANUAL,
+    val sortDescending: Boolean = false,
     val startMinimised: Boolean = false,
+    val startAtLogin: Boolean = false,
     val minimiseToTray: Boolean = true,
     // This is the only place a geometry is decoded from the file, so clamping it here covers every
     // untrusted value the model can receive.
@@ -89,14 +91,17 @@ internal object WindowGeometrySerializer : KSerializer<WindowGeometry> {
     override fun deserialize(decoder: Decoder): WindowGeometry = decoder.decodeSerializableValue(delegate).clamped()
 }
 
-// A size out of range is clamped. A position is kept only when both coordinates are present and land
-// where a display could be, and dropped whole otherwise.
+// An authenticator that seizes the screen at every login is one the user turns off again, so taking
+// the setting on takes the window out of the way with it. Turning it off returns no choice.
+fun Preferences.withStartAtLogin(isEnabled: Boolean): Preferences =
+    copy(startAtLogin = isEnabled, startMinimised = if (isEnabled) true else startMinimised)
+
 fun WindowGeometry.clamped(): WindowGeometry {
     val coordinates = -WindowGeometry.MAX_COORDINATE..WindowGeometry.MAX_COORDINATE
     val hasPosition = x != null && y != null && x in coordinates && y in coordinates
     return copy(
-        width = width.coerceIn(WindowGeometry.MIN_WIDTH, WindowGeometry.MAX_EXTENT),
-        height = height.coerceIn(WindowGeometry.MIN_HEIGHT, WindowGeometry.MAX_EXTENT),
+        width = width.coerceIn(WindowGeometry.MIN_WIDTH, WindowGeometry.MAX_WIDTH),
+        height = height.coerceIn(WindowGeometry.MIN_HEIGHT, WindowGeometry.MAX_HEIGHT),
         x = if (hasPosition) x else null,
         y = if (hasPosition) y else null,
     )

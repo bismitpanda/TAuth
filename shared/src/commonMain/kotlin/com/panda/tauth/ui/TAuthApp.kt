@@ -17,8 +17,10 @@ import com.panda.tauth.session.SessionState
 import com.panda.tauth.session.UnlockedEntry
 import com.panda.tauth.session.VaultSession
 import com.panda.tauth.settings.PreferencesState
+import com.panda.tauth.settings.withStartAtLogin
 import com.panda.tauth.totp.OtpAuthUri
 import com.panda.tauth.totp.TotpCode
+import com.panda.tauth.ui.components.OverWindow
 import com.panda.tauth.ui.create.CreateVaultScreen
 import com.panda.tauth.ui.edit.AddAccountScreen
 import com.panda.tauth.ui.edit.EditAccountScreen
@@ -159,9 +161,6 @@ fun TAuthApp(
             is SessionState.Locked ->
                 UnlockScreen(unlock, screenModifier, error = unlocking.error, lastReason = current.lastReason)
 
-            // A derivation is running and the state alone does not say which one asked for it, so the
-            // screen that took the password is the screen that reports its progress. The settings
-            // route is reached only from an open vault, which is what makes it the asker here.
             is SessionState.Unlocking -> when {
                 route is Route.Settings ->
                     SettingsDestination(session, settings, preferences, shell, scope, screenModifier) {
@@ -292,13 +291,16 @@ private fun UnlockedGraph(
             codes = codes,
             modifier = modifier,
             sortOrder = preferences.value.sortOrder,
+            isSortDescending = preferences.value.sortDescending,
             clipboardClearSeconds = state.policy.clipboardClearSeconds,
             clipboard = clipboard,
             qrEncoding = qrEncoding,
             error = listError,
             // The ordering outlives the window it was chosen in, so it goes to the file rather than
             // into state the next launch starts without.
-            onSortOrderChange = { order -> scope.launch { preferences.update { it.copy(sortOrder = order) } } },
+            onSortChange = { order, isDescending ->
+                scope.launch { preferences.update { it.copy(sortOrder = order, sortDescending = isDescending) } }
+            },
             onVisibleChange = onVisibleChange,
             onIdleLockSuppressed = onIdleLockSuppressed,
             onSaveQrImage = onSaveQrImage,
@@ -329,44 +331,89 @@ private fun UnlockedGraph(
                 onRoute(Route.Accounts)
             }
 
-        is Route.Import -> ImportScreen(
-            rows = imports.rows,
-            modifier = modifier,
-            addAnyway = imports.addAnyway,
-            isBusy = imports.isBusy,
-            error = imports.addError,
-            onToggleDuplicate = imports::toggle,
-            onImport = { imports.add(scope, session::addEntries) },
-            onCancel = imports::clear,
-        )
+        is Route.Import -> OverWindow(modifier = modifier, onDismiss = imports::clear) { inner ->
+            ImportScreen(
+                rows = imports.rows,
+                modifier = inner,
+                addAnyway = imports.addAnyway,
+                isBusy = imports.isBusy,
+                error = imports.addError,
+                onToggleDuplicate = imports::toggle,
+                onImport = { imports.add(scope, session::addEntries) },
+                onCancel = imports::clear,
+            )
+        }
 
-        is Route.Add -> AddAccountScreen(
+        is Route.Add -> AddDestination(
             scanning = scanning,
-            onSave = { uri -> onAddWork { addAndReturn(session, uri, clock, onRoute) } },
-            onCancel = { onRoute(Route.Accounts) },
             epochSeconds = nowSeconds,
-            modifier = modifier,
             isBusy = isEntryBusy,
             error = addError,
+            modifier = modifier,
+            onSave = { uri -> onAddWork { addAndReturn(session, uri, clock, onRoute) } },
+            onLeave = { onRoute(Route.Accounts) },
         )
 
-        is Route.Edit -> {
-            val entry = state.entries.firstOrNull { it.id == route.id }
-            if (entry == null) {
-                // The account went while this destination was open. Routing is a write to the state
-                // above, so it waits for the composition rather than running inside it.
-                LaunchedEffect(route.id) { onRoute(Route.Accounts) }
-            } else {
-                EditAccountScreen(
-                    entry = entry,
-                    onSave = { edit -> onEditWork { editAndReturn(session, entry, edit, onRoute) } },
-                    onCancel = { onRoute(Route.Accounts) },
-                    modifier = modifier,
-                    isBusy = isEntryBusy,
-                    error = editError,
-                )
-            }
-        }
+        is Route.Edit -> EditDestination(
+            entry = state.entries.firstOrNull { it.id == route.id },
+            id = route.id,
+            isBusy = isEntryBusy,
+            error = editError,
+            modifier = modifier,
+            onSave = { entry, edit -> onEditWork { editAndReturn(session, entry, edit, onRoute) } },
+            onLeave = { onRoute(Route.Accounts) },
+        )
+    }
+}
+
+@Composable
+private fun EditDestination(
+    entry: UnlockedEntry?,
+    id: String,
+    isBusy: Boolean,
+    error: EntryChangeError?,
+    onSave: (UnlockedEntry, EntryEdit) -> Unit,
+    onLeave: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (entry == null) {
+        // Routing is a write to the state above, so it waits for the composition rather than running
+        // inside it.
+        LaunchedEffect(id) { onLeave() }
+        return
+    }
+    OverWindow(modifier = modifier, onDismiss = onLeave) { inner ->
+        EditAccountScreen(
+            entry = entry,
+            onSave = { edit -> onSave(entry, edit) },
+            onCancel = onLeave,
+            modifier = inner,
+            isBusy = isBusy,
+            error = error,
+        )
+    }
+}
+
+@Composable
+private fun AddDestination(
+    scanning: QrScanning?,
+    epochSeconds: Long,
+    isBusy: Boolean,
+    error: EntryAddError?,
+    onSave: (OtpAuthUri) -> Unit,
+    onLeave: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OverWindow(modifier = modifier, onDismiss = onLeave) { inner ->
+        AddAccountScreen(
+            scanning = scanning,
+            onSave = onSave,
+            onCancel = onLeave,
+            epochSeconds = epochSeconds,
+            modifier = inner,
+            isBusy = isBusy,
+            error = error,
+        )
     }
 }
 
@@ -414,9 +461,9 @@ private fun SettingsDestination(
         // A refused preference write is reported where the file is written. What this slot carries is
         // what the vault refused, which is a different thing.
         onThemeChange = { theme -> scope.launch { preferences.update { it.copy(theme = theme) } } },
-        onSortOrderChange = { order -> scope.launch { preferences.update { it.copy(sortOrder = order) } } },
         onMinimiseToTrayChange = { isOn -> scope.launch { preferences.update { it.copy(minimiseToTray = isOn) } } },
         onStartMinimisedChange = { isOn -> scope.launch { preferences.update { it.copy(startMinimised = isOn) } } },
+        onStartAtLoginChange = { isOn -> scope.launch { preferences.update { it.withStartAtLogin(isOn) } } },
         onChangePassword = { current, next ->
             settings.run(scope, current, next) { session.changePassword(current, next) }
         },

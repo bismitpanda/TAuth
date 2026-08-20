@@ -34,7 +34,6 @@ private val ALL_CASES: List<ExportError> = listOf(
 private inline fun <reified V : ExportError> namesIn(): Set<String> =
     ALL_CASES.filterIsInstance<V>().map { it::class.simpleName.orEmpty() }.toSet()
 
-// No else branch: a case added to the hierarchy has to be named here before this compiles again.
 private fun nameOf(error: ExportError): String = when (error) {
     is ExportError.VaultUnreadable -> "VaultUnreadable"
     is ExportError.NotRestricted -> "NotRestricted"

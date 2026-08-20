@@ -34,13 +34,13 @@ import com.panda.tauth.vault.VaultCreateError
 import com.panda.tauth.vault.VaultError
 
 private const val TITLE = "Create your vault"
-private const val NOTE_HEADING = "Your master password cannot be recovered"
+private const val NOTE_HEADING = "Your password cannot be recovered"
 private const val NOTE_BODY =
     "TAuth keeps no copy of it and has no reset path. If you forget it, every secret stored in " +
         "this vault is lost with it."
-private const val ACKNOWLEDGE_LABEL = "I understand that losing my master password loses every stored secret"
-private const val PASSWORD_LABEL = "Master password"
-private const val CONFIRMATION_LABEL = "Confirm master password"
+private const val ACKNOWLEDGE_LABEL = "I understand that if I lose my password, I lose every code stored here"
+private const val PASSWORD_LABEL = "Password"
+private const val CONFIRMATION_LABEL = "Confirm password"
 private const val CREATE_LABEL = "Create vault"
 private const val TOO_SHORT_MESSAGE = "Use at least $MIN_MASTER_PASSWORD_LENGTH characters"
 private const val MISMATCH_MESSAGE = "The two passwords do not match"
@@ -173,12 +173,10 @@ private fun StrengthMeter(strength: PasswordStrength, modifier: Modifier = Modif
     }
 }
 
-// No else branch, over the cases a creation reports: a case joining that view has to be given a message
-// here before this compiles again.
 private fun messageFor(error: VaultCreateError): String = when (error) {
     is VaultError.VaultFileExists -> "A vault already exists at this location."
 
-    is VaultError.NoVaultFile -> "The vault file was written but was gone when it was read back."
+    is VaultError.NoVaultFile -> "The vault was created but could not be found afterwards."
 
     is VaultError.LockedByAnotherProcess -> "Another TAuth process is holding the vault file."
 
@@ -187,14 +185,14 @@ private fun messageFor(error: VaultCreateError): String = when (error) {
     is VaultError.TooLarge -> "The vault is larger than the file format allows."
 
     // Kept apart from the damage cases below: this one means the password, those mean the file.
-    is VaultError.WrongPassword -> "The vault was written but the password did not open it."
+    is VaultError.WrongPassword -> "The vault was created but the password did not open it."
 
     // A secret that will not decode is the body reading back wrong, which to the person in front of
     // it is the same as a failed tag or a structure that does not parse.
     is VaultError.IntegrityFailure, is VaultError.Corrupt, is VaultError.InvalidSecret ->
         "The vault file was written but reads back damaged."
 
-    is VaultError.UnsupportedVersion -> "The vault file is in a format this version of TAuth does not read."
+    is VaultError.UnsupportedVersion -> "This vault was made by a newer version of TAuth."
 
     // A lock overtook the creation. The file is written and opening it is a password entry away.
     is VaultError.VaultClosed -> "The vault locked while it was being created."
