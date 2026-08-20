@@ -20,3 +20,8 @@ node_modules/
 
 # Claude Code local settings; the agent definitions and the hook are shared
 .claude/settings.local.json
+
+# A vault a run resolved against an empty user.home lands here rather than under the real home. The
+# store refuses that path now, so this catches what a build made before it did.
+**/.local/
+
