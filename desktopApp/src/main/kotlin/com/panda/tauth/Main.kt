@@ -113,6 +113,7 @@ private fun runTAuth(role: InstanceRole) = application {
         val sessionState by session.state.collectAsState()
         val idleMinutes = idleTimeoutMinutes(sessionState)
         var isIdleLockSuppressed by remember { mutableStateOf(false) }
+        val isHeld = isIdleHeld(isIdleLockSuppressed, modalHold.isHeld)
 
         WatchPresence(session, windowState, windowInfo, modalHold) {
             presenceOf(isVisible, windowState, windowInfo, shownBy, modalHold)
@@ -124,16 +125,8 @@ private fun runTAuth(role: InstanceRole) = application {
             window.raiseToFront()
         }
 
-        val isHeld = isIdleHeld(isIdleLockSuppressed, modalHold.isHeld)
-
-        // Keyed on the interval and the hold as well as the window, so a lock, an unlock or a hold
-        // lifted each begin a whole interval against the policy the session publishes.
-        LaunchedEffect(idleWatch, isVisible, idleMinutes, isHeld) {
-            idleWatch.awaitIdle(isVisible, idleMinutes, isHeld) { reason ->
-                // Read again at the report: a chooser raised after this interval began blocks the
-                // toolkit thread, and the recomposition that would restart this waits behind it.
-                if (!isIdleHeld(isIdleLockSuppressed, modalHold.isHeld)) session.scheduleLock(reason)
-            }
+        WatchIdle(idleWatch, isVisible, idleMinutes, isHeld, session::scheduleLock) {
+            isIdleHeld(isIdleLockSuppressed, modalHold.isHeld)
         }
 
         TauthTheme(darkTheme = preferences.value.theme.isDark(isSystemInDarkTheme())) {
@@ -147,6 +140,7 @@ private fun runTAuth(role: InstanceRole) = application {
                 isSingleInstanceUnprotected = role is InstanceRole.Unprotected,
                 onIdleLockSuppressed = { isIdleLockSuppressed = it },
                 scanning = { readQrImage { modalHold.around { chooseQrImage() } } },
+                pasting = { readQrClipboard { modalHold.around { clipboardImage() } } },
                 onSaveQrImage = { symbol -> saveQrImage(symbol) { modalHold.around { chooseQrDestination() } } },
             )
         }
@@ -182,6 +176,24 @@ private fun presenceOf(
 ): WindowPresence = WindowPresence(isVisible, windowState.isMinimized, windowInfo.isWindowFocused, shownBy, hold.isHeld)
 
 private suspend fun chooseQrDestination(): Path? = chooseSaveDestination(QR_IMAGE_TITLE, QR_IMAGE_FILE_NAME)
+
+// Keyed on the interval and the hold as well as the window, so a lock, an unlock or a hold lifted
+// each begin a whole interval against the policy the session publishes.
+@Composable
+private fun WatchIdle(
+    watch: IdleWatch,
+    isVisible: Boolean,
+    idleMinutes: Int,
+    isHeld: Boolean,
+    onIdle: (LockReason) -> Unit,
+    heldNow: () -> Boolean,
+) {
+    LaunchedEffect(watch, isVisible, idleMinutes, isHeld) {
+        // Read again at the report: a chooser raised after this interval began blocks the toolkit
+        // thread, and the recomposition that would restart this waits behind it.
+        watch.awaitIdle(isVisible, idleMinutes, isHeld) { reason -> if (!heldNow()) onIdle(reason) }
+    }
+}
 
 @Composable
 private fun RaiseOnRequest(

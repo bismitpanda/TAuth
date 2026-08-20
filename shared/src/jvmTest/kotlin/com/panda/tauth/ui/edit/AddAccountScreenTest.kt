@@ -31,6 +31,7 @@ import kotlin.test.assertNull
 private const val SAVE = "Save account"
 private const val CANCEL = "Cancel"
 private const val MANUAL_PATH = "Enter details"
+private const val PASTE_IMAGE = "Paste an image"
 private const val ADVANCED = "Advanced"
 
 private const val TOTP_URI = "otpauth://totp/GitHub:alice?secret=$SEED_BASE32&issuer=GitHub"
@@ -516,6 +517,56 @@ class AddAccountScreenTest {
         compose.onNodeWithTag(SCAN_PROBLEM_TAG).assertTextEquals("That image could not be read.")
     }
 
+    // A composition with no clipboard under it has nothing to paste from, so it offers no way to try.
+    @Test
+    fun `a composition given no clipboard offers no paste`() {
+        show(scanning = { Outcome.Success(null) })
+
+        compose.onNodeWithText("Read an image").performClick()
+
+        compose.onNodeWithText(PASTE_IMAGE).assertDoesNotExist()
+    }
+
+    @Test
+    fun `a composition given a clipboard offers a paste`() {
+        show(scanning = { Outcome.Success(null) }, pasting = { Outcome.Success(null) })
+
+        compose.onNodeWithText("Read an image").performClick()
+
+        compose.onNodeWithText(PASTE_IMAGE).assertIsDisplayed()
+    }
+
+    @Test
+    fun `a pasted account reaches the preview`() {
+        show(pasting = { Outcome.Success(listOf(TOTP_URI)) })
+
+        compose.onNodeWithText("Read an image").performClick()
+        compose.onNodeWithText(PASTE_IMAGE).performClick()
+
+        compose.onNodeWithTag(PREVIEW_CODE_TAG).assertTextEquals(TOTP_PREVIEW)
+    }
+
+    @Test
+    fun `a clipboard holding no image says so`() {
+        show(pasting = { Outcome.Failure(VaultError.Corrupt("the clipboard holds no image")) })
+
+        compose.onNodeWithText("Read an image").performClick()
+        compose.onNodeWithText(PASTE_IMAGE).performClick()
+
+        compose.onNodeWithTag(SCAN_PROBLEM_TAG)
+            .assertTextEquals("Nothing was read: the clipboard holds no image.")
+    }
+
+    @Test
+    fun `several accounts in a pasted image are offered by name`() {
+        show(pasting = { Outcome.Success(listOf(TOTP_URI, HOTP_URI)) })
+
+        compose.onNodeWithText("Read an image").performClick()
+        compose.onNodeWithText(PASTE_IMAGE).performClick()
+
+        compose.onNodeWithTag(scanPickTag(0)).assertIsDisplayed()
+    }
+
     @Test
     fun `several accounts in an image are offered by name`() {
         show(scanning = { Outcome.Success(listOf(TOTP_URI, HOTP_URI)) })
@@ -538,7 +589,7 @@ class AddAccountScreenTest {
         compose.runOnIdle { assertEquals("bob", saved?.accountName) }
     }
 
-    private fun show(error: EntryAddError? = null, scanning: QrScanning? = null) {
+    private fun show(error: EntryAddError? = null, scanning: QrScanning? = null, pasting: QrScanning? = null) {
         compose.setContent {
             TauthTheme {
                 AddAccountScreen(
@@ -547,6 +598,7 @@ class AddAccountScreenTest {
                     epochSeconds = PREVIEW_AT,
                     error = error,
                     scanning = scanning,
+                    pasting = pasting,
                 )
             }
         }

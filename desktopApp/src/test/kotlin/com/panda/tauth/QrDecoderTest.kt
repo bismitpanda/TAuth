@@ -130,4 +130,39 @@ class QrDecoderTest {
 
         assertIs<VaultError.Io>(runBlocking { readQrImage { source } }.errorOrNull)
     }
+
+    @Test
+    fun `a pasted image is read`() {
+        val outcome = runBlocking { readQrClipboard { imageOf(GITHUB.build()) } }
+
+        assertContentEquals(listOf(GITHUB.build()), outcome.valueOrNull)
+    }
+
+    @Test
+    fun `every code in a pasted image is read`() {
+        val outcome = runBlocking { readQrClipboard { imageOf(GITHUB.build(), ZENDESK.build()) } }
+
+        assertEquals(2, outcome.valueOrNull?.size)
+    }
+
+    // Declining a file dialog is nothing to report; pressing paste against a clipboard holding a
+    // screenshot of nothing, or holding text, is a question that was asked and needs answering.
+    @Test
+    fun `a clipboard holding no image is refused rather than passed over`() {
+        assertIs<VaultError.Corrupt>(runBlocking { readQrClipboard { null } }.errorOrNull)
+    }
+
+    @Test
+    fun `a clipboard holding no image says which`() {
+        val error = runBlocking { readQrClipboard { null } }.errorOrNull
+
+        assertEquals("the clipboard holds no image", (error as VaultError.Corrupt).detail)
+    }
+
+    @Test
+    fun `a pasted image holding no code is read as no codes`() {
+        val blank = BufferedImage(64, 64, BufferedImage.TYPE_INT_RGB)
+
+        assertContentEquals(emptyList(), runBlocking { readQrClipboard { blank } }.valueOrNull)
+    }
 }

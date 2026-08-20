@@ -32,6 +32,7 @@ import com.panda.tauth.totp.OtpAuthUri
 import com.panda.tauth.totp.OtpType
 import com.panda.tauth.ui.components.ChoiceRow
 import com.panda.tauth.ui.components.FormField
+import com.panda.tauth.ui.theme.ButtonLabel
 import com.panda.tauth.ui.theme.ControlIcon
 import com.panda.tauth.ui.theme.LocalSpacing
 import com.panda.tauth.ui.theme.TauthIcons
@@ -49,6 +50,7 @@ internal const val SCAN_PATH_LABEL = "Read an image"
 internal const val MANUAL_PATH_LABEL = "Enter details"
 
 internal const val SCAN_CHOOSE_LABEL = "Choose an image"
+internal const val SCAN_PASTE_LABEL = "Paste an image"
 internal const val SCAN_PICK_TITLE = "Which account?"
 internal const val SCAN_PICK_CANCEL_LABEL = "Cancel"
 
@@ -82,8 +84,9 @@ internal const val ADVANCED_LABEL = "Advanced"
 
 internal fun scanPickTag(index: Int): String = "add-scan-choice-$index"
 
+// A file and a paste reach this, so the sentence names neither.
 internal fun scanMessageFor(error: ImageReadError): String = when (error) {
-    is VaultError.Corrupt -> "That image could not be read: ${error.detail}."
+    is VaultError.Corrupt -> "Nothing was read: ${error.detail}."
     is VaultError.Io -> "That image could not be read."
 }
 
@@ -116,6 +119,8 @@ fun AddAccountScreen(
     error: EntryAddError? = null,
     // Absent where the composition has no desktop under it to read an image with.
     scanning: QrScanning? = null,
+    // Absent where the composition has no clipboard under it to take an image from.
+    pasting: QrScanning? = null,
 ) {
     val spacing = LocalSpacing.current
     val scope = rememberCoroutineScope()
@@ -139,7 +144,7 @@ fun AddAccountScreen(
         Text(ADD_TITLE, style = MaterialTheme.typography.headlineSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(spacing.small)) {
             PathChoice(TauthIcons.paste, PASTE_PATH_LABEL, path == AddPath.PASTE) { path = AddPath.PASTE }
-            scanning?.let {
+            if (scanning != null || pasting != null) {
                 PathChoice(TauthIcons.image, SCAN_PATH_LABEL, path == AddPath.SCAN) { path = AddPath.SCAN }
             }
             PathChoice(TauthIcons.typed, MANUAL_PATH_LABEL, path == AddPath.MANUAL) { path = AddPath.MANUAL }
@@ -156,7 +161,8 @@ fun AddAccountScreen(
             AddPath.SCAN -> ScanPath(
                 scan = scan,
                 isEnabled = !isBusy,
-                onChoose = { scanning?.let { scan.read(scope, it) { uri -> pasted = uri } } },
+                onChoose = scanning?.let { read -> { scan.read(scope, read) { uri -> pasted = uri } } },
+                onPaste = pasting?.let { paste -> { scan.read(scope, paste) { uri -> pasted = uri } } },
                 onPick = { uri -> pasted = uri },
             )
 
@@ -188,16 +194,26 @@ fun AddAccountScreen(
 private fun ScanPath(
     scan: ScanState,
     isEnabled: Boolean,
-    onChoose: () -> Unit,
     onPick: (String) -> Unit,
     modifier: Modifier = Modifier,
+    onChoose: (() -> Unit)? = null,
+    onPaste: (() -> Unit)? = null,
 ) {
     val spacing = LocalSpacing.current
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(spacing.small)) {
-        Button(onClick = onChoose, enabled = isEnabled && !scan.isBusy) {
-            Icon(TauthIcons.image, contentDescription = null, modifier = Modifier.size(ControlIcon))
-            Spacer(Modifier.width(LocalSpacing.current.small))
-            Text(SCAN_CHOOSE_LABEL)
+        Row(horizontalArrangement = Arrangement.spacedBy(spacing.small)) {
+            onChoose?.let { choose ->
+                Button(onClick = choose, enabled = isEnabled && !scan.isBusy) {
+                    Icon(TauthIcons.image, contentDescription = null, modifier = Modifier.size(ControlIcon))
+                    Spacer(Modifier.width(LocalSpacing.current.small))
+                    Text(SCAN_CHOOSE_LABEL)
+                }
+            }
+            onPaste?.let { paste ->
+                TextButton(onClick = paste, enabled = isEnabled && !scan.isBusy) {
+                    ButtonLabel(TauthIcons.paste, SCAN_PASTE_LABEL)
+                }
+            }
         }
         val problem = scan.error?.let(::scanMessageFor) ?: scan.notice
         problem?.let {

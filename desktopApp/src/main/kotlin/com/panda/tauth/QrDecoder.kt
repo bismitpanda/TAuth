@@ -6,6 +6,7 @@ import com.google.zxing.NotFoundException
 import com.google.zxing.client.j2se.BufferedImageLuminanceSource
 import com.google.zxing.common.HybridBinarizer
 import com.google.zxing.multi.GenericMultipleBarcodeReader
+import com.panda.tauth.Outcome
 import com.panda.tauth.vault.ImageReadError
 import com.panda.tauth.vault.VaultError
 import kotlinx.coroutines.Dispatchers
@@ -13,6 +14,10 @@ import kotlinx.coroutines.swing.Swing
 import kotlinx.coroutines.withContext
 import java.awt.FileDialog
 import java.awt.Frame
+import java.awt.HeadlessException
+import java.awt.Toolkit
+import java.awt.datatransfer.DataFlavor
+import java.awt.datatransfer.UnsupportedFlavorException
 import java.awt.image.BufferedImage
 import java.io.IOException
 import java.nio.file.InvalidPathException
@@ -50,6 +55,31 @@ internal suspend fun readQrImage(destination: suspend () -> Path?): Outcome<List
         } catch (e: IOException) {
             Outcome.Failure(VaultError.Io(e))
         }
+    }
+}
+
+internal suspend fun readQrClipboard(source: suspend () -> BufferedImage?): Outcome<List<String>?, ImageReadError> {
+    val image = source() ?: return Outcome.Failure(VaultError.Corrupt("the clipboard holds no image"))
+    return withContext(Dispatchers.Default) { Outcome.Success(decodeQrCodes(image)) }
+}
+
+// The clipboard belongs to the toolkit thread. A flavour it does not hold is an ordinary answer, and
+// so is contents that changed between the offer and the read.
+internal suspend fun clipboardImage(): BufferedImage? = withContext(Dispatchers.Swing) {
+    try {
+        Toolkit.getDefaultToolkit().systemClipboard.getContents(null)
+            ?.takeIf { it.isDataFlavorSupported(DataFlavor.imageFlavor) }
+            ?.getTransferData(DataFlavor.imageFlavor) as? BufferedImage
+    } catch (e: IllegalStateException) {
+        LOGGER.log(System.Logger.Level.WARNING, "the clipboard could not be read for an image", e)
+        null
+    } catch (_: HeadlessException) {
+        null
+    } catch (_: UnsupportedFlavorException) {
+        null
+    } catch (e: IOException) {
+        LOGGER.log(System.Logger.Level.WARNING, "the clipboard could not be read for an image", e)
+        null
     }
 }
 

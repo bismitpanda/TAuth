@@ -109,6 +109,7 @@ fun TAuthApp(
     onIdleLockSuppressed: (Boolean) -> Unit = {},
     onSaveQrImage: (suspend (QrSymbol) -> Outcome<Unit, FileWriteError>)? = null,
     scanning: QrScanning? = null,
+    pasting: QrScanning? = null,
 ) {
     val scope = rememberCoroutineScope()
     val state by session.state.collectAsState()
@@ -200,6 +201,7 @@ fun TAuthApp(
                 onIdleLockSuppressed = onIdleLockSuppressed,
                 onSaveQrImage = onSaveQrImage,
                 scanning = scanning,
+                pasting = pasting,
                 onListWork = { work -> scope.launch { listError = (work() as? Outcome.Failure)?.error } },
                 onAddWork = scope.entryWork({ isEntryBusy = it }, { addError = it }),
                 onEditWork = scope.entryWork({ isEntryBusy = it }, { editError = it }),
@@ -274,6 +276,7 @@ private fun UnlockedGraph(
     onIdleLockSuppressed: (Boolean) -> Unit,
     onSaveQrImage: (suspend (QrSymbol) -> Outcome<Unit, FileWriteError>)?,
     scanning: QrScanning?,
+    pasting: QrScanning?,
     onListWork: (suspend () -> Outcome<*, EntryChangeError>) -> Unit,
     onAddWork: (suspend () -> Outcome<*, EntryAddError>) -> Unit,
     onEditWork: (suspend () -> Outcome<*, EntryChangeError>) -> Unit,
@@ -346,6 +349,7 @@ private fun UnlockedGraph(
 
         is Route.Add -> AddDestination(
             scanning = scanning,
+            pasting = pasting,
             epochSeconds = nowSeconds,
             isBusy = isEntryBusy,
             error = addError,
@@ -397,6 +401,7 @@ private fun EditDestination(
 @Composable
 private fun AddDestination(
     scanning: QrScanning?,
+    pasting: QrScanning?,
     epochSeconds: Long,
     isBusy: Boolean,
     error: EntryAddError?,
@@ -407,6 +412,7 @@ private fun AddDestination(
     OverWindow(modifier = modifier, onDismiss = onLeave) { inner ->
         AddAccountScreen(
             scanning = scanning,
+            pasting = pasting,
             onSave = onSave,
             onCancel = onLeave,
             epochSeconds = epochSeconds,
