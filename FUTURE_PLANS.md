@@ -101,7 +101,6 @@ Keyring behaviour cannot be meaningfully unit-tested; it depends on a live platf
 - **The Windows Startup-tab divergence.** Windows keeps the enabled state of a startup entry separately from the entry, under `HKCU\…\Explorer\StartupApproved\Run`. Disabling TAuth in Task Manager's Startup tab leaves the `Run` value in place and untouched, so the setting reads as on while nothing launches. Reflecting it means reading an undocumented binary format, and writing it would override a choice the user made in the platform's own interface; what a fix should do is report the divergence, not resolve it.
 - **A `--vault <path>` argument** overriding the resolved location, for a vault kept on removable media and for exercising the application against a scratch file. `main` takes no arguments, so every path comes from `VaultPaths`. Both the single-instance lock and the preferences file are resolved from the same directory, so an override has to move all three together or a second instance will take the lock of the first.
 - **Screen-region QR capture.** It requires `java.awt.Robot` screen capture permission, which on macOS triggers a Screen Recording privacy prompt and on Wayland needs a portal integration.
-- **Narrowed jlink module list** replacing `includeAllModules = true`, once the packaged artifact is verified on each OS.
 - **System accent-colour following on Windows.**
 
 ---

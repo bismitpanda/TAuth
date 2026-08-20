@@ -78,8 +78,8 @@ compose.desktop {
             // licenseFile takes one file, so this rides along beside the application instead.
             appResourcesRootDir.set(project.layout.projectDirectory.dir("resources"))
 
-            // Traded against installer size: a stripped runtime fails at the module a code path
-            // reaches only on one platform, and the failure lands on the user rather than the build.
+            // A narrowed module list is not worth the megabytes: jdeps sees no reflective reach, so
+            // what it leaves out fails silently at runtime rather than at the build.
             includeAllModules = true
 
             // Cut from src/main/composeResources/drawable/tauth.svg, which is the mark itself and
