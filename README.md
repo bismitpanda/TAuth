@@ -53,3 +53,4 @@ Apache-2.0, in `LICENSE`. The bundled Noto Sans and Noto Sans Mono are under the
 - `AGENTS.md` — the threat model, the cryptographic parameters, the invariants a change must not break, and the commands.
 - `STYLE_GUIDE.md` — Kotlin and Compose conventions, error handling, testing.
 - `FUTURE_PLANS.md` — work TAuth does not do, and what is verified nowhere.
+- `SECURITY.md` — what to report, where to report it, and the limits that are not defects.
