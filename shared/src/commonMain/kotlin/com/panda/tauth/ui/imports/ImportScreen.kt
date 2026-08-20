@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -18,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import com.panda.tauth.ui.theme.ButtonLabel
 import com.panda.tauth.ui.theme.LocalSpacing
 import com.panda.tauth.ui.theme.TauthIcons
@@ -31,8 +34,6 @@ internal const val IMPORT_TITLE = "Import accounts"
 internal const val IMPORT_CONFIRM_LABEL = "Add these accounts"
 internal const val IMPORT_CANCEL_LABEL = "Cancel"
 internal const val IMPORT_ADD_ANYWAY_LABEL = "Add anyway"
-internal const val IMPORT_SKIP_LABEL = "Skip"
-internal const val IMPORT_DUPLICATE_NOTE = "Already in this vault"
 
 internal const val IMPORT_SUMMARY_TAG = "import-summary"
 internal const val IMPORT_PROBLEM_TAG = "import-problem"
@@ -41,14 +42,24 @@ internal fun importRowTag(position: Int): String = "import-row-$position"
 
 internal fun importChoiceTag(position: Int): String = "import-choice-$position"
 
-// Counted rather than listed: a file may carry a great many accounts, and what the user decides on
-// before reading the rows is how much of it arrived intact.
+// A count of nothing and a total equal to what is being taken each state a choice nobody can act on,
+// so neither is said.
 internal fun importSummary(rows: List<ImportRow>, addAnyway: Set<Int>): String {
     val accounts = rows.filterIsInstance<ImportRow.Account>()
+    val accepted = rows.accepted(addAnyway).size
     val duplicates = accounts.count { it.isDuplicate }
     val refused = rows.size - accounts.size
-    return "${rows.accepted(addAnyway).size} of ${accounts.size} accounts will be added. " +
-        "$duplicates already here, $refused could not be read."
+
+    val added = when {
+        accepted == 0 -> "No accounts will be added"
+        accepted == accounts.size -> "$accepted ${if (accepted == 1) "account" else "accounts"} will be added"
+        else -> "$accepted of ${accounts.size} accounts will be added"
+    }
+    val notes = buildList {
+        if (duplicates > 0) add("$duplicates already here")
+        if (refused > 0) add("$refused could not be read")
+    }
+    return if (notes.isEmpty()) "$added." else "$added. ${notes.joinToString(", ")}."
 }
 
 internal fun importRowLabel(entry: VaultEntry): String =
@@ -143,16 +154,31 @@ private fun RowEntry(
     }
 }
 
+// A duplicate is drawn back rather than labelled: the summary counts them once, and a note on every
+// row says the same thing as many times as the file holds copies.
 @Composable
 private fun RowScope.Account(row: ImportRow.Account, isAddedAnyway: Boolean, isEnabled: Boolean, onToggle: () -> Unit) {
-    Text(importRowLabel(row.entry), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+    Text(
+        importRowLabel(row.entry),
+        modifier = Modifier.weight(1f),
+        style = MaterialTheme.typography.bodyMedium,
+        color = if (row.isDuplicate) {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        },
+    )
     if (row.isDuplicate) {
-        Text(IMPORT_DUPLICATE_NOTE, style = MaterialTheme.typography.bodySmall)
-        TextButton(
-            onClick = onToggle,
-            enabled = isEnabled,
-            modifier = Modifier.testTag(importChoiceTag(row.position)),
-        ) { Text(if (isAddedAnyway) IMPORT_SKIP_LABEL else IMPORT_ADD_ANYWAY_LABEL) }
+        Row(
+            modifier = Modifier
+                .testTag(importChoiceTag(row.position))
+                .toggleable(value = isAddedAnyway, enabled = isEnabled, role = Role.Checkbox) { onToggle() },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(LocalSpacing.current.extraSmall),
+        ) {
+            Checkbox(checked = isAddedAnyway, onCheckedChange = null, enabled = isEnabled)
+            Text(IMPORT_ADD_ANYWAY_LABEL, style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
 

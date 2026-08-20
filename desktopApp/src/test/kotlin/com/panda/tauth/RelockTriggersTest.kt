@@ -75,6 +75,81 @@ class RelockTriggersTest {
     }
 
     @Test
+    fun `a window with nothing open leaves the idle trigger armed`() {
+        assertEquals(false, isIdleHeld(isDisclosureShown = false, holdsModal = false))
+    }
+
+    @Test
+    fun `an open chooser holds the idle trigger`() {
+        assertEquals(true, isIdleHeld(isDisclosureShown = false, holdsModal = true))
+    }
+
+    @Test
+    fun `a symbol on the screen holds the idle trigger`() {
+        assertEquals(true, isIdleHeld(isDisclosureShown = true, holdsModal = false))
+    }
+
+    @Test
+    fun `a window whose chooser holds the focus reports a return`() {
+        val report = windowReport(
+            WindowPresence(
+                isVisible = true,
+                isMinimised = false,
+                isFocused = false,
+                shownBy = ShowSource.USER,
+                holdsModal = true,
+            ),
+        )
+
+        assertEquals(WindowReport.Returned, report)
+    }
+
+    @Test
+    fun `a window whose chooser has closed reports the focus loss again`() {
+        val report = windowReport(
+            WindowPresence(
+                isVisible = true,
+                isMinimised = false,
+                isFocused = false,
+                shownBy = ShowSource.USER,
+                holdsModal = false,
+            ),
+        )
+
+        assertEquals(WindowReport.ReturnedUnfocused, report)
+    }
+
+    @Test
+    fun `a window hidden while its chooser is open reports the hide trigger`() {
+        val report = windowReport(
+            WindowPresence(
+                isVisible = false,
+                isMinimised = false,
+                isFocused = false,
+                shownBy = ShowSource.USER,
+                holdsModal = true,
+            ),
+        )
+
+        assertEquals(WindowReport.Trigger(LockReason.HiddenToTray), report)
+    }
+
+    @Test
+    fun `a window minimised while its chooser is open reports the minimise trigger`() {
+        val report = windowReport(
+            WindowPresence(
+                isVisible = true,
+                isMinimised = true,
+                isFocused = false,
+                shownBy = ShowSource.USER,
+                holdsModal = true,
+            ),
+        )
+
+        assertEquals(WindowReport.Trigger(LockReason.Minimised), report)
+    }
+
+    @Test
     fun `a window a show request raised while unfocused reports the raise`() {
         val report = windowReport(
             WindowPresence(
@@ -134,6 +209,21 @@ class RelockTriggersTest {
 
     // A window restored from the tray onto a desktop that gives it no focus is back, and the relock
     // the hide scheduled must not fire in front of the user.
+    @Test
+    fun `a window whose chooser holds the focus schedules nothing`() {
+        apply(
+            WindowPresence(
+                isVisible = true,
+                isMinimised = false,
+                isFocused = false,
+                shownBy = ShowSource.USER,
+                holdsModal = true,
+            ),
+        )
+
+        assertEquals(emptyList(), scheduled)
+    }
+
     @Test
     fun `a window that comes back without focus cancels the scheduled lock`() {
         apply(WindowPresence(isVisible = true, isMinimised = false, isFocused = false, shownBy = ShowSource.USER))

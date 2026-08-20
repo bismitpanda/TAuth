@@ -1,6 +1,5 @@
 package com.panda.tauth
 
-// A run from the build tree is not an installed application and carries no packaged version.
 internal const val DEVELOPMENT_VERSION = "development build"
 
 internal const val LICENCE_NOTICE = "Apache-2.0. Bundled fonts are under the SIL Open Font License 1.1."

@@ -35,6 +35,7 @@ import com.panda.tauth.vault.VaultStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.nio.file.Path
 
 internal const val APPLICATION_NAME = "TAuth"
 
@@ -70,10 +71,11 @@ private fun runTAuth(role: InstanceRole) = application {
     val quit = { lockThenExit(session::lock, ::exitApplication) }
     val launcher = remember { currentLauncher() }
     val loginItem = remember { loginItemFor() }
+    val modalHold = remember { ModalHold() }
     // Whether the tray settings are offered is the lifecycle's answer, so the screen and the window
     // read one answer rather than each asking the toolkit.
-    val shell = remember(paths, lifecycle.canConfigureTray, launcher) {
-        shellSettings(paths, lifecycle.canConfigureTray, launcher)
+    val shell = remember(paths, lifecycle.canConfigureTray, launcher, modalHold) {
+        shellSettings(paths, lifecycle.canConfigureTray, launcher, modalHold)
     }
     val idleWatch = remember { IdleWatch() }
     val exitLock = remember(session) { ExitLock(session::lock) }
@@ -112,8 +114,8 @@ private fun runTAuth(role: InstanceRole) = application {
         val idleMinutes = idleTimeoutMinutes(sessionState)
         var isIdleLockSuppressed by remember { mutableStateOf(false) }
 
-        WatchPresence(session, windowState, windowInfo) {
-            WindowPresence(isVisible, windowState.isMinimized, windowInfo.isWindowFocused, shownBy)
+        WatchPresence(session, windowState, windowInfo, modalHold) {
+            presenceOf(isVisible, windowState, windowInfo, shownBy, modalHold)
         }
 
         RaiseOnRequest(windowRaise, primary, onShownBy = { shownBy = it }) {
@@ -122,10 +124,16 @@ private fun runTAuth(role: InstanceRole) = application {
             window.raiseToFront()
         }
 
+        val isHeld = isIdleHeld(isIdleLockSuppressed, modalHold.isHeld)
+
         // Keyed on the interval and the hold as well as the window, so a lock, an unlock or a hold
         // lifted each begin a whole interval against the policy the session publishes.
-        LaunchedEffect(idleWatch, isVisible, idleMinutes, isIdleLockSuppressed) {
-            idleWatch.awaitIdle(isVisible, idleMinutes, isIdleLockSuppressed, session::scheduleLock)
+        LaunchedEffect(idleWatch, isVisible, idleMinutes, isHeld) {
+            idleWatch.awaitIdle(isVisible, idleMinutes, isHeld) { reason ->
+                // Read again at the report: a chooser raised after this interval began blocks the
+                // toolkit thread, and the recomposition that would restart this waits behind it.
+                if (!isIdleHeld(isIdleLockSuppressed, modalHold.isHeld)) session.scheduleLock(reason)
+            }
         }
 
         TauthTheme(darkTheme = preferences.value.theme.isDark(isSystemInDarkTheme())) {
@@ -138,30 +146,42 @@ private fun runTAuth(role: InstanceRole) = application {
                 shell = shell,
                 isSingleInstanceUnprotected = role is InstanceRole.Unprotected,
                 onIdleLockSuppressed = { isIdleLockSuppressed = it },
-                scanning = { readQrImage { chooseQrImage() } },
-                onSaveQrImage = { symbol ->
-                    saveQrImage(symbol) { chooseSaveDestination(QR_IMAGE_TITLE, QR_IMAGE_FILE_NAME) }
-                },
+                scanning = { readQrImage { modalHold.around { chooseQrImage() } } },
+                onSaveQrImage = { symbol -> saveQrImage(symbol) { modalHold.around { chooseQrDestination() } } },
             )
         }
     }
 }
 
-// The four facts are sampled together, so a change to any of them is one report rather than four.
-// The sample is a lambda because the effect outlives the composition that supplied it.
+// Sampled together, so a change to any of them is one report rather than several. The sample is a
+// lambda because the effect outlives the composition that supplied it.
 @Composable
 private fun WatchPresence(
     session: VaultSession,
     windowState: WindowState,
     windowInfo: WindowInfo,
+    hold: ModalHold,
     presence: () -> WindowPresence,
 ) {
-    LaunchedEffect(session, windowState, windowInfo) {
+    LaunchedEffect(session, windowState, windowInfo, hold) {
+        // The hold is read again here rather than taken from the sample: a chooser raises it and then
+        // blocks the toolkit thread, so the focus it took can reach this before the sample does.
         snapshotFlow(presence).collect {
-            applyWindowPresence(it, session::scheduleLock, session::cancelScheduledLock)
+            val now = it.copy(holdsModal = hold.isHeld)
+            applyWindowPresence(now, session::scheduleLock, session::cancelScheduledLock)
         }
     }
 }
+
+private fun presenceOf(
+    isVisible: Boolean,
+    windowState: WindowState,
+    windowInfo: WindowInfo,
+    shownBy: ShowSource,
+    hold: ModalHold,
+): WindowPresence = WindowPresence(isVisible, windowState.isMinimized, windowInfo.isWindowFocused, shownBy, hold.isHeld)
+
+private suspend fun chooseQrDestination(): Path? = chooseSaveDestination(QR_IMAGE_TITLE, QR_IMAGE_FILE_NAME)
 
 @Composable
 private fun RaiseOnRequest(
@@ -199,20 +219,27 @@ private fun RecordGeometry(scope: CoroutineScope, windowState: WindowState, pref
 }
 
 // What the settings screen reports on and reaches the desktop through.
-private fun shellSettings(paths: VaultPaths, canConfigureTray: Boolean, launcher: String?): ShellSettings =
-    ShellSettings(
-        vaultLocation = paths.vaultFile.toString(),
-        version = applicationVersion(),
-        licence = LICENCE_NOTICE,
-        canConfigureTray = canConfigureTray,
-        canStartAtLogin = isPackagedLauncher(launcher),
-        onReveal = { revealInFileManager(paths.vaultFile) },
-        onExport = { bytes -> exportVault(bytes) { chooseExportDestination() } },
-        onExportPlaintext = { text, format ->
-            exportPlaintext(text, format) { name -> chooseSaveDestination(PLAINTEXT_DIALOG_TITLE, name) }
-        },
-        onChooseImport = { readImportSource { chooseImportSource() } },
-    )
+private fun shellSettings(
+    paths: VaultPaths,
+    canConfigureTray: Boolean,
+    launcher: String?,
+    hold: ModalHold,
+): ShellSettings = ShellSettings(
+    vaultLocation = paths.vaultFile.toString(),
+    version = applicationVersion(),
+    licence = LICENCE_NOTICE,
+    canConfigureTray = canConfigureTray,
+    canStartAtLogin = isPackagedLauncher(launcher),
+    // Not held: this hands the window to the file manager, which is the user going elsewhere.
+    onReveal = { revealInFileManager(paths.vaultFile) },
+    onExport = { bytes -> exportVault(bytes) { hold.around { chooseExportDestination() } } },
+    onExportPlaintext = { text, format ->
+        exportPlaintext(text, format) { name ->
+            hold.around { chooseSaveDestination(PLAINTEXT_DIALOG_TITLE, name) }
+        }
+    },
+    onChooseImport = { readImportSource { hold.around { chooseImportSource() } } },
+)
 
 // A window behind another one, or on the desktop the user has left, is not back on screen for having
 // been made visible.

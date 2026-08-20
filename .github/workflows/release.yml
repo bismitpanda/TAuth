@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+    steps:
+      - id: read
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::$TAG is not a release tag. Releases are cut at vMAJOR.MINOR.PATCH, digits only:"
+            echo "::error::an MSI carries a numeric version and will not install under any other shape."
+            exit 1
+          fi
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+  package:
+    needs: version
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: ubuntu-latest
+            format: deb
+          - os: macos-latest
+            format: dmg
+          - os: windows-latest
+            format: msi
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Matching gradle/gradle-daemon-jvm.properties, so the runner provisions no second JDK.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Package the installer
+        shell: bash
+        run: ./gradlew packageDistributionForCurrentOS -PtauthVersion=${{ needs.version.outputs.version }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.format }}
+          path: desktopApp/build/compose/binaries/main/${{ matrix.format }}/*.${{ matrix.format }}
+          if-no-files-found: error
+
+  release:
+    needs: [version, package]
+    runs-on: ubuntu-latest
+    steps:
+      # The tag before this one is unreachable from a shallow checkout, and the body compares against it.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: installers
+          merge-multiple: true
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          previous=$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)
+          # A first release has no tag behind it, so it compares against the repository's first commit.
+          base=${previous:-$(git rev-list --max-parents=0 HEAD | tail -1)}
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes "https://github.com/${GITHUB_REPOSITORY}/compare/${base}...${TAG}" \
+            installers/*

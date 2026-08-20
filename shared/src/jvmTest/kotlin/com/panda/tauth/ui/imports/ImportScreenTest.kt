@@ -3,6 +3,8 @@ package com.panda.tauth.ui.imports
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -23,8 +25,6 @@ import kotlin.test.assertEquals
 // The screen's own wording, written out here so a changed label fails the test naming it.
 private const val CONFIRM = "Add these accounts"
 private const val CANCEL = "Cancel"
-private const val ADD_ANYWAY = "Add anyway"
-private const val SKIP = "Skip"
 
 private val FRESH = ImportRow.Account(1, totpEntry(accountName = "alice"), isDuplicate = false)
 private val DUPLICATE = ImportRow.Account(2, hotpEntry(), isDuplicate = true)
@@ -53,7 +53,7 @@ class ImportScreenTest {
         show(addAnyway = setOf(2))
 
         compose.onNodeWithTag(IMPORT_SUMMARY_TAG)
-            .assertTextEquals("2 of 2 accounts will be added. 1 already here, 1 could not be read.")
+            .assertTextEquals("2 accounts will be added. 1 already here, 1 could not be read.")
     }
 
     @Test
@@ -72,10 +72,10 @@ class ImportScreenTest {
     }
 
     @Test
-    fun `an account the vault already holds says so`() {
+    fun `an account the vault already holds offers the choice to take it`() {
         show()
 
-        compose.onNodeWithText(IMPORT_DUPLICATE_NOTE).assertIsDisplayed()
+        compose.onNodeWithTag(importChoiceTag(2)).assertIsDisplayed()
     }
 
     @Test
@@ -89,14 +89,14 @@ class ImportScreenTest {
     fun `a duplicate opens on skipping`() {
         show()
 
-        compose.onNodeWithTag(importChoiceTag(2)).assertTextEquals(ADD_ANYWAY)
+        compose.onNodeWithTag(importChoiceTag(2)).assertIsOff()
     }
 
     @Test
-    fun `a duplicate that was taken offers to skip it again`() {
+    fun `a duplicate that was taken reads as taken`() {
         show(addAnyway = setOf(2))
 
-        compose.onNodeWithTag(importChoiceTag(2)).assertTextEquals(SKIP)
+        compose.onNodeWithTag(importChoiceTag(2)).assertIsOn()
     }
 
     @Test

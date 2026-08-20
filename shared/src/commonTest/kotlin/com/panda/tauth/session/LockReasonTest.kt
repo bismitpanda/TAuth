@@ -77,9 +77,23 @@ class LockReasonTest {
         assertEquals(0, LockReason.Manual.graceSeconds(POLICY))
     }
 
+    // Closing a dialog leaves the window unfocused until the desktop hands the focus back, and a
+    // trigger that fired on that transition would lock the vault on every file the user chose.
     @Test
-    fun `losing focus waits for nothing`() {
-        assertEquals(0, LockReason.FocusLost.graceSeconds(POLICY))
+    fun `losing focus waits for the focus to settle`() {
+        assertEquals(FOCUS_SETTLE_SECONDS, LockReason.FocusLost.graceSeconds(POLICY))
+    }
+
+    @Test
+    fun `the focus settles in the time a desktop takes to hand it back`() {
+        assertEquals(1, FOCUS_SETTLE_SECONDS)
+    }
+
+    // The settle covers a transition, not a policy: it is fixed here rather than read from the
+    // document an attacker can rewrite.
+    @Test
+    fun `the focus settle is not a policy the file carries`() {
+        assertEquals(FOCUS_SETTLE_SECONDS, LockReason.FocusLost.graceSeconds(POLICY.copy(hideGraceSeconds = 120)))
     }
 
     @Test

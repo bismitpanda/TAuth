@@ -17,6 +17,7 @@ data class WindowPresence(
     val isMinimised: Boolean,
     val isFocused: Boolean,
     val shownBy: ShowSource,
+    val holdsModal: Boolean = false,
 )
 
 sealed interface WindowReport {
@@ -33,9 +34,17 @@ sealed interface WindowReport {
 // screen names the reason rather than the focus loss that comes with it.
 fun windowReport(presence: WindowPresence): WindowReport = when {
     !presence.isVisible -> WindowReport.Trigger(LockReason.HiddenToTray)
+
     presence.isMinimised -> WindowReport.Trigger(LockReason.Minimised)
+
     presence.shownBy == ShowSource.SHOW_REQUEST -> WindowReport.Raised
+
+    // The trigger is for a window nobody is at. A chooser this application opened is someone
+    // standing in front of it, so the focus it took is not the user leaving.
+    presence.holdsModal -> WindowReport.Returned
+
     !presence.isFocused -> WindowReport.ReturnedUnfocused
+
     else -> WindowReport.Returned
 }
 
@@ -56,6 +65,10 @@ fun applyWindowPresence(presence: WindowPresence, schedule: (LockReason) -> Unit
         WindowReport.Raised -> Unit
     }
 }
+
+// The toolkit's event stream carries nothing from a symbol being read off the screen or a chooser
+// being clicked through, so either reads as an empty room.
+fun isIdleHeld(isDisclosureShown: Boolean, holdsModal: Boolean): Boolean = isDisclosureShown || holdsModal
 
 // The interval the session publishes with the unlocked body, which is where a trigger reads it from
 // rather than from the plaintext preferences. A vault that is not open has no key left to take away.

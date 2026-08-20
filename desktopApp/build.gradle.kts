@@ -59,6 +59,8 @@ tasks.test {
     inputs.files(icons).withPropertyName("declaredIcons").optional()
 }
 
+val tauthVersion = providers.gradleProperty("tauthVersion").getOrElse("1.0.0")
+
 compose.desktop {
     application {
         mainClass = "com.panda.tauth.MainKt"
@@ -66,7 +68,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "TAuth"
-            packageVersion = "1.0.0"
+            packageVersion = tauthVersion
             description = "A desktop authenticator for time-based one-time codes"
             vendor = "Bismit Panda"
             copyright = "Copyright 2026 Bismit Panda"
