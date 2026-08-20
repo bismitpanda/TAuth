@@ -43,21 +43,21 @@ jobs:
             format: msi
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Matching gradle/gradle-daemon-jvm.properties, so the runner provisions no second JDK.
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Package the installer
         shell: bash
         run: ./gradlew packageDistributionForCurrentOS -PtauthVersion=${{ needs.version.outputs.version }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.format }}
           path: desktopApp/build/compose/binaries/main/${{ matrix.format }}/*.${{ matrix.format }}
@@ -68,11 +68,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # The tag before this one is unreachable from a shallow checkout, and the body compares against it.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: installers
           merge-multiple: true
