@@ -48,13 +48,6 @@ private val NAMELESS_MALLORY = entry(
 
 private val ALL = listOf(ZENDESK_BOB, NAMELESS_MALLORY, GITHUB_AARON, GITHUB_ALICE)
 
-private const val ROW_HEIGHT = 80
-private const val GAPPED_PITCH = 88
-
-// A scrolled list reports the first visible row's offset as negative, so a pitch read off that offset
-// alone rather than off the distance between two of them comes out wrong here.
-private val SCROLLED_OFFSETS = listOf(-24, 64, 152)
-
 private fun entry(
     id: String,
     issuer: String?,
@@ -134,63 +127,5 @@ class AccountOrderTest {
     @Test
     fun `recently added order runs from the newest account backwards`() {
         assertEquals(listOf("b", "c", "d", "a"), idsOf(SortOrder.RECENTLY_ADDED))
-    }
-
-    @Test
-    fun `a drop one row down lands one position further on`() {
-        assertEquals(1, dropIndex(from = 0, draggedPixels = 80f, rowPitchPixels = 80f, count = 4))
-    }
-
-    @Test
-    fun `a drop that travelled under half a row stays where it was`() {
-        assertEquals(2, dropIndex(from = 2, draggedPixels = 30f, rowPitchPixels = 80f, count = 4))
-    }
-
-    @Test
-    fun `a drop upwards lands earlier in the list`() {
-        assertEquals(1, dropIndex(from = 3, draggedPixels = -160f, rowPitchPixels = 80f, count = 4))
-    }
-
-    @Test
-    fun `a drop past the end of the list lands on the end`() {
-        assertEquals(3, dropIndex(from = 0, draggedPixels = 8000f, rowPitchPixels = 80f, count = 4))
-    }
-
-    @Test
-    fun `a drop above the top of the list lands on the top`() {
-        assertEquals(0, dropIndex(from = 3, draggedPixels = -8000f, rowPitchPixels = 80f, count = 4))
-    }
-
-    // A list that has not been measured yet reports no pitch, and dividing by it would give a
-    // position from nothing.
-    @Test
-    fun `a drop against an unmeasured row stays where it was`() {
-        assertEquals(2, dropIndex(from = 2, draggedPixels = 400f, rowPitchPixels = 0f, count = 4))
-    }
-
-    // The list arranges its rows with a gap between them, so the distance from one row to the next is
-    // the row plus the gap. Measuring the row alone counts every gap a drag crossed as extra travel.
-    @Test
-    fun `the pitch is the distance between two adjacent rows`() {
-        assertEquals(GAPPED_PITCH, rowPitch(offsets = SCROLLED_OFFSETS, firstSize = ROW_HEIGHT))
-    }
-
-    @Test
-    fun `the pitch of a single row on screen is its own height`() {
-        assertEquals(ROW_HEIGHT, rowPitch(offsets = listOf(-24), firstSize = ROW_HEIGHT))
-    }
-
-    @Test
-    fun `a list with nothing measured has no pitch`() {
-        assertEquals(0, rowPitch(offsets = emptyList(), firstSize = 0))
-    }
-
-    // The distance across six gaps, written out rather than derived from the divisor: 528 over a pitch
-    // of 88 is six, over the 80-pixel row height it is 6.6 and rounds a place further on.
-    @Test
-    fun `a drag across six gaps lands on the row it was dropped over`() {
-        val pitch = rowPitch(offsets = SCROLLED_OFFSETS, firstSize = ROW_HEIGHT)
-
-        assertEquals(6, dropIndex(from = 0, draggedPixels = 528f, rowPitchPixels = pitch.toFloat(), count = 10))
     }
 }

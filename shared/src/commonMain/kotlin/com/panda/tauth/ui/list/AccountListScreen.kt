@@ -1,6 +1,7 @@
 package com.panda.tauth.ui.list
 
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,11 +32,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -45,9 +49,12 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LocalPinnableContainer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.zIndex
 import com.panda.tauth.Outcome
 import com.panda.tauth.session.UnlockedEntry
 import com.panda.tauth.settings.SortOrder
@@ -67,6 +74,7 @@ import com.panda.tauth.vault.DiscloseError
 import com.panda.tauth.vault.EntryChangeError
 import com.panda.tauth.vault.VaultError
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 internal const val TITLE = "Accounts"
@@ -184,6 +192,8 @@ fun AccountListScreen(
     val shown = remember(entries, query, sortOrder, isSortDescending) {
         sorted(entries.filter { matchesQuery(it, query) }, sortOrder, isSortDescending)
     }
+
+    StartOverOnSort(sortOrder, isSortDescending, listState) { selected = it }
 
     val selectedIndex = rememberSelection(selected, shown.size, searchFocus, listState)
 
@@ -348,11 +358,26 @@ private fun QrDisclosure(
     }
 }
 
+// The scroll is here rather than left to the selection, which does not move when the first row was
+// already the selected one.
+@Composable
+private fun StartOverOnSort(
+    sortOrder: SortOrder,
+    isDescending: Boolean,
+    listState: LazyListState,
+    onSelect: (Int) -> Unit,
+) {
+    LaunchedEffect(sortOrder, isDescending) {
+        onSelect(0)
+        listState.animateScrollToItem(0)
+    }
+}
+
 @Composable
 private fun rememberSelection(selected: Int, count: Int, searchFocus: FocusRequester, listState: LazyListState): Int {
     val index = selected.coerceIn(0, (count - 1).coerceAtLeast(0))
     LaunchedEffect(Unit) { searchFocus.requestFocus() }
-    LaunchedEffect(index) { if (count > 0) listState.scrollToItem(index) }
+    LaunchedEffect(index) { if (count > 0) listState.animateScrollToItem(index) }
     return index
 }
 
@@ -504,40 +529,48 @@ private fun AccountList(
     callbacks: RowCallbacks,
     modifier: Modifier = Modifier,
 ) {
+    val spacing = LocalSpacing.current
+    val drag = remember { RowDragState() }
+    val density = LocalDensity.current
+    val marginPixels = with(density) { spacing.extraLarge.toPx() }
+    val stepPixels = with(density) { spacing.small.toPx() }
+
+    ScrollWhileDragging(drag, listState, marginPixels, stepPixels)
+
+    val order = reordered(shown, drag.startIndex, drag.targetIndex)
+
     LazyColumn(
         state = listState,
         modifier = modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(LocalSpacing.current.small),
+        verticalArrangement = Arrangement.spacedBy(spacing.small),
     ) {
-        itemsIndexed(shown, key = { _, entry -> entry.id }) { index, entry ->
-            AccountRow(
-                entry = entry,
-                isSelected = index == selectedIndex,
-                code = codes[entry.id],
-                generatedCode = rows.generated[entry.id],
-                isGenerateEnabled = entry.id !in rows.coolingDown,
-                notice = rows.noticeFor(entry.id),
-                dragModifier = dragModifier(
-                    isEnabled = isDragEnabled,
-                    id = entry.id,
-                    index = index,
-                    count = shown.size,
-                    rowPitch = {
-                        val items = listState.layoutInfo.visibleItemsInfo
-                        rowPitch(items.map { it.offset }, items.firstOrNull()?.size ?: 0)
-                    },
-                    onMove = callbacks.onMove,
-                ),
-                onCopyCode = { callbacks.onCopyCode(entry) },
-                onGenerate = { callbacks.onGenerate(entry.id) },
-                onHideCode = { callbacks.onHideCode(entry.id) },
-                onEdit = { callbacks.onEdit(entry.id) },
-                onCopyUri = { callbacks.onCopyUri(entry) },
-                onShowQr = { callbacks.onShowQr(entry) },
-                onDelete = { callbacks.onDelete(entry) },
-            )
+        itemsIndexed(order, key = { _, entry -> entry.id }) { index, entry ->
+            val isDragged = drag.draggedId == entry.id
+            PinWhileDragged(isDragged)
+            Box(modifier = if (isDragged) Modifier.zIndex(1f) else Modifier.animateItem()) {
+                if (isDragged) DragSlot(Modifier.matchParentSize())
+                AccountRow(
+                    modifier = if (isDragged) Modifier.dragPlacement(drag, index, listState) else Modifier,
+                    entry = entry,
+                    isSelected = index == selectedIndex,
+                    code = codes[entry.id],
+                    generatedCode = rows.generated[entry.id],
+                    isGenerateEnabled = entry.id !in rows.coolingDown,
+                    notice = rows.noticeFor(entry.id),
+                    dragModifier = dragHandle(isDragEnabled, entry.id, index, drag, listState, callbacks.onMove),
+                    onCopyCode = { callbacks.onCopyCode(entry) },
+                    onGenerate = { callbacks.onGenerate(entry.id) },
+                    onHideCode = { callbacks.onHideCode(entry.id) },
+                    onEdit = { callbacks.onEdit(entry.id) },
+                    onCopyUri = { callbacks.onCopyUri(entry) },
+                    onShowQr = { callbacks.onShowQr(entry) },
+                    onDelete = { callbacks.onDelete(entry) },
+                )
+            }
         }
     }
+
+    LaunchedEffect(shown) { drag.settle() }
 }
 
 @Composable
@@ -688,25 +721,69 @@ private fun messageFor(error: EntryChangeError): String = when (error) {
     is VaultError.UnsupportedVersion -> "This vault was made by a newer version of TAuth."
 }
 
-private fun dragModifier(
+private fun LazyListState.rowBounds(): List<RowBounds> =
+    layoutInfo.visibleItemsInfo.map { RowBounds(it.index, it.offset, it.size) }
+
+// Keying on the index too would tear the gesture down the moment the rearrangement moves the row.
+@Composable
+private fun dragHandle(
     isEnabled: Boolean,
     id: String,
     index: Int,
-    count: Int,
-    rowPitch: () -> Int,
+    drag: RowDragState,
+    listState: LazyListState,
     onMove: (String, Int) -> Unit,
 ): Modifier {
     if (!isEnabled) return Modifier
-    return Modifier.pointerInput(id, index, count) {
-        var travelled = 0f
+    val grabbed by rememberUpdatedState(index)
+    return Modifier.pointerInput(id) {
         detectDragGestures(
-            onDragStart = { travelled = 0f },
+            onDragStart = { drag.start(id, grabbed, listState.rowBounds()) },
             onDrag = { change, amount ->
                 change.consume()
-                travelled += amount.y
+                drag.dragBy(amount.y, listState.rowBounds())
             },
-            onDragEnd = { onMove(id, dropIndex(index, travelled, rowPitch().toFloat(), count)) },
-            onDragCancel = { travelled = 0f },
+            onDragEnd = { drag.release()?.let { onMove(it.id, it.toIndex) } },
+            onDragCancel = { drag.settle() },
         )
     }
+}
+
+// A slot the list is not reporting holds the last drawing rather than snapping the row to the top.
+private fun Modifier.dragPlacement(drag: RowDragState, index: Int, listState: LazyListState): Modifier =
+    this.graphicsLayer {
+        val top = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }?.offset
+        translationY = top?.let { drag.translationFor(it) } ?: translationY
+    }
+
+// The gesture is a node inside the item, and a lazy list disposes an item whose slot leaves view.
+@Composable
+private fun PinWhileDragged(isDragged: Boolean) {
+    val container = LocalPinnableContainer.current
+    DisposableEffect(isDragged, container) {
+        val handle = if (isDragged) container?.pin() else null
+        onDispose { handle?.release() }
+    }
+}
+
+@Composable
+private fun ScrollWhileDragging(drag: RowDragState, listState: LazyListState, margin: Float, step: Float) {
+    val draggedId = drag.draggedId
+    LaunchedEffect(draggedId) {
+        if (draggedId == null) return@LaunchedEffect
+        while (isActive) {
+            withFrameNanos { }
+            val viewport = listState.layoutInfo.viewportEndOffset - listState.layoutInfo.viewportStartOffset
+            val pixels = edgeScroll(drag.centreY, viewport, margin, step)
+            if (pixels != 0f) listState.scrollBy(pixels)
+            drag.retarget(listState.rowBounds())
+            listState.keepInView(drag.targetIndex)
+        }
+    }
+}
+
+// The list holds its position by the key of its first visible row, so an arrangement reaching that
+// row pushes the dragged one off the top instead of moving anything.
+private suspend fun LazyListState.keepInView(index: Int) {
+    if (index != NO_ROW && layoutInfo.visibleItemsInfo.none { it.index == index }) scrollToItem(index)
 }

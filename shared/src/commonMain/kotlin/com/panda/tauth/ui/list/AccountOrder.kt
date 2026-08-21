@@ -2,7 +2,6 @@ package com.panda.tauth.ui.list
 
 import com.panda.tauth.session.UnlockedEntry
 import com.panda.tauth.settings.SortOrder
-import kotlin.math.roundToInt
 
 fun matchesQuery(entry: UnlockedEntry, query: String): Boolean {
     val trimmed = query.trim()
@@ -27,12 +26,3 @@ fun sorted(entries: List<UnlockedEntry>, order: SortOrder, isDescending: Boolean
 }
 
 val SortOrder.hasDirection: Boolean get() = this != SortOrder.MANUAL
-
-fun dropIndex(from: Int, draggedPixels: Float, rowPitchPixels: Float, count: Int): Int {
-    if (rowPitchPixels <= 0f || count <= 0) return from
-    return (from + (draggedPixels / rowPitchPixels).roundToInt()).coerceIn(0, count - 1)
-}
-
-// The distance from one row to the next, which is a row's height plus the gap the list arranges with.
-// Dividing a drag by the height alone counts every gap it crossed as extra travel.
-fun rowPitch(offsets: List<Int>, firstSize: Int): Int = if (offsets.size >= 2) offsets[1] - offsets[0] else firstSize
