@@ -33,7 +33,7 @@ private const val DAMAGED_FILE_MESSAGE = "The vault file is damaged, so nothing 
 
 // The component takes the statement as a parameter, so the sentence a caller supplies is the
 // sentence on screen.
-private const val STATEMENT = "The complete secret for GitHub — alice is about to be placed on the clipboard."
+private const val STATEMENT = "The complete secret for GitHub: alice is about to be placed on the clipboard."
 
 class SecretDisclosureGateTest {
     @get:Rule

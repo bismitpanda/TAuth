@@ -44,7 +44,7 @@ const val QR_SAVE_LABEL = "Save as PNG"
 const val QR_CLOSE_LABEL = "Close"
 
 const val QR_COUNTER_NOTE =
-    "Scanning clones the account at this counter, not at the value the other authenticator will next need."
+    "scanning clones the account at this counter, not at the value the other authenticator will next need"
 
 const val QR_UNAVAILABLE =
     "This account does not fit in a QR code, so its URI has to be copied instead."
@@ -128,7 +128,7 @@ fun ShowQrDialog(
                 )
                 if (entry.type == OtpType.HOTP) {
                     Text(
-                        "${entry.counter} — $QR_COUNTER_NOTE",
+                        "${entry.counter} ($QR_COUNTER_NOTE)",
                         modifier = Modifier.testTag(QR_COUNTER_TAG),
                         style = MaterialTheme.typography.bodySmall,
                     )

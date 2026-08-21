@@ -133,7 +133,7 @@ internal fun disclosureStatement(entry: UnlockedEntry): String =
 internal fun qrDisclosureStatement(entry: UnlockedEntry): String =
     "The complete secret for ${entry.describe()} is about to be drawn on screen as a QR code."
 
-internal fun UnlockedEntry.describe(): String = issuer?.let { "$it — $accountName" } ?: accountName
+internal fun UnlockedEntry.describe(): String = issuer?.let { "$it: $accountName" } ?: accountName
 
 private class RowCallbacks(
     val onCopyCode: (UnlockedEntry) -> Unit,

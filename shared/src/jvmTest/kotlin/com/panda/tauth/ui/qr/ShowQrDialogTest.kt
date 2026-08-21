@@ -58,7 +58,7 @@ class ShowQrDialogTest {
     fun `the account is named by its issuer and account name`() {
         show()
 
-        compose.onNodeWithText("GitHub — alice").assertIsDisplayed()
+        compose.onNodeWithText("GitHub: alice").assertIsDisplayed()
     }
 
     // Scanning takes the counter as it stands, so the value that leaves is on screen beside the
@@ -74,7 +74,7 @@ class ShowQrDialogTest {
     fun `an hotp account states what scanning that counter does`() {
         show(entry = hotpRow(counter = 41uL))
 
-        compose.onNodeWithText("41 — $QR_COUNTER_NOTE").assertIsDisplayed()
+        compose.onNodeWithText("41 ($QR_COUNTER_NOTE)").assertIsDisplayed()
     }
 
     @Test

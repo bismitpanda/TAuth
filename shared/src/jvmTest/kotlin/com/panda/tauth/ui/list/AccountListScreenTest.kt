@@ -72,11 +72,11 @@ private const val EMPTY_BODY_TEXT =
 // The gate has to state what is about to leave the vault, so the sentence is written out here rather
 // than read from the function the screen calls to produce it.
 private const val DISCLOSURE_STATEMENT =
-    "The complete secret for GitHub — alice is about to be placed on the clipboard as an otpauth:// URI."
+    "The complete secret for GitHub: alice is about to be placed on the clipboard as an otpauth:// URI."
 
 // The screen is a different destination from the clipboard, so the gate in front of it says so.
 private const val QR_DISCLOSURE_STATEMENT =
-    "The complete secret for GitHub — alice is about to be drawn on screen as a QR code."
+    "The complete secret for GitHub: alice is about to be drawn on screen as a QR code."
 
 private const val TOTP_CODE = "287082"
 private const val TOTP_GROUPED = "287 082"
@@ -384,7 +384,7 @@ class AccountListScreenTest {
 
         compose.onNodeWithText(TOTP_GROUPED).performClick()
 
-        compose.onNodeWithText("Code copied — the clipboard clears in $CLEAR_SECONDS s").assertIsDisplayed()
+        compose.onNodeWithText("Code copied. The clipboard clears in $CLEAR_SECONDS s").assertIsDisplayed()
     }
 
     @Test
@@ -492,7 +492,7 @@ class AccountListScreenTest {
         compose.onNodeWithText(TOTP_GROUPED).performClick()
         compose.mainClock.advanceTimeBy(ONE_SECOND_MILLIS)
 
-        compose.onNodeWithText("Code copied — the clipboard clears in ${CLEAR_SECONDS - 1} s").assertIsDisplayed()
+        compose.onNodeWithText("Code copied. The clipboard clears in ${CLEAR_SECONDS - 1} s").assertIsDisplayed()
     }
 
     // A failed vault write leaves the counter where it was, so the row shows no code and the control
@@ -596,7 +596,7 @@ class AccountListScreenTest {
         openUriGate()
         confirmGateWith(RIGHT_PASSWORD)
 
-        compose.onNodeWithText("URI copied — the clipboard clears in $CLEAR_SECONDS s").assertIsDisplayed()
+        compose.onNodeWithText("URI copied. The clipboard clears in $CLEAR_SECONDS s").assertIsDisplayed()
     }
 
     @Test
@@ -606,7 +606,7 @@ class AccountListScreenTest {
         openMenuOn(TOTP.id)
         compose.onNodeWithText(DELETE).performClick()
 
-        compose.onNodeWithText("Delete GitHub — alice?").assertIsDisplayed()
+        compose.onNodeWithText("Delete GitHub: alice?").assertIsDisplayed()
     }
 
     @Test

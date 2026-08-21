@@ -11,7 +11,7 @@ fun accountsIn(payloads: List<String>): List<OtpAuthUri> =
 
 // The identity a scanned account is chosen by. The secret it carries is not part of it, since a
 // selection list is on screen for as long as the user takes to read it.
-fun scannedLabel(uri: OtpAuthUri): String = uri.issuer?.let { "$it — ${uri.accountName}" } ?: uri.accountName
+fun scannedLabel(uri: OtpAuthUri): String = uri.issuer?.let { "$it: ${uri.accountName}" } ?: uri.accountName
 
 // The payloads of every code in an image the user chose, or nothing where they chose none. Reading
 // the image belongs to the shell; what the codes mean belongs here.

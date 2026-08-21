@@ -26,7 +26,7 @@ private const val GENERATE_COOLDOWN_SECONDS = 3
 private const val NOTICE_SECONDS = 3
 
 internal fun copiedNotice(subject: String, secondsLeft: Int?): String =
-    if (secondsLeft == null) "$subject copied" else "$subject copied — the clipboard clears in $secondsLeft s"
+    if (secondsLeft == null) "$subject copied" else "$subject copied. The clipboard clears in $secondsLeft s"
 
 private class CopyNotice(val entryId: String, val message: String)
 

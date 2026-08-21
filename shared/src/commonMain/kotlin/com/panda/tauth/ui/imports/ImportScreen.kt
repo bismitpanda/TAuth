@@ -65,7 +65,7 @@ internal fun importSummary(rows: List<ImportRow>, addAnyway: Set<Int>): String {
 }
 
 internal fun importRowLabel(entry: VaultEntry): String =
-    entry.issuer?.let { "$it — ${entry.accountName}" } ?: entry.accountName
+    entry.issuer?.let { "$it: ${entry.accountName}" } ?: entry.accountName
 
 internal fun refusalLabel(source: ImportSource, row: ImportRow.Refused): String = when (source) {
     ImportSource.URI_LIST -> "Line ${row.position}: ${row.detail}"

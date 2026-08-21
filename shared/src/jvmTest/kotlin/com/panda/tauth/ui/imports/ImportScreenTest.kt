@@ -60,7 +60,7 @@ class ImportScreenTest {
     fun `an account is named by its issuer and account name`() {
         show()
 
-        compose.onNodeWithText("GitHub — alice").assertIsDisplayed()
+        compose.onNodeWithText("GitHub: alice").assertIsDisplayed()
     }
 
     // The row carries the secret the file offered, and nothing about it belongs on a screen.

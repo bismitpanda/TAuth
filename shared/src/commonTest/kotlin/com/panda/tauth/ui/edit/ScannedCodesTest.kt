@@ -44,7 +44,7 @@ class ScannedCodesTest {
     // credential behind it.
     @Test
     fun `a choice is named by its issuer and account name`() {
-        assertEquals("GitHub — alice", scannedLabel(OtpAuthUri(OtpType.TOTP, "alice", SECRET, issuer = "GitHub")))
+        assertEquals("GitHub: alice", scannedLabel(OtpAuthUri(OtpType.TOTP, "alice", SECRET, issuer = "GitHub")))
     }
 
     @Test
