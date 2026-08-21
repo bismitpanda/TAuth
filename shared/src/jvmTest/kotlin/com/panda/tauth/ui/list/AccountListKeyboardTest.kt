@@ -36,6 +36,7 @@ class AccountListKeyboardTest {
 
     private val copied = mutableListOf<String>()
     private var moved: Pair<String, Int>? = null
+    private var locks = 0
 
     @Test
     fun `the search field takes focus as the screen opens`() {
@@ -127,9 +128,51 @@ class AccountListKeyboardTest {
         compose.runOnIdle { assertNull(moved) }
     }
 
+    @Test
+    fun `control and l locks the vault`() {
+        show()
+
+        pressWith(Key.CtrlLeft, Key.L)
+
+        compose.runOnIdle { assertEquals(1, locks) }
+    }
+
+    @Test
+    fun `meta and l locks the vault`() {
+        show()
+
+        pressWith(Key.MetaLeft, Key.L)
+
+        compose.runOnIdle { assertEquals(1, locks) }
+    }
+
+    @Test
+    fun `control and l locks a vault holding no accounts`() {
+        show(entries = emptyList())
+
+        pressWith(Key.CtrlLeft, Key.L)
+
+        compose.runOnIdle { assertEquals(1, locks) }
+    }
+
+    @Test
+    fun `l on its own locks nothing`() {
+        show()
+
+        press(Key.L)
+
+        compose.runOnIdle { assertEquals(0, locks) }
+    }
+
     private fun press(key: Key, isAlt: Boolean = false) {
         compose.onNodeWithTag(SEARCH_TAG).performKeyInput {
             if (isAlt) withKeyDown(Key.AltLeft) { pressKey(key) } else pressKey(key)
+        }
+    }
+
+    private fun pressWith(modifier: Key, key: Key) {
+        compose.onNodeWithTag(SEARCH_TAG).performKeyInput {
+            withKeyDown(modifier) { pressKey(key) }
         }
     }
 
@@ -146,6 +189,7 @@ class AccountListKeyboardTest {
                         CopyResult.COPIED
                     },
                     onMove = { id, index -> moved = id to index },
+                    onLock = { locks++ },
                 )
             }
         }

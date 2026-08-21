@@ -121,6 +121,7 @@ class VaultErrorViewsTest {
             setOf(
                 "InvalidSecret",
                 "InvalidEntry",
+                "DuplicateAccount",
                 "UnsupportedVersion",
                 "TooLarge",
                 "VaultClosed",
@@ -153,6 +154,7 @@ class VaultErrorViewsTest {
             setOf(
                 "NoSuchEntry",
                 "InvalidEntry",
+                "DuplicateAccount",
                 "InvalidSecret",
                 "UnsupportedVersion",
                 "TooLarge",
@@ -212,8 +214,8 @@ class VaultErrorViewsTest {
 
     // A case added stops nameOf compiling; naming it there then fails this count until it joins the list.
     @Test
-    fun `the hierarchy holds fourteen cases and the list measured over them holds all of them`() {
-        assertEquals(14, ALL_CASES.size)
+    fun `the hierarchy holds fifteen cases and the list measured over them holds all of them`() {
+        assertEquals(15, ALL_CASES.size)
         assertEquals(ALL_CASES.map(::nameOf), ALL_CASES.map { it::class.simpleName })
     }
 }
@@ -229,6 +231,7 @@ private val ALL_CASES: List<VaultError> = listOf(
     VaultError.MalformedUri("not an otpauth URI"),
     VaultError.NoSuchEntry,
     VaultError.InvalidEntry("digits must be a whole number"),
+    VaultError.DuplicateAccount,
     VaultError.VaultClosed,
     VaultError.TooLarge(size = 2, limit = 1),
     VaultError.Io(Throwable("the vault could not be read")),
@@ -249,6 +252,7 @@ private fun nameOf(error: VaultError): String = when (error) {
     is VaultError.MalformedUri -> "MalformedUri"
     is VaultError.NoSuchEntry -> "NoSuchEntry"
     is VaultError.InvalidEntry -> "InvalidEntry"
+    is VaultError.DuplicateAccount -> "DuplicateAccount"
     is VaultError.VaultClosed -> "VaultClosed"
     is VaultError.TooLarge -> "TooLarge"
     is VaultError.Io -> "Io"

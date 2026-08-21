@@ -46,6 +46,10 @@ sealed interface VaultError {
         EntryChangeError,
         DraftError
 
+    // Not a refusal on its own: the caller decides, since one secret under two names is a thing a
+    // user may want.
+    data object DuplicateAccount : EntryAddError
+
     // No live key: the vault was locked, or a lock overtook an unlock and the key it derived was
     // zeroed rather than installed.
     data object VaultClosed :

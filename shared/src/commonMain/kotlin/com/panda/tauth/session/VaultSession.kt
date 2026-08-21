@@ -32,6 +32,7 @@ import com.panda.tauth.vault.VaultRewriteError
 import com.panda.tauth.vault.VaultUnlockError
 import com.panda.tauth.vault.edited
 import com.panda.tauth.vault.exported
+import com.panda.tauth.vault.holds
 import com.panda.tauth.vault.readAccounts
 import com.panda.tauth.vault.toOtpAuthUri
 import kotlinx.coroutines.CoroutineScope
@@ -208,9 +209,12 @@ class VaultSession internal constructor(
 
     // One write for the whole batch: fifty entries added one at a time are fifty chances to stop
     // half way, and the file would then hold a part of what the user accepted.
-    suspend fun addEntries(entries: List<VaultEntry>): Outcome<Unit, EntryAddError> =
-        onOpenVault(VaultError.VaultClosed) { open ->
+    suspend fun addEntries(entries: List<VaultEntry>, isDuplicateAllowed: Boolean = false) =
+        onOpenVault<Unit, EntryAddError>(VaultError.VaultClosed) { open ->
             if (entries.isEmpty()) return@onOpenVault Outcome.Success(Unit)
+            if (!isDuplicateAllowed && entries.any { open.body.entries.holds(it) }) {
+                return@onOpenVault Outcome.Failure(VaultError.DuplicateAccount)
+            }
             addAll(open, entries)
         }
 

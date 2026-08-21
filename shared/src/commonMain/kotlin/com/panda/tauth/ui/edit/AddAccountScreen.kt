@@ -61,6 +61,10 @@ internal const val SCAN_PROBLEM_TAG = "add-scan-problem"
 
 internal const val SAVE_LABEL = "Save account"
 internal const val CANCEL_LABEL = "Cancel"
+internal const val ADD_ANYWAY_LABEL = "Add anyway"
+
+internal const val DUPLICATE_MESSAGE =
+    "This account is already in your vault. Adding it again gives you two rows generating the same codes."
 
 internal const val URI_FIELD_TAG = "add-uri"
 internal const val ISSUER_FIELD_TAG = "add-issuer"
@@ -112,6 +116,7 @@ private enum class AddPath {
 @Composable
 fun AddAccountScreen(
     onSave: (OtpAuthUri) -> Unit,
+    onSaveDuplicate: (OtpAuthUri) -> Unit = onSave,
     onCancel: () -> Unit,
     epochSeconds: Long,
     modifier: Modifier = Modifier,
@@ -176,17 +181,42 @@ fun AddAccountScreen(
                 color = MaterialTheme.colorScheme.error,
             )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(spacing.small)) {
-            Button(onClick = { ready?.let(onSave) }, enabled = ready != null && !isBusy) {
-                Icon(TauthIcons.save, contentDescription = null, modifier = Modifier.size(ControlIcon))
-                Spacer(Modifier.width(LocalSpacing.current.small))
-                Text(SAVE_LABEL)
-            }
-            TextButton(onClick = onCancel, enabled = !isBusy) { Text(CANCEL_LABEL) }
-        }
+        SaveControls(
+            ready = ready,
+            isEnabled = !isBusy,
+            isDuplicate = error is VaultError.DuplicateAccount,
+            onSave = onSave,
+            onSaveDuplicate = onSaveDuplicate,
+            onCancel = onCancel,
+        )
         if (isBusy) {
             CircularProgressIndicator()
         }
+    }
+}
+
+@Composable
+private fun SaveControls(
+    ready: OtpAuthUri?,
+    isEnabled: Boolean,
+    isDuplicate: Boolean,
+    onSave: (OtpAuthUri) -> Unit,
+    onSaveDuplicate: (OtpAuthUri) -> Unit,
+    onCancel: () -> Unit,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(LocalSpacing.current.small)) {
+        Button(onClick = { ready?.let(onSave) }, enabled = ready != null && isEnabled) {
+            Icon(TauthIcons.save, contentDescription = null, modifier = Modifier.size(ControlIcon))
+            Spacer(Modifier.width(LocalSpacing.current.small))
+            Text(SAVE_LABEL)
+        }
+        if (isDuplicate) {
+            TextButton(
+                onClick = { ready?.let(onSaveDuplicate) },
+                enabled = ready != null && isEnabled,
+            ) { Text(ADD_ANYWAY_LABEL) }
+        }
+        TextButton(onClick = onCancel, enabled = isEnabled) { Text(CANCEL_LABEL) }
     }
 }
 
@@ -349,6 +379,7 @@ private fun AdvancedFields(
 }
 
 private fun messageFor(error: EntryAddError): String = when (error) {
+    is VaultError.DuplicateAccount -> DUPLICATE_MESSAGE
     is VaultError.InvalidEntry -> "The account could not be saved: ${error.detail}."
     is VaultError.InvalidSecret -> "The secret could not be stored: ${error.detail}."
     is VaultError.VaultClosed -> "The vault locked before the account was saved."

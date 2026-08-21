@@ -139,6 +139,67 @@ class EntryOperationsTest {
         scope.cancel()
     }
 
+    @Test
+    fun `an account the vault does not hold is added`() {
+        unlocked()
+
+        val outcome = runBlocking { session.addEntries(listOf(newEntry())) }
+
+        assertIs<Outcome.Success<Unit>>(outcome)
+    }
+
+    // The same key under the same names, whatever id it arrives with: an id is this vault's to give.
+    @Test
+    fun `an account the vault already holds is refused`() {
+        unlocked()
+        runBlocking { session.addEntries(listOf(newEntry())) }
+
+        val outcome = runBlocking { session.addEntries(listOf(newEntry(id = BATCH_ID))) }
+
+        assertEquals(VaultError.DuplicateAccount, outcome.errorOrNull)
+    }
+
+    @Test
+    fun `a refused duplicate reaches no file`() {
+        unlocked()
+        runBlocking { session.addEntries(listOf(newEntry())) }
+        val before = file.writes
+
+        runBlocking { session.addEntries(listOf(newEntry(id = BATCH_ID))) }
+
+        assertEquals(before, file.writes)
+    }
+
+    @Test
+    fun `a duplicate the caller allowed is added`() {
+        unlocked()
+        runBlocking { session.addEntries(listOf(newEntry())) }
+
+        runBlocking { session.addEntries(listOf(newEntry(id = BATCH_ID)), isDuplicateAllowed = true) }
+
+        assertEquals(ENTRY_COUNT + 2, stored().size)
+    }
+
+    @Test
+    fun `the same key under another name is not a duplicate`() {
+        unlocked()
+        runBlocking { session.addEntries(listOf(newEntry())) }
+
+        val outcome = runBlocking { session.addEntries(listOf(totpEntry(id = BATCH_ID, accountName = "erin"))) }
+
+        assertIs<Outcome.Success<Unit>>(outcome)
+    }
+
+    @Test
+    fun `a batch carrying an account the vault holds is refused whole`() {
+        unlocked()
+        runBlocking { session.addEntries(listOf(newEntry())) }
+
+        runBlocking { session.addEntries(listOf(totpEntry(id = BATCH_ID, accountName = "erin"), newEntry())) }
+
+        assertEquals(ENTRY_COUNT + 1, stored().size)
+    }
+
     // A batch is one write however many accounts it carries: fifty added one at a time are fifty
     // chances to stop half way, and the file would then hold a part of what the user accepted.
     @Test

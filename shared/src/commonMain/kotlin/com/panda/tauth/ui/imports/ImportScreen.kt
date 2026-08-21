@@ -201,6 +201,7 @@ private fun RowScope.Account(row: ImportRow.Account, isAddedAnyway: Boolean, isE
 }
 
 private fun messageFor(error: EntryAddError): String = when (error) {
+    is VaultError.DuplicateAccount -> "One of these accounts is already in the vault."
     is VaultError.InvalidSecret -> "One of these accounts carries a secret this cannot store: ${error.detail}."
     is VaultError.InvalidEntry -> "One of these accounts cannot be stored: ${error.detail}."
     is VaultError.VaultClosed -> "The vault locked before the accounts were added, so none of them were."

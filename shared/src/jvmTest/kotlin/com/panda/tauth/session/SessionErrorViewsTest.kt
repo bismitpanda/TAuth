@@ -125,8 +125,9 @@ class SessionErrorViewsTest {
     fun `a refused add is typed at the view storing a new entry reports`() {
         unlocked()
 
-        val refusal: EntryAddError =
-            checkNotNull(runBlocking { session.addEntries(listOf(totpEntry(id = ENTRY_ID))) }.errorOrNull)
+        // Under a name of its own, so what the id collides with is the id and not the account.
+        val collision = totpEntry(id = ENTRY_ID, accountName = "erin")
+        val refusal: EntryAddError = checkNotNull(runBlocking { session.addEntries(listOf(collision)) }.errorOrNull)
 
         assertIs<VaultError.InvalidEntry>(refusal)
     }

@@ -50,6 +50,8 @@ class AddAccountScreenTest {
     val compose = createComposeRule()
 
     private var saved: OtpAuthUri? = null
+
+    private var savedAnyway: OtpAuthUri? = null
     private var cancels = 0
 
     @Test
@@ -384,6 +386,41 @@ class AddAccountScreenTest {
         compose.onNodeWithText("The vault locked before the account was saved.").assertIsDisplayed()
     }
 
+    @Test
+    fun `an account the vault already holds is reported`() {
+        show(error = VaultError.DuplicateAccount)
+
+        compose.onNodeWithText(DUPLICATE_MESSAGE).assertIsDisplayed()
+    }
+
+    @Test
+    fun `a duplicate offers a way to add it anyway`() {
+        show(error = VaultError.DuplicateAccount)
+        paste(TOTP_URI)
+
+        tap(ADD_ANYWAY_LABEL)
+
+        compose.runOnIdle { assertEquals("alice", savedAnyway?.accountName) }
+    }
+
+    @Test
+    fun `a duplicate that was added anyway is not saved twice`() {
+        show(error = VaultError.DuplicateAccount)
+        paste(TOTP_URI)
+
+        tap(ADD_ANYWAY_LABEL)
+
+        compose.runOnIdle { assertNull(saved) }
+    }
+
+    @Test
+    fun `nothing offers to add anyway until the vault says the account is already there`() {
+        show()
+        paste(TOTP_URI)
+
+        compose.onNodeWithText(ADD_ANYWAY_LABEL).assertDoesNotExist()
+    }
+
     // The remaining branches of the mapping this screen holds, which is every case storing a new entry
     // reports.
     @Test
@@ -592,6 +629,7 @@ class AddAccountScreenTest {
             TauthTheme {
                 AddAccountScreen(
                     onSave = { saved = it },
+                    onSaveDuplicate = { savedAnyway = it },
                     onCancel = { cancels++ },
                     epochSeconds = PREVIEW_AT,
                     error = error,

@@ -45,6 +45,8 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -230,6 +232,7 @@ fun AccountListScreen(
                 onCopy = callbacks.onCopyCode,
                 onMove = onMove,
                 onClearQuery = { query = "" },
+                onLock = onLock,
             ),
         verticalArrangement = Arrangement.spacedBy(spacing.small),
     ) {
@@ -461,6 +464,7 @@ private fun Modifier.listKeys(
     onCopy: (UnlockedEntry) -> Unit,
     onMove: (String, Int) -> Unit,
     onClearQuery: () -> Unit,
+    onLock: () -> Unit,
 ): Modifier = onPreviewKeyEvent { event ->
     onListKey(
         event = event,
@@ -472,6 +476,7 @@ private fun Modifier.listKeys(
         onCopy = { shown.getOrNull(index)?.let(onCopy) },
         onMove = { to -> shown.getOrNull(index)?.let { onMove(it.id, to) } },
         onClearQuery = onClearQuery,
+        onLock = onLock,
     )
 }
 
@@ -486,8 +491,15 @@ private fun onListKey(
     onCopy: () -> Unit,
     onMove: (Int) -> Unit,
     onClearQuery: () -> Unit,
+    onLock: () -> Unit,
 ): Boolean {
-    if (event.type != KeyEventType.KeyDown || count == 0) return false
+    if (event.type != KeyEventType.KeyDown) return false
+    // Ahead of the count, because a vault holding nothing still locks.
+    if (event.key == Key.L && (event.isCtrlPressed || event.isMetaPressed)) {
+        onLock()
+        return true
+    }
+    if (count == 0) return false
     val step = when (event.key) {
         Key.DirectionDown -> 1
         Key.DirectionUp -> -1

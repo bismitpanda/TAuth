@@ -345,7 +345,8 @@ private fun UnlockedGraph(
                 isBusy = imports.isBusy,
                 error = imports.addError,
                 onToggleDuplicate = imports::toggle,
-                onImport = { imports.add(scope, session::addEntries) },
+                // The preview is where a duplicate was decided, so the write takes what was chosen.
+                onImport = { imports.add(scope) { session.addEntries(it, isDuplicateAllowed = true) } },
                 onCancel = imports::clear,
             )
         }
@@ -357,7 +358,7 @@ private fun UnlockedGraph(
             isBusy = isEntryBusy,
             error = addError,
             modifier = modifier,
-            onSave = { uri -> onAddWork { addAndReturn(session, uri, clock, onRoute) } },
+            onSave = { uri, anyway -> onAddWork { addAndReturn(session, uri, clock, onRoute, anyway) } },
             onLeave = { onRoute(Route.Accounts) },
         )
 
@@ -408,7 +409,7 @@ private fun AddDestination(
     epochSeconds: Long,
     isBusy: Boolean,
     error: EntryAddError?,
-    onSave: (OtpAuthUri) -> Unit,
+    onSave: (OtpAuthUri, Boolean) -> Unit,
     onLeave: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -416,7 +417,8 @@ private fun AddDestination(
         AddAccountScreen(
             scanning = scanning,
             pasting = pasting,
-            onSave = onSave,
+            onSave = { onSave(it, false) },
+            onSaveDuplicate = { onSave(it, true) },
             onCancel = onLeave,
             epochSeconds = epochSeconds,
             modifier = inner,
@@ -496,8 +498,10 @@ private suspend fun addAndReturn(
     uri: OtpAuthUri,
     clock: Clock,
     onRoute: (Route) -> Unit,
+    isDuplicateAllowed: Boolean = false,
 ): Outcome<Unit, EntryAddError> {
-    val outcome = session.addEntries(listOf(uri.toEntry(VaultEntry.newId(), clock.now())))
+    val entry = uri.toEntry(VaultEntry.newId(), clock.now())
+    val outcome = session.addEntries(listOf(entry), isDuplicateAllowed)
     if (outcome is Outcome.Success) onRoute(Route.Accounts)
     return outcome
 }
