@@ -22,7 +22,6 @@ data class EntryDraft(
     val period: String = Totp.PERIOD_DEFAULT.toString(),
     val counter: String = "0",
 ) {
-    // The secret is a complete credential and this type is printed by anything that logs a state.
     override fun toString(): String =
         "EntryDraft(type=$type, issuer=$issuer, accountName=$accountName, algorithm=$algorithm, " +
             "digits=$digits, period=$period, counter=$counter, secret=<redacted>)"

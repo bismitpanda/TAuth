@@ -22,7 +22,6 @@ import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-// The screen's own wording, written out here so a changed label fails the test naming it.
 private const val CONFIRM = "Add these accounts"
 private const val CANCEL = "Cancel"
 

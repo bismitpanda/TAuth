@@ -5,10 +5,8 @@ import kotlin.test.Test
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-// jpackage reads the icon each platform declares only when it packages for that platform, and two of
-// the three cannot be packaged on any one machine. The test task passes the declarations across, so a
-// file renamed or emptied under `icons/` is a failure here rather than at a release nobody can
-// rehearse.
+// jpackage reads each platform's icon only when packaging for it, and two of the three cannot be
+// packaged on any one machine, so a file renamed under `icons/` fails here or at an unrehearsed release.
 class PackagedIconTest {
 
     @Test

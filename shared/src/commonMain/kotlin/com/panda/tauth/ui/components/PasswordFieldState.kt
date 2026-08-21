@@ -133,8 +133,6 @@ class PasswordFieldState(initialCapacity: Int = INITIAL_CAPACITY) {
         base = text
     }
 
-    // Rendering the characters would put the password into every log line and exception message
-    // that prints this holder.
     override fun toString(): String = "PasswordFieldState(length=$length, destroyed=$isDestroyed)"
 
     private fun ensureCapacity(required: Int) {

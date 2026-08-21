@@ -18,8 +18,6 @@ import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-// The dialog's own wording, written out here so a changed label fails the test naming it rather than
-// following it.
 private const val COPY_URI = "Copy URI"
 private const val SAVE = "Save as PNG"
 private const val CLOSE = "Close"

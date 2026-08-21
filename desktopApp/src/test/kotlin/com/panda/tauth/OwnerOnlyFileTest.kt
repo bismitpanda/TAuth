@@ -121,9 +121,8 @@ class OwnerOnlyFileTest {
         assertIs<Outcome.Success<Unit>>(writeOwnerOnly(destination(), WRITTEN))
     }
 
-    // Everything down this path carries a secret in a form something other than TAuth reads. This and
-    // the pair below read a real mode, so they distinguish a mode this set from one the umask happened
-    // to give only where that umask is looser than 0077.
+    // This and the pair below read a real mode, so they tell a mode this set from one the umask
+    // happened to give only where that umask is looser than 0077.
     @Test
     fun `a restricted write is readable by its owner alone`() {
         writeOwnerOnly(destination(), WRITTEN)
@@ -131,9 +130,8 @@ class OwnerOnlyFileTest {
         assertEquals("rw-------", modeOf(destination()))
     }
 
-    // The end state above says nothing about the window between the two: a file created at the umask
-    // and restricted after the content is in it is readable for the length of the write, and a
-    // descriptor opened in that window survives the restriction.
+    // The end state above says nothing about the window between the two: a file restricted after the
+    // content is in it is readable for the length of the write, and a descriptor opened then survives.
     @Test
     fun `a restricted write is restricted before any content reaches it`() {
         var modeAtWrite: String? = null
@@ -168,8 +166,7 @@ class OwnerOnlyFileTest {
     }
 
     // The moment between the file being created and the content reaching it belongs to whoever can
-    // write to the destination directory. Reopening by name would put the content wherever a link left
-    // in that window points.
+    // write to that directory, so reopening by name would follow a link left there in the meantime.
     @Test
     fun `a restricted write goes into the file it created rather than into the name`() {
         val decoy = root.resolve("decoy")

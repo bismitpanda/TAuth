@@ -13,8 +13,6 @@ import com.panda.tauth.vault.VaultError
 import org.junit.Rule
 import kotlin.test.Test
 
-// The preview's own wording, repeated here as literals so a changed message fails the test that names
-// it rather than following it.
 private const val MALFORMED_MESSAGE = "That is not an account this reads: not an otpauth URI."
 private const val SECRET_MESSAGE = "The secret is not usable: invalid base32 character."
 private const val DETAILS_MESSAGE = "These details do not make an account: digits must be 6..8."

@@ -30,8 +30,6 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertNull
 
-// The screen's own wording, repeated here as literals so a changed message fails the test that
-// names it rather than following it.
 private const val UNLOCK_LABEL = "Unlock"
 private const val PROGRESS_LABEL = "Checking your password"
 private const val WRONG_PASSWORD_MESSAGE = "That password is not correct."

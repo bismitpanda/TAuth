@@ -173,6 +173,5 @@ class ClipboardService internal constructor(
         }
     }
 
-    // The placed string can be a complete credential; no rendering of this object carries it.
     override fun toString(): String = "ClipboardService"
 }

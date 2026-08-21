@@ -22,8 +22,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-// The row's own wording, repeated here as literals so a changed label fails the test that names it
-// rather than following it.
 private const val GENERATE = "Generate code"
 private const val HIDE = "Hide code"
 private const val MENU = "More"

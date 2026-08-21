@@ -26,8 +26,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-// The screen's own wording, repeated here as literals so a changed label fails the test that names it
-// rather than following it.
 private const val SAVE = "Save account"
 private const val CANCEL = "Cancel"
 private const val MANUAL_PATH = "Enter details"

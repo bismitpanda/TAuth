@@ -11,5 +11,5 @@ const val ARGON2_SALT_BYTES = 16
 // Argon2's own floor. BouncyCastle reports less with an IllegalStateException.
 const val ARGON2_MIN_OUTPUT_BYTES = 4
 
-// CharArray rather than String, which cannot be wiped. The caller zeroes it.
+// The caller zeroes the password it passes.
 expect fun argon2id(password: CharArray, salt: ByteArray, outputBytes: Int): ByteArray

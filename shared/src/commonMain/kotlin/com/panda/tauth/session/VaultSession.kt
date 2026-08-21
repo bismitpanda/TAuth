@@ -286,7 +286,6 @@ class VaultSession internal constructor(
     internal fun <T> withSecret(id: String, block: (ByteArray) -> T): T? =
         exclusively(guard) { secrets[id]?.lendOrNull(block) }
 
-    // Neither the key nor an entry's secret appears in any rendering of a session.
     override fun toString(): String = "VaultSession(state=${_state.value::class.simpleName})"
 
     // A rewrite produces a new header, and the header an open vault holds is the associated data of

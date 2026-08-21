@@ -22,7 +22,6 @@ internal const val VAULT_ID_BYTES = 16
 
 private val NO_ASSOCIATED_DATA = ByteArray(0)
 
-// Every path that finishes with this vault must call close(), error paths included: it zeroes the DEK.
 class OpenVault internal constructor(body: VaultBody, internal val header: VaultHeader, private val dek: SecureBytes) :
     AutoCloseable {
     // A write assigns the body it has committed, so what this carries is what the file holds. The
@@ -67,7 +66,6 @@ object VaultCodec {
     internal fun verify(header: VaultHeader, password: CharArray): Outcome<Unit, PasswordCheckError> {
         val fields = decodeHeaderFields(header)
             ?: return Outcome.Failure(VaultError.Corrupt("a header field is missing, malformed or the wrong size"))
-        // withKek zeroes the derived key on every path out of the block, a throw included.
         val dek = withKek(password, fields.salt) { kek ->
             aeadOpen(kek, fields.wrapNonce, fields.wrapCiphertext, NO_ASSOCIATED_DATA)
         } ?: return Outcome.Failure(VaultError.WrongPassword)
@@ -237,8 +235,8 @@ object VaultCodec {
             // offline password search needs. The error reaches the log and the screen, so it carries none.
             return Outcome.Failure(VaultError.Corrupt("header is not valid JSON"))
         }
-        // The prefix is kept verbatim off disk for use as the body's associated data. Re-serialising
-        // the header would make decryption depend on the serialiser never changing its output.
+        // Re-serialising the header would make decryption depend on the serialiser never changing
+        // its output.
         return Outcome.Success(
             Envelope(
                 header = header,

@@ -5,8 +5,7 @@ import com.panda.tauth.totp.HashAlgorithm
 import com.panda.tauth.totp.OtpType
 import kotlin.time.Instant
 
-// RFC 4226 §5.1's published seed as base32, which every fixture below stands over so that a code a
-// test names is a code the RFC publishes.
+// RFC 4226 §5.1's published seed as base32.
 internal const val SEED_BASE32 = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
 
 internal fun totpRow(

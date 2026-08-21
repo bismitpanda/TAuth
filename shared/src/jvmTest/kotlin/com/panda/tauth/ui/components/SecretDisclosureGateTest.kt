@@ -25,8 +25,6 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-// The component's own wording, repeated here as literals so a changed message fails the test that
-// names it rather than following it.
 private const val CONFIRM_LABEL = "Show"
 private const val CANCEL_LABEL = "Cancel"
 private const val PROGRESS_LABEL = "Checking your password"

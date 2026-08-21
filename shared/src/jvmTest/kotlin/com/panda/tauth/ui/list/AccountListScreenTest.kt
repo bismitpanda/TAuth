@@ -46,8 +46,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-// The screen's own wording, repeated here as literals so a changed label fails the test that names it
-// rather than following it.
 private const val ADD = "Add account"
 private const val LOCK = "Lock"
 private const val MENU = "More"

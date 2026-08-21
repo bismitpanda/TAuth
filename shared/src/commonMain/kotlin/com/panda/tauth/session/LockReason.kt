@@ -21,9 +21,8 @@ internal fun LockReason.isArmedBy(policy: SecurityPolicy): Boolean = when (this)
     LockReason.Idle -> policy.idleTimeoutMinutes > 0
 }
 
-// A window closing a dialog it opened is unfocused for as long as the desktop takes to hand the focus
-// back, which is a transition rather than someone leaving. Focus returning inside this cancels the
-// lock; focus that stays gone reaches it a second later.
+// A window closing a dialog it opened is unfocused for as long as the desktop takes to hand the
+// focus back, which is a transition rather than someone leaving.
 const val FOCUS_SETTLE_SECONDS = 1
 
 // The grace period covers the window leaving the screen, the one trigger the user reverses by

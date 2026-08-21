@@ -21,8 +21,6 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertNull
 
-// The screen's own wording, repeated here as literals so a changed message fails the test that
-// names it rather than following it.
 private const val ACKNOWLEDGE_LABEL = "I understand that if I lose my password, I lose every code stored here"
 private const val NOTE_HEADING = "Your password cannot be recovered"
 private const val CREATE_LABEL = "Create vault"

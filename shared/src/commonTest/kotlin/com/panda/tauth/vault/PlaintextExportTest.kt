@@ -7,9 +7,8 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Instant
 
-// Two entries whose order indices run backwards against the list they sit in, so an export that
-// takes the list as it finds it disagrees with one that reads the order the vault stores. Their
-// creation times differ too, since one shared by both would survive an export that dropped it.
+// Order indices running backwards against the list they sit in, and creation times that differ, so
+// an export taking the list as it finds it disagrees with one reading the order the vault stores.
 private val LATER = totpEntry(orderIndex = 1).copy(createdAt = Instant.parse("2026-09-01T00:00:00Z"))
 private val FIRST = hotpEntry(orderIndex = 0)
 
@@ -57,8 +56,7 @@ class PlaintextExportTest {
     }
 
     // The order index, the creation time and the id have no field in a URI, and carrying them is the
-    // whole reason the two formats are not one. Read off the entry holding neither default, so a
-    // field dropped on the way through decodes to something this disagrees with.
+    // whole reason the two formats are not one.
     @Test
     fun `json carries what a uri has no field for`() {
         val document = plaintextExportJson.decodeFromString<PlaintextExport>(BODY.exported(ExportFormat.JSON))

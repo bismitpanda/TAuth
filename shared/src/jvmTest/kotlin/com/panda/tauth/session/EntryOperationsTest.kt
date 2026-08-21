@@ -33,8 +33,7 @@ import kotlin.time.Instant
 
 private const val PASSWORD = "correct horse battery staple"
 
-// The bytes TEST_SECRET spells out, written here rather than decoded, so an assertion on a decoded
-// key stands on RFC 4226 §5.1's published seed instead of on the decoder that produced it.
+// The bytes TEST_SECRET spells out. RFC 4226 §5.1.
 private const val SEED = "12345678901234567890"
 
 private const val FIRST_ID = "0192f4c1-0000-7000-8000-000000000021"

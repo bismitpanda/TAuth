@@ -34,7 +34,6 @@ private const val UNREADABLE_ENTRY = "this account is not in a shape TAuth reads
 // Two spellings of one key are one account, and nothing here decodes a secret to establish that.
 private fun normalisedSecret(secret: String): String = secret.uppercase().filterNot { it == '=' || it.isWhitespace() }
 
-// Holds a secret, so it says nothing about itself. It exists to be compared and never to be read.
 private data class AccountKey(val issuer: String?, val accountName: String, val secret: String) {
     override fun toString(): String = "AccountKey(issuer=$issuer, accountName=$accountName, secret=<redacted>)"
 }

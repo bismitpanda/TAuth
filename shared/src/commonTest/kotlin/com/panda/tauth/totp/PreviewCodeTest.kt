@@ -3,8 +3,7 @@ package com.panda.tauth.totp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-// RFC 4226 §5.1's published seed, base32-encoded. Written out rather than encoded here so the input
-// to the vectors below is a literal.
+// RFC 4226 §5.1's published seed, base32-encoded.
 private const val SEED_BASE32 = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
 
 // RFC 6238 errata 2866: Appendix B uses a distinct seed per algorithm, 32 bytes for SHA-256.

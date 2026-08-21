@@ -94,8 +94,6 @@ private const val RENAMED_ACCOUNT = "erin"
 private const val WAIT_MILLIS = 30_000L
 private const val WAIT_SECONDS = 30L
 
-// The screens' own wording, repeated here as literals so a changed label fails the test that names it
-// rather than following it.
 private const val SETTINGS_BUTTON = "Settings"
 private const val BACK_LABEL = "Back to accounts"
 private const val CHANGE_PASSWORD_BUTTON = "Change password"

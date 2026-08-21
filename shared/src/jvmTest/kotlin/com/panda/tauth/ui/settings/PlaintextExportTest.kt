@@ -23,7 +23,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-// The flow's own wording, written out here so a changed label fails the test naming it.
 private const val CONTINUE = "Continue"
 private const val CANCEL = "Cancel"
 private const val DISCLOSE = "Show"

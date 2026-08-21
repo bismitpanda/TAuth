@@ -72,8 +72,6 @@ private val PLACEMENT_WORDS = listOf("plaintext", "inside the vault", "kept in a
 
 private fun mentionsPlaintext(note: String): Boolean = PLACEMENT_WORDS.any { it in note.lowercase() }
 
-// The screen's own wording, repeated here as literals so a changed label fails the test that names it
-// rather than following it.
 private const val CHANGE = "Change password"
 private const val REENCRYPT = "Re-encrypt vault"
 private const val REVEAL = "Show in file manager"
