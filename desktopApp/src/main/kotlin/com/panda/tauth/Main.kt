@@ -78,13 +78,10 @@ private fun runTAuth(role: InstanceRole) = application {
         shellSettings(paths, lifecycle.canConfigureTray, launcher, modalHold)
     }
     val idleWatch = remember { IdleWatch() }
-    val exitLock = remember(session) { ExitLock(session::lock) }
     val primary = role as? InstanceRole.Primary
     val windowRaise = remember { WindowRaise() }
 
-    // A shutdown the window never sees — a signal, a session logout — reaches the key through the
-    // runtime rather than through this composition, and the hook outlives the composition on purpose.
-    LaunchedEffect(exitLock) { exitLock.install() }
+    InstallExitLock(session)
 
     // Closing gives the lock back and takes the port file with it, so the launch that follows this
     // one finds no port naming a socket nobody holds.
@@ -119,7 +116,7 @@ private fun runTAuth(role: InstanceRole) = application {
             presenceOf(isVisible, windowState, windowInfo, shownBy, modalHold)
         }
 
-        RaiseOnRequest(windowRaise, primary, onShownBy = { shownBy = it }) {
+        RaiseOnRequest(windowRaise, primary, isShown = isVisible, onShownBy = { shownBy = it }) {
             isVisible = true
             windowState.isMinimized = false
             window.raiseToFront()
@@ -199,6 +196,7 @@ private fun WatchIdle(
 private fun RaiseOnRequest(
     raise: WindowRaise,
     primary: InstanceRole.Primary?,
+    isShown: Boolean,
     onShownBy: (ShowSource) -> Unit,
     onRaise: () -> Unit,
 ) {
@@ -206,6 +204,18 @@ private fun RaiseOnRequest(
         val requests = primary?.showRequests ?: return@LaunchedEffect
         raise.raiseOnRequest(requests = requests, onRaise = onRaise, onShownBy = onShownBy)
     }
+
+    // Made visible is not brought forward, and a field asking for focus inside an unfocused window
+    // takes no keystroke.
+    LaunchedEffect(isShown) { if (isShown) onRaise() }
+}
+
+// The hook outlives this composition on purpose: a shutdown the window never sees reaches the key
+// through the runtime rather than through here.
+@Composable
+private fun InstallExitLock(session: VaultSession) {
+    val exitLock = remember(session) { ExitLock(session::lock) }
+    LaunchedEffect(exitLock) { exitLock.install() }
 }
 
 @Composable

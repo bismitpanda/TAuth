@@ -13,9 +13,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -53,8 +55,12 @@ fun UnlockScreen(
         onDispose { password.destroy() }
     }
 
-    // The screen exists to take one password, so it opens on the field.
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    // Hiding to the tray leaves this composition standing, so a first-composition effect never runs
+    // again.
+    val windowInfo = LocalWindowInfo.current
+    LaunchedEffect(windowInfo) {
+        snapshotFlow { windowInfo.isWindowFocused }.collect { if (it) focusRequester.requestFocus() }
+    }
 
     val spacing = LocalSpacing.current
     val subtitle = lastReason?.let(::subtitleFor)

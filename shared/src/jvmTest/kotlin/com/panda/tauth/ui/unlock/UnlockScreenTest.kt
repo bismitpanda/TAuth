@@ -1,13 +1,17 @@
 package com.panda.tauth.ui.unlock
 
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -37,6 +41,12 @@ private const val FOCUS_LOST_SUBTITLE = "Locked when the window lost focus."
 private const val HIDDEN_TO_TRAY_SUBTITLE = "Locked when the window was hidden to the tray."
 private const val MINIMISED_SUBTITLE = "Locked when the window was minimised."
 
+private class FakeWindowInfo(isFocused: Boolean) : WindowInfo {
+    var isFocused by mutableStateOf(isFocused)
+
+    override val isWindowFocused: Boolean get() = isFocused
+}
+
 class UnlockScreenTest {
     @get:Rule
     val compose = createComposeRule()
@@ -48,6 +58,24 @@ class UnlockScreenTest {
         show()
 
         passwordField().assertIsFocused()
+    }
+
+    @Test
+    fun `the password field takes focus when the window regains it`() {
+        val window = FakeWindowInfo(isFocused = false)
+        showIn(window)
+        passwordField().assertIsNotFocused()
+
+        compose.runOnIdle { window.isFocused = true }
+
+        passwordField().assertIsFocused()
+    }
+
+    @Test
+    fun `the password field is left alone while the window is not focused`() {
+        showIn(FakeWindowInfo(isFocused = false))
+
+        passwordField().assertIsNotFocused()
     }
 
     @Test
@@ -309,6 +337,14 @@ class UnlockScreenTest {
                     error = error,
                     lastReason = lastReason,
                 )
+            }
+        }
+    }
+
+    private fun showIn(window: WindowInfo) {
+        compose.setContent {
+            CompositionLocalProvider(LocalWindowInfo provides window) {
+                TauthTheme { UnlockScreen(onUnlock = { captured = it }) }
             }
         }
     }
