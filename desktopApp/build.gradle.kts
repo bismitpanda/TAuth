@@ -61,9 +61,47 @@ tasks.test {
 
 val tauthVersion = providers.gradleProperty("tauthVersion").getOrElse("1.0.0")
 
+val mainClassName = "com.panda.tauth.MainKt"
+
+// The toolkit derives a window's class from the main class this way.
+val windowClass = mainClassName.replace('.', '-')
+
+// jpackage writes no StartupWMClass, and takes a template only from --resource-dir, which the
+// Compose plugin empties inside the packaging task itself: CMP-9837.
+// Matched rather than named, because the plugin registers these after this script is configured.
+tasks.matching { it.name == "packageDeb" || it.name == "packageReleaseDeb" }.configureEach {
+    val binaries = if (name == "packageDeb") "compose/binaries/main/deb" else "compose/binaries/main-release/deb"
+    val built = layout.buildDirectory.dir(binaries)
+    val declared = windowClass
+    doLast {
+        val dpkg: (List<String>) -> Unit = { arguments ->
+            val process = ProcessBuilder(listOf("dpkg-deb") + arguments).redirectErrorStream(true).start()
+            val reported = process.inputStream.bufferedReader().readText()
+            check(process.waitFor() == 0) { "dpkg-deb ${arguments.joinToString(" ")} failed: $reported" }
+        }
+        val directory = built.get().asFile
+        val archive = directory.listFiles().orEmpty().singleOrNull { it.extension == "deb" }
+            ?: error("expected one deb in $directory")
+        val unpacked = File(directory, "unpacked")
+        unpacked.deleteRecursively()
+        dpkg(listOf("-R", archive.path, unpacked.path))
+
+        val entry = File(unpacked, "opt").walkTopDown()
+            .firstOrNull { it.name.endsWith(".desktop") && !it.path.contains("/runtime/") }
+            ?: error("the package carries no desktop entry to correct")
+        entry.appendText("StartupWMClass=$declared\n")
+
+        archive.delete()
+        // The unpacked tree belongs to whoever unpacked it, and a package installing /opt under that
+        // account is not the package jpackage wrote.
+        dpkg(listOf("--root-owner-group", "-b", unpacked.path, archive.path))
+        unpacked.deleteRecursively()
+    }
+}
+
 compose.desktop {
     application {
-        mainClass = "com.panda.tauth.MainKt"
+        mainClass = mainClassName
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
