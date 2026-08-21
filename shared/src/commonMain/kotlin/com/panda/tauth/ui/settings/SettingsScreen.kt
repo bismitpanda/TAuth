@@ -97,9 +97,12 @@ internal const val SETTINGS_PLAINTEXT_PROBLEM_TAG = "settings-plaintext-problem"
 
 internal const val IMPORT_LABEL = "Import accounts"
 internal const val IMPORT_NOTE =
-    "Reads an unencrypted export or a list of otpauth:// URIs, and shows what it found first."
+    "Reads an unencrypted export, a list of otpauth:// URIs, or another authenticator's export QR " +
+        "code, and shows what it found first."
 
 internal const val SETTINGS_IMPORT_PROBLEM_TAG = "settings-import-problem"
+
+internal const val SCAN_IMPORT_LABEL = "Scan an export code"
 
 internal const val EXPORT_NOTE =
     "The copy is the vault file itself, and the same password opens it."
@@ -189,6 +192,7 @@ fun SettingsScreen(
     onExport: () -> Unit = {},
     onPlaintextExport: () -> Unit = {},
     onImport: () -> Unit = {},
+    onScanImport: () -> Unit = {},
     onBack: () -> Unit = {},
 ) {
     val spacing = LocalSpacing.current
@@ -244,6 +248,7 @@ fun SettingsScreen(
             onExport = onExport,
             onPlaintextExport = onPlaintextExport,
             onImport = onImport,
+            onScanImport = onScanImport,
         )
         AboutGroup(shell = shell)
     }
@@ -506,6 +511,7 @@ private fun DataGroup(
     onExport: () -> Unit,
     onPlaintextExport: () -> Unit,
     onImport: () -> Unit,
+    onScanImport: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val spacing = LocalSpacing.current
@@ -531,8 +537,14 @@ private fun DataGroup(
                 ButtonLabel(TauthIcons.warning, PLAINTEXT_EXPORT_LABEL)
             }
         }
+        // Two ways into one import, so they share the line that reports what the last of them read.
         Action(IMPORT_NOTE, importError?.let(::importMessageFor), SETTINGS_IMPORT_PROBLEM_TAG) {
-            TextButton(onClick = onImport, enabled = isEnabled) { ButtonLabel(TauthIcons.import, IMPORT_LABEL) }
+            Row(horizontalArrangement = Arrangement.spacedBy(spacing.small)) {
+                TextButton(onClick = onImport, enabled = isEnabled) { ButtonLabel(TauthIcons.import, IMPORT_LABEL) }
+                TextButton(onClick = onScanImport, enabled = isEnabled) {
+                    ButtonLabel(TauthIcons.qr, SCAN_IMPORT_LABEL)
+                }
+            }
         }
     }
 }

@@ -2,6 +2,7 @@ package com.panda.tauth.ui.imports
 
 import com.panda.tauth.Outcome
 import com.panda.tauth.vault.EntryAddError
+import com.panda.tauth.vault.ImportOffer
 import com.panda.tauth.vault.ImportRow
 import com.panda.tauth.vault.VaultEntry
 import com.panda.tauth.vault.VaultError
@@ -23,6 +24,8 @@ private val FRESH = ImportRow.Account(1, totpEntry(accountName = "alice"), isDup
 private val DUPLICATE = ImportRow.Account(2, hotpEntry(), isDuplicate = true)
 private val ROWS = listOf(FRESH, DUPLICATE)
 
+private val OFFER = ImportOffer(ROWS, note = "part 1 of 2")
+
 // Unconfined runs each resumption on the thread that causes it, so every assertion below sees a
 // settled holder without joining anything.
 class ImportWorkTest {
@@ -38,14 +41,14 @@ class ImportWorkTest {
 
     @Test
     fun `a file that was read opens a preview`() {
-        work.open(scope, { Outcome.Success(TEXT) }) { Outcome.Success(ROWS) }
+        work.open(scope, { Outcome.Success(TEXT) }) { Outcome.Success(OFFER) }
 
         assertTrue(work.isPreviewing)
     }
 
     @Test
     fun `a file that was read holds the rows it offered`() {
-        work.open(scope, { Outcome.Success(TEXT) }) { Outcome.Success(ROWS) }
+        work.open(scope, { Outcome.Success(TEXT) }) { Outcome.Success(OFFER) }
 
         assertEquals(ROWS, work.rows)
     }
@@ -53,28 +56,28 @@ class ImportWorkTest {
     // Declining the picker is neither a failure to report nor a preview to open.
     @Test
     fun `a file the user declined opens no preview`() {
-        work.open(scope, { Outcome.Success(null) }) { Outcome.Success(ROWS) }
+        work.open(scope, { Outcome.Success(null) }) { Outcome.Success(OFFER) }
 
         assertFalse(work.isPreviewing)
     }
 
     @Test
     fun `a file the user declined reports nothing`() {
-        work.open(scope, { Outcome.Success(null) }) { Outcome.Success(ROWS) }
+        work.open(scope, { Outcome.Success(null) }) { Outcome.Success(OFFER) }
 
         assertNull(work.readError)
     }
 
     @Test
     fun `a file that could not be fetched reports what the shell said`() {
-        work.open(scope, { Outcome.Failure(VaultError.Corrupt("not text")) }) { Outcome.Success(ROWS) }
+        work.open(scope, { Outcome.Failure(VaultError.Corrupt("not text")) }) { Outcome.Success(OFFER) }
 
         assertEquals(VaultError.Corrupt("not text"), work.readError)
     }
 
     @Test
     fun `a file that could not be fetched opens no preview`() {
-        work.open(scope, { Outcome.Failure(VaultError.Corrupt("not text")) }) { Outcome.Success(ROWS) }
+        work.open(scope, { Outcome.Failure(VaultError.Corrupt("not text")) }) { Outcome.Success(OFFER) }
 
         assertFalse(work.isPreviewing)
     }
@@ -164,7 +167,7 @@ class ImportWorkTest {
         opened()
         work.toggle(2)
 
-        work.open(scope, { Outcome.Success(TEXT) }) { Outcome.Success(ROWS) }
+        work.open(scope, { Outcome.Success(TEXT) }) { Outcome.Success(OFFER) }
 
         assertEquals(emptySet(), work.addAnyway)
     }
@@ -173,7 +176,7 @@ class ImportWorkTest {
     // leaves what it reported.
     @Test
     fun `what a read reported is left behind when it is cleared`() {
-        work.open(scope, { Outcome.Failure(VaultError.Corrupt("not text")) }) { Outcome.Success(ROWS) }
+        work.open(scope, { Outcome.Failure(VaultError.Corrupt("not text")) }) { Outcome.Success(OFFER) }
 
         work.clearReadError()
 
@@ -190,7 +193,7 @@ class ImportWorkTest {
     }
 
     private fun opened() {
-        work.open(scope, { Outcome.Success(TEXT) }) { Outcome.Success(ROWS) }
+        work.open(scope, { Outcome.Success(TEXT) }) { Outcome.Success(OFFER) }
     }
 
     private suspend fun record(entries: List<VaultEntry>): Outcome<Unit, EntryAddError> {

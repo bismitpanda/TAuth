@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performClick
 import com.panda.tauth.ui.theme.TauthTheme
 import com.panda.tauth.vault.EntryAddError
 import com.panda.tauth.vault.ImportRow
+import com.panda.tauth.vault.ImportSource
 import com.panda.tauth.vault.TEST_SECRET
 import com.panda.tauth.vault.VaultError
 import com.panda.tauth.vault.hotpEntry
@@ -116,6 +117,35 @@ class ImportScreenTest {
     }
 
     @Test
+    fun `a refused account off a document is named by its place rather than by a line`() {
+        show(source = ImportSource.DOCUMENT)
+
+        compose.onNodeWithText("Account 3: truncated base32 group").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a refused account off an export code is named by its place rather than by a line`() {
+        show(source = ImportSource.EXPORT_CODE)
+
+        compose.onNodeWithText("Account 3: truncated base32 group").assertIsDisplayed()
+    }
+
+    @Test
+    fun `what a source said about itself is on screen`() {
+        show(note = "This export is split across 2 codes. This is part 1: scan the others too.")
+
+        compose.onNodeWithTag(IMPORT_NOTE_TAG)
+            .assertTextEquals("This export is split across 2 codes. This is part 1: scan the others too.")
+    }
+
+    @Test
+    fun `a source that said nothing about itself draws no note`() {
+        show()
+
+        compose.onNodeWithTag(IMPORT_NOTE_TAG).assertDoesNotExist()
+    }
+
+    @Test
     fun `importing reports the request`() {
         show()
 
@@ -192,11 +222,15 @@ class ImportScreenTest {
         addAnyway: Set<Int> = emptySet(),
         isBusy: Boolean = false,
         error: EntryAddError? = null,
+        source: ImportSource = ImportSource.URI_LIST,
+        note: String? = null,
     ) {
         compose.setContent {
             TauthTheme {
                 ImportScreen(
                     rows = rows,
+                    source = source,
+                    note = note,
                     addAnyway = addAnyway,
                     isBusy = isBusy,
                     error = error,

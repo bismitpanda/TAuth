@@ -1,7 +1,13 @@
 package com.panda.tauth.vault
 
 import com.panda.tauth.Outcome
+import com.panda.tauth.totp.MIGRATION_PERIOD_SECONDS
+import com.panda.tauth.totp.MigrationAccount
+import com.panda.tauth.totp.MigrationBatch
 import com.panda.tauth.totp.OtpAuthUri
+import com.panda.tauth.totp.OtpType
+import com.panda.tauth.totp.isMigrationUri
+import com.panda.tauth.totp.readMigration
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -21,6 +27,19 @@ sealed interface ImportRow {
     data class Refused(override val position: Int, val detail: String) : ImportRow
 }
 
+enum class ImportSource {
+    URI_LIST,
+    DOCUMENT,
+    EXPORT_CODE,
+}
+
+// The note carries what the source said about itself that no row can.
+data class ImportOffer(
+    val rows: List<ImportRow>,
+    val source: ImportSource = ImportSource.URI_LIST,
+    val note: String? = null,
+)
+
 // A duplicate is left out unless its position was chosen; a row the reader refused has no account to
 // add whatever is chosen.
 fun List<ImportRow>.accepted(addAnyway: Set<Int>): List<VaultEntry> = filterIsInstance<ImportRow.Account>()
@@ -30,6 +49,8 @@ fun List<ImportRow>.accepted(addAnyway: Set<Int>): List<VaultEntry> = filterIsIn
 private const val DOCUMENT_OPENING = '{'
 
 private const val UNREADABLE_ENTRY = "this account is not in a shape TAuth reads"
+
+private const val UNSUPPORTED_DIGEST = "TAuth does not generate codes under this account's digest"
 
 // Two spellings of one key are one account, and nothing here decodes a secret to establish that.
 private fun normalisedSecret(secret: String): String = secret.uppercase().filterNot { it == '=' || it.isWhitespace() }
@@ -47,8 +68,10 @@ fun readAccounts(
     existing: List<VaultEntry>,
     now: Instant,
     newId: () -> String,
-): Outcome<List<ImportRow>, VaultError.Corrupt> {
-    val rows = if (text.trimStart().startsWith(DOCUMENT_OPENING)) {
+): Outcome<ImportOffer, VaultError.Corrupt> {
+    if (isMigrationUri(text)) return migrationOffer(text, existing, now, newId)
+    val isDocument = text.trimStart().startsWith(DOCUMENT_OPENING)
+    val rows = if (isDocument) {
         when (val document = documentRows(text, newId)) {
             is Outcome.Failure -> return document
             is Outcome.Success -> document.value
@@ -56,7 +79,52 @@ fun readAccounts(
     } else {
         uriRows(text, now, newId)
     }
-    return Outcome.Success(marked(rows, existing))
+    val source = if (isDocument) ImportSource.DOCUMENT else ImportSource.URI_LIST
+    return Outcome.Success(ImportOffer(marked(rows, existing), source))
+}
+
+private fun migrationOffer(
+    text: String,
+    existing: List<VaultEntry>,
+    now: Instant,
+    newId: () -> String,
+): Outcome<ImportOffer, VaultError.Corrupt> {
+    val batch = when (val parsed = readMigration(text)) {
+        is Outcome.Failure -> return parsed
+        is Outcome.Success -> parsed.value
+    }
+    val rows = batch.accounts.mapIndexed { index, account -> migrationRow(index + 1, account, now, newId) }
+    return Outcome.Success(ImportOffer(marked(rows, existing), ImportSource.EXPORT_CODE, batchNote(batch)))
+}
+
+// A user handed one code of several would otherwise take half their accounts for all of them.
+private fun batchNote(batch: MigrationBatch): String? = batch.parts
+    .takeIf { it > 1 }
+    ?.let { "This export is split across $it codes. This is part ${batch.part}: scan the others too." }
+
+private fun migrationRow(position: Int, account: MigrationAccount, now: Instant, newId: () -> String): ImportRow {
+    val algorithm = account.algorithm ?: return ImportRow.Refused(position, UNSUPPORTED_DIGEST)
+    return try {
+        ImportRow.Account(
+            position = position,
+            entry = VaultEntry(
+                id = newId(),
+                type = account.type,
+                accountName = account.accountName,
+                secret = account.secret,
+                createdAt = now,
+                issuer = account.issuer,
+                algorithm = algorithm,
+                digits = account.digits,
+                period = if (account.type == OtpType.TOTP) MIGRATION_PERIOD_SECONDS else null,
+                counter = if (account.type == OtpType.HOTP) account.counter else null,
+                orderIndex = position - 1,
+            ),
+            isDuplicate = false,
+        )
+    } catch (e: IllegalArgumentException) {
+        ImportRow.Refused(position, e.message ?: UNREADABLE_ENTRY)
+    }
 }
 
 // Against the vault and against the rows already read, so a file carrying one account twice offers

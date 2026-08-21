@@ -7,7 +7,9 @@ import com.google.zxing.client.j2se.BufferedImageLuminanceSource
 import com.google.zxing.common.HybridBinarizer
 import com.google.zxing.multi.GenericMultipleBarcodeReader
 import com.panda.tauth.Outcome
+import com.panda.tauth.totp.isMigrationUri
 import com.panda.tauth.vault.ImageReadError
+import com.panda.tauth.vault.ImportReadError
 import com.panda.tauth.vault.VaultError
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.swing.Swing
@@ -81,6 +83,27 @@ internal suspend fun clipboardImage(): BufferedImage? = withContext(Dispatchers.
         LOGGER.log(System.Logger.Level.WARNING, "the clipboard could not be read for an image", e)
         null
     }
+}
+
+// One export code holds many accounts, so the image is read for that one rather than for every code
+// in it.
+internal suspend fun readExportCode(destination: suspend () -> Path?): Outcome<String?, ImportReadError> =
+    when (val read = readQrImage(destination)) {
+        is Outcome.Failure -> Outcome.Failure(asImportError(read.error))
+
+        is Outcome.Success ->
+            read.value
+                ?.let { codes ->
+                    codes.firstOrNull(::isMigrationUri)?.let { Outcome.Success(it) }
+                        ?: Outcome.Failure(VaultError.Corrupt("that image holds no export code"))
+                }
+                ?: Outcome.Success(null)
+    }
+
+// Neither view is the other's subtype, so the reading's failure is restated as the import's.
+private fun asImportError(error: ImageReadError): ImportReadError = when (error) {
+    is VaultError.Corrupt -> error
+    is VaultError.Io -> error
 }
 
 // The dialog is modal and belongs to the toolkit thread, so it is entered there and left before the

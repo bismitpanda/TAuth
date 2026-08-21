@@ -26,6 +26,7 @@ import com.panda.tauth.ui.theme.LocalSpacing
 import com.panda.tauth.ui.theme.TauthIcons
 import com.panda.tauth.vault.EntryAddError
 import com.panda.tauth.vault.ImportRow
+import com.panda.tauth.vault.ImportSource
 import com.panda.tauth.vault.VaultEntry
 import com.panda.tauth.vault.VaultError
 import com.panda.tauth.vault.accepted
@@ -37,6 +38,7 @@ internal const val IMPORT_ADD_ANYWAY_LABEL = "Add anyway"
 
 internal const val IMPORT_SUMMARY_TAG = "import-summary"
 internal const val IMPORT_PROBLEM_TAG = "import-problem"
+internal const val IMPORT_NOTE_TAG = "import-note"
 
 internal fun importRowTag(position: Int): String = "import-row-$position"
 
@@ -65,12 +67,19 @@ internal fun importSummary(rows: List<ImportRow>, addAnyway: Set<Int>): String {
 internal fun importRowLabel(entry: VaultEntry): String =
     entry.issuer?.let { "$it — ${entry.accountName}" } ?: entry.accountName
 
+internal fun refusalLabel(source: ImportSource, row: ImportRow.Refused): String = when (source) {
+    ImportSource.URI_LIST -> "Line ${row.position}: ${row.detail}"
+    ImportSource.DOCUMENT, ImportSource.EXPORT_CODE -> "Account ${row.position}: ${row.detail}"
+}
+
 // The screen holds no session: it draws the rows it is given and reports what was chosen. The rows
 // carry secrets and nothing here puts one on the screen.
 @Composable
 fun ImportScreen(
     rows: List<ImportRow>,
     modifier: Modifier = Modifier,
+    source: ImportSource = ImportSource.URI_LIST,
+    note: String? = null,
     addAnyway: Set<Int> = emptySet(),
     isBusy: Boolean = false,
     error: EntryAddError? = null,
@@ -89,6 +98,14 @@ fun ImportScreen(
             modifier = Modifier.testTag(IMPORT_SUMMARY_TAG),
             style = MaterialTheme.typography.bodyMedium,
         )
+        note?.let { stated ->
+            Text(
+                stated,
+                modifier = Modifier.testTag(IMPORT_NOTE_TAG),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         error?.let { failure ->
             Text(
                 messageFor(failure),
@@ -105,7 +122,7 @@ fun ImportScreen(
             verticalArrangement = Arrangement.spacedBy(spacing.extraSmall),
         ) {
             items(rows, key = { it.position }) { row ->
-                RowEntry(row, isAddedAnyway = row.position in addAnyway, isEnabled = !isBusy) {
+                RowEntry(row, source, isAddedAnyway = row.position in addAnyway, isEnabled = !isBusy) {
                     onToggleDuplicate(row.position)
                 }
             }
@@ -123,6 +140,7 @@ fun ImportScreen(
 @Composable
 private fun RowEntry(
     row: ImportRow,
+    source: ImportSource,
     isAddedAnyway: Boolean,
     isEnabled: Boolean,
     modifier: Modifier = Modifier,
@@ -145,7 +163,7 @@ private fun RowEntry(
                 // The line is a credential, so what is on screen is where it sat and the rule it
                 // broke rather than any of it.
                 is ImportRow.Refused -> Text(
-                    "Line ${row.position}: ${row.detail}",
+                    refusalLabel(source, row),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )

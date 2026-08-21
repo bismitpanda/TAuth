@@ -28,4 +28,7 @@ class ShellSettings(
     // The text of a file the user chose, or nothing where they chose none. What it holds is the
     // shell's to fetch and the vault's to make sense of.
     val onChooseImport: suspend () -> Outcome<String?, ImportReadError> = { Outcome.Success(null) },
+    // One code carries many accounts, so what it yields is an import rather than the single account
+    // a scan on the add screen offers.
+    val onScanImport: suspend () -> Outcome<String?, ImportReadError> = { Outcome.Success(null) },
 )

@@ -2,6 +2,12 @@ package com.panda.tauth.vault
 
 import com.panda.tauth.Outcome
 import com.panda.tauth.errorOrNull
+import com.panda.tauth.totp.MIGRATION_ALGORITHM_MD5
+import com.panda.tauth.totp.MIGRATION_PERIOD_SECONDS
+import com.panda.tauth.totp.MIGRATION_TYPE_HOTP
+import com.panda.tauth.totp.migrationAccount
+import com.panda.tauth.totp.migrationPayload
+import com.panda.tauth.totp.migrationUri
 import com.panda.tauth.valueOrNull
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -26,13 +32,11 @@ private class Ids {
     fun newId(): String = "0192f4c1-0000-7000-8000-00000000000${next++}"
 }
 
-private fun read(
-    text: String,
-    existing: List<VaultEntry> = emptyList(),
-): Outcome<List<ImportRow>, VaultError.Corrupt> = readAccounts(text, existing, IMPORTED_AT, Ids()::newId)
+private fun read(text: String, existing: List<VaultEntry> = emptyList()): Outcome<ImportOffer, VaultError.Corrupt> =
+    readAccounts(text, existing, IMPORTED_AT, Ids()::newId)
 
 private fun rowsOf(text: String, existing: List<VaultEntry> = emptyList()): List<ImportRow> =
-    checkNotNull(read(text, existing).valueOrNull)
+    checkNotNull(read(text, existing).valueOrNull).rows
 
 private fun accountsOf(text: String, existing: List<VaultEntry> = emptyList()): List<ImportRow.Account> =
     rowsOf(text, existing).filterIsInstance<ImportRow.Account>()
@@ -214,7 +218,85 @@ class ImportRowTest {
     fun `a document carrying no entries at all is unreadable`() {
         assertIs<VaultError.Corrupt>(read("""{"v":1}""").errorOrNull)
     }
+
+    @Test
+    fun `an export code offers the accounts it carries`() {
+        assertEquals(listOf("alice", "bob"), accountsOf(exportCode()).map { it.entry.accountName })
+    }
+
+    @Test
+    fun `an account off an export code carries the seed the code held`() {
+        assertEquals(TEST_SECRET, accountsOf(exportCode()).first().entry.secret)
+    }
+
+    @Test
+    fun `a totp account off an export code runs at thirty seconds`() {
+        assertEquals(MIGRATION_PERIOD_SECONDS, accountsOf(exportCode()).first().entry.period)
+    }
+
+    @Test
+    fun `an hotp account off an export code carries its counter`() {
+        assertEquals(41uL, accountsOf(exportCode()).last().entry.counter)
+    }
+
+    @Test
+    fun `an account under a digest TAuth does not generate is refused rather than written as sha1`() {
+        assertIs<ImportRow.Refused>(rowsOf(md5ExportCode()).single())
+    }
+
+    @Test
+    fun `an account off an export code the vault already holds is marked a duplicate`() {
+        val stored = accountsOf(exportCode()).first().entry
+
+        assertEquals(true, accountsOf(exportCode(), listOf(stored)).first().isDuplicate)
+    }
+
+    @Test
+    fun `an export code that is the whole export says nothing about parts`() {
+        assertEquals(null, checkNotNull(read(exportCode()).valueOrNull).note)
+    }
+
+    @Test
+    fun `an export code that is one of several says which`() {
+        val note = checkNotNull(read(exportCode(parts = 3, index = 1)).valueOrNull).note
+
+        assertEquals("This export is split across 3 codes. This is part 2: scan the others too.", note)
+    }
+
+    @Test
+    fun `an export code carrying nothing readable is refused`() {
+        assertIs<VaultError.Corrupt>(read("otpauth-migration://offline?data=!!!!").errorOrNull)
+    }
+
+    @Test
+    fun `a list of uris says its positions count lines`() {
+        assertEquals(ImportSource.URI_LIST, sourceOf(GITHUB_URI))
+    }
+
+    @Test
+    fun `a document says its positions count accounts`() {
+        assertEquals(ImportSource.DOCUMENT, sourceOf(exportOf(totpEntry())))
+    }
+
+    @Test
+    fun `an export code says its positions count accounts`() {
+        assertEquals(ImportSource.EXPORT_CODE, sourceOf(exportCode()))
+    }
 }
+
+private fun sourceOf(text: String): ImportSource = checkNotNull(read(text).valueOrNull).source
 
 private fun exportOf(vararg entries: VaultEntry): String =
     VaultBody(entries = entries.toList()).exported(ExportFormat.JSON)
+
+private fun exportCode(parts: Int? = null, index: Int? = null): String = migrationUri(
+    migrationPayload(
+        migrationAccount(),
+        migrationAccount(name = "bob", issuer = null, type = MIGRATION_TYPE_HOTP, counter = 41),
+        size = parts,
+        index = index,
+    ),
+)
+
+private fun md5ExportCode(): String =
+    migrationUri(migrationPayload(migrationAccount(algorithm = MIGRATION_ALGORITHM_MD5)))

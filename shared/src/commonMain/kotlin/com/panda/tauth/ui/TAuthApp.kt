@@ -327,6 +327,7 @@ private fun UnlockedGraph(
                 modifier = modifier,
                 importError = imports.readError,
                 onImport = { imports.open(scope, shell.onChooseImport) { session.readImport(it, clock.now()) } },
+                onScanImport = { imports.open(scope, shell.onScanImport) { session.readImport(it, clock.now()) } },
             ) {
                 // Leaving the screen leaves what the last read reported, as every other destination
                 // leaves what it reported.
@@ -338,6 +339,8 @@ private fun UnlockedGraph(
             ImportScreen(
                 rows = imports.rows,
                 modifier = inner,
+                source = imports.source,
+                note = imports.note,
                 addAnyway = imports.addAnyway,
                 isBusy = imports.isBusy,
                 error = imports.addError,
@@ -435,6 +438,7 @@ private fun SettingsDestination(
     modifier: Modifier,
     importError: ImportReadError? = null,
     onImport: () -> Unit = {},
+    onScanImport: () -> Unit = {},
     onBack: () -> Unit,
 ) {
     var isPlaintextRequested by remember { mutableStateOf(false) }
@@ -482,6 +486,7 @@ private fun SettingsDestination(
             isPlaintextRequested = true
         },
         onImport = onImport,
+        onScanImport = onScanImport,
         onBack = onBack,
     )
 }

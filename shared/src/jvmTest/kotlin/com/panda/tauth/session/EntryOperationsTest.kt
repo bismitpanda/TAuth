@@ -246,7 +246,7 @@ class EntryOperationsTest {
 
         val outcome = runBlocking { session.readImport(IMPORTABLE_URI, IMPORTED_AT) }
 
-        assertEquals(1, checkNotNull(outcome.valueOrNull).size)
+        assertEquals(1, checkNotNull(outcome.valueOrNull).rows.size)
     }
 
     // The vault's own secrets are what a duplicate is measured against, which is why the check runs
@@ -257,7 +257,7 @@ class EntryOperationsTest {
 
         val outcome = runBlocking { session.readImport(storedUri(), IMPORTED_AT) }
 
-        assertEquals(true, (checkNotNull(outcome.valueOrNull).single() as ImportRow.Account).isDuplicate)
+        assertEquals(true, (checkNotNull(outcome.valueOrNull).rows.single() as ImportRow.Account).isDuplicate)
     }
 
     @Test

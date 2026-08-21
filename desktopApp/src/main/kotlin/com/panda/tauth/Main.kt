@@ -261,6 +261,7 @@ private fun shellSettings(
         }
     },
     onChooseImport = { readImportSource { hold.around { chooseImportSource() } } },
+    onScanImport = { readExportCode { hold.around { chooseQrImage() } } },
 )
 
 // A window behind another one, or on the desktop the user has left, is not back on screen for having

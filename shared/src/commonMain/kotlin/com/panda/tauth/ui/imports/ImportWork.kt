@@ -6,8 +6,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.panda.tauth.Outcome
 import com.panda.tauth.vault.EntryAddError
+import com.panda.tauth.vault.ImportOffer
 import com.panda.tauth.vault.ImportReadError
 import com.panda.tauth.vault.ImportRow
+import com.panda.tauth.vault.ImportSource
 import com.panda.tauth.vault.VaultEntry
 import com.panda.tauth.vault.accepted
 import kotlinx.coroutines.CoroutineScope
@@ -18,6 +20,12 @@ import kotlinx.coroutines.launch
 @Stable
 internal class ImportWork {
     var rows: List<ImportRow> by mutableStateOf(emptyList())
+        private set
+
+    var source: ImportSource by mutableStateOf(ImportSource.URI_LIST)
+        private set
+
+    var note: String? by mutableStateOf(null)
         private set
 
     // Positions of duplicates the user chose over the default, which is to skip one the vault holds.
@@ -43,6 +51,8 @@ internal class ImportWork {
 
     fun clear() {
         rows = emptyList()
+        source = ImportSource.URI_LIST
+        note = null
         addAnyway = emptySet()
         addError = null
     }
@@ -55,14 +65,14 @@ internal class ImportWork {
     // failure nor a preview.
     fun open(
         scope: CoroutineScope,
-        source: suspend () -> Outcome<String?, ImportReadError>,
-        read: suspend (String) -> Outcome<List<ImportRow>, ImportReadError>,
+        fetch: suspend () -> Outcome<String?, ImportReadError>,
+        read: suspend (String) -> Outcome<ImportOffer, ImportReadError>,
     ) {
         isBusy = true
         readError = null
         scope.launch {
             try {
-                val text = when (val chosen = source()) {
+                val text = when (val chosen = fetch()) {
                     is Outcome.Failure -> {
                         readError = chosen.error
                         return@launch
@@ -74,7 +84,9 @@ internal class ImportWork {
                     is Outcome.Failure -> readError = offered.error
 
                     is Outcome.Success -> {
-                        rows = offered.value
+                        rows = offered.value.rows
+                        source = offered.value.source
+                        note = offered.value.note
                         addAnyway = emptySet()
                         addError = null
                     }

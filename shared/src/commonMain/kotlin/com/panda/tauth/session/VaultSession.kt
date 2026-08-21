@@ -14,8 +14,8 @@ import com.panda.tauth.vault.EntryChangeError
 import com.panda.tauth.vault.EntryEdit
 import com.panda.tauth.vault.EntryLookupError
 import com.panda.tauth.vault.ExportFormat
+import com.panda.tauth.vault.ImportOffer
 import com.panda.tauth.vault.ImportReadError
-import com.panda.tauth.vault.ImportRow
 import com.panda.tauth.vault.OpenVault
 import com.panda.tauth.vault.PasswordGateError
 import com.panda.tauth.vault.VaultAdoptError
@@ -201,7 +201,7 @@ class VaultSession internal constructor(
 
     // The duplicate check reads the secrets the body holds, so it happens here rather than on a
     // screen: what the UI is given carries no secret to compare with.
-    suspend fun readImport(text: String, now: Instant): Outcome<List<ImportRow>, ImportReadError> =
+    suspend fun readImport(text: String, now: Instant): Outcome<ImportOffer, ImportReadError> =
         onOpenVault(VaultError.VaultClosed) { open ->
             readAccounts(text, open.body.entries, now, VaultEntry::newId)
         }
