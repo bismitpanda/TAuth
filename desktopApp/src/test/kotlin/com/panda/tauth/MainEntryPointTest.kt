@@ -36,7 +36,7 @@ class MainEntryPointTest {
         "$MAIN_CLASS_PROPERTY is unset; the Gradle test task supplies it",
     )
 
-    // `false` skips static initialisation: naming the class must not start the
+    // `false` skips static initialization: naming the class must not start the
     // application or require a display.
     private fun entryPointClass(name: String): Class<*>? = try {
         Class.forName(name, false, MainEntryPointTest::class.java.classLoader)

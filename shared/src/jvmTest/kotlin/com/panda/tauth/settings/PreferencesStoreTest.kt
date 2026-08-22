@@ -23,7 +23,7 @@ class PreferencesStoreTest {
 
     @BeforeTest
     fun setUp() {
-        // Tests never touch the real preferences path.
+        // Tests never touch the real preferences file.
         root = Files.createTempDirectory("tauth-preferences")
         paths = VaultPaths(OperatingSystem.LINUX, { root.toString() }, root.toString())
         store = PreferencesStore(paths)
@@ -130,8 +130,8 @@ class PreferencesStoreTest {
         val preferences = Preferences(
             theme = Theme.DARK,
             sortOrder = SortOrder.RECENTLY_ADDED,
-            startMinimised = true,
-            minimiseToTray = false,
+            startMinimized = true,
+            minimizeToTray = false,
             window = WindowGeometry(width = 640, height = 800, x = 12, y = -34),
         )
         store.save(preferences)

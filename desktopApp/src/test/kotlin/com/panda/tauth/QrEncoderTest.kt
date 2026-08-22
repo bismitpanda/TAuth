@@ -129,7 +129,7 @@ class QrEncoderTest {
     }
 
     @Test
-    fun `an hotp entry at the 64-bit counter maximum scans back as the uri it was built from`() {
+    fun `a hotp entry at the 64-bit counter maximum scans back as the uri it was built from`() {
         rendersBackTo(
             OtpAuthUri(
                 type = OtpType.HOTP,

@@ -188,7 +188,7 @@ class CodeTickerTest {
     }
 
     @Test
-    fun `an hotp entry on screen is not computed`() {
+    fun `a hotp entry on screen is not computed`() {
         visible.value = setOf(TOTP_ID, HOTP_ID)
 
         ticking()
@@ -225,7 +225,7 @@ class CodeTickerTest {
     }
 
     @Test
-    fun `a cancelled collection asks for no further tick`() {
+    fun `a canceled collection asks for no further tick`() {
         val job = ticking()
         val waitsBefore = cadence.waits
 

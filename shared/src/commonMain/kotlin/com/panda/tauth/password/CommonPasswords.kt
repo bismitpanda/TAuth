@@ -41,7 +41,7 @@ private val COMMON_PASSWORDS: List<String> = listOf(
 // to look up in a set would leave a copy of the password in the heap that nothing can zero.
 fun isCommonPassword(password: CharArray): Boolean = COMMON_PASSWORDS.any { candidate -> matches(candidate, password) }
 
-// Case-insensitive because the list holds lowercase forms, and capitalising a common password
+// Case-insensitive because the list holds lowercase forms, and capitalizing a common password
 // leaves it as guessable as it was.
 private fun matches(candidate: String, password: CharArray): Boolean {
     if (candidate.length != password.size) return false

@@ -201,7 +201,7 @@ class SecretDisclosureTest {
     }
 
     @Test
-    fun `an hotp entry discloses the URI its counter names`() {
+    fun `a hotp entry discloses the URI its counter names`() {
         unlocked()
 
         val outcome = runBlocking { session.discloseUri(HOTP_ID, PASSWORD.toCharArray()) }

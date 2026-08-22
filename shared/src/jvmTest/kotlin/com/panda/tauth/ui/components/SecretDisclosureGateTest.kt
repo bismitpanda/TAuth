@@ -199,7 +199,7 @@ class SecretDisclosureGateTest {
     }
 
     @Test
-    fun `cancelling reports a dismissal`() {
+    fun `canceling reports a dismissal`() {
         show()
 
         compose.onNodeWithText(CANCEL_LABEL).performClick()
@@ -208,7 +208,7 @@ class SecretDisclosureGateTest {
     }
 
     @Test
-    fun `cancelling hands over no password`() {
+    fun `canceling hands over no password`() {
         show()
         type("aB3!efghij")
 

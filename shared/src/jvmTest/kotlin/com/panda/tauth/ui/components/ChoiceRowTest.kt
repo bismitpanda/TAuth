@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import com.panda.tauth.ui.theme.TauthTheme
 import org.junit.Rule
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 private const val CONTAINER_TAG = "choice-row-container"
@@ -57,7 +58,7 @@ class ChoiceRowTest {
 
         val tops = OPTIONS.map { optionTop(it) }.toSet()
 
-        assertTrue(tops.size == 1, "the options wrapped at $WIDE across $tops")
+        assertEquals(1, tops.size, "the options wrapped at $WIDE across $tops")
     }
 
     private fun container() = compose.onNodeWithTag(CONTAINER_TAG).getUnclippedBoundsInRoot()

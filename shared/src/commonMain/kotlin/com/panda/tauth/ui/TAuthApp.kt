@@ -473,8 +473,8 @@ private fun SettingsDestination(
         // A refused preference write is reported where the file is written. What this slot carries is
         // what the vault refused, which is a different thing.
         onThemeChange = { theme -> scope.launch { preferences.update { it.copy(theme = theme) } } },
-        onMinimiseToTrayChange = { isOn -> scope.launch { preferences.update { it.copy(minimiseToTray = isOn) } } },
-        onStartMinimisedChange = { isOn -> scope.launch { preferences.update { it.copy(startMinimised = isOn) } } },
+        onMinimizeToTrayChange = { isOn -> scope.launch { preferences.update { it.copy(minimizeToTray = isOn) } } },
+        onStartMinimizedChange = { isOn -> scope.launch { preferences.update { it.copy(startMinimized = isOn) } } },
         onStartAtLoginChange = { isOn -> scope.launch { preferences.update { it.withStartAtLogin(isOn) } } },
         onChangePassword = { current, next ->
             settings.run(scope, current, next) { session.changePassword(current, next) }

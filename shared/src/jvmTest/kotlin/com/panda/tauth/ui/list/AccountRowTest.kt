@@ -185,7 +185,7 @@ class AccountRowTest {
     }
 
     @Test
-    fun `an hotp row shows its counter`() {
+    fun `a hotp row shows its counter`() {
         show(hotpRow(counter = 41uL))
 
         compose.onNodeWithText("Counter 41").assertIsDisplayed()
@@ -194,21 +194,21 @@ class AccountRowTest {
     // Displaying a code spends a counter value, so the row shows none until it is asked. The test
     // below puts the same code on screen the moment the row is given one.
     @Test
-    fun `an hotp row shows no code before one is asked for`() {
+    fun `a hotp row shows no code before one is asked for`() {
         show(hotpRow())
 
         compose.onNodeWithText(COUNTER_ZERO_GROUPED).assertDoesNotExist()
     }
 
     @Test
-    fun `an hotp row shows the code it is given`() {
+    fun `a hotp row shows the code it is given`() {
         show(hotpRow(), generatedCode = COUNTER_ZERO_CODE)
 
         compose.onNodeWithText(COUNTER_ZERO_GROUPED).assertIsDisplayed()
     }
 
     @Test
-    fun `an hotp row carries no countdown`() {
+    fun `a hotp row carries no countdown`() {
         val entry = hotpRow()
         show(entry, generatedCode = COUNTER_ZERO_CODE)
 

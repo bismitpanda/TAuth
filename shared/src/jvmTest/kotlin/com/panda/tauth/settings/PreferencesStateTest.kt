@@ -13,8 +13,8 @@ import kotlin.test.assertIs
 private val OPENING = Preferences(
     theme = Theme.LIGHT,
     sortOrder = SortOrder.ISSUER,
-    startMinimised = true,
-    minimiseToTray = false,
+    startMinimized = true,
+    minimizeToTray = false,
     window = WindowGeometry(width = 1024, height = 800, x = 12, y = 34),
 )
 

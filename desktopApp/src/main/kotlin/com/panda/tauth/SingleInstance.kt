@@ -95,7 +95,7 @@ sealed interface InstanceRole {
         val showRequests: StateFlow<Long> = _showRequests.asStateFlow()
 
         internal fun startListening() {
-            // A blocking accept is a thread rather than a coroutine: cancelling a coroutine does not
+            // A blocking accept is a thread rather than a coroutine: canceling a coroutine does not
             // return from accept. The thread is a daemon, so it holds no exit open.
             thread(isDaemon = true, name = LISTENER_THREAD_NAME) { serve() }
         }
@@ -123,7 +123,7 @@ sealed interface InstanceRole {
 
         private fun answer(socket: Socket) {
             socket.soTimeout = handshakeTimeoutMillis
-            // An unrecognised line is answered with nothing and the connection is closed. The line
+            // An unrecognized line is answered with nothing and the connection is closed. The line
             // itself is a stranger's to choose, so it is not logged.
             if (readAsciiLine(socket.getInputStream()) != SHOW_COMMAND) return
             // The count is raised before the acknowledgement is written, so a launch that reads the

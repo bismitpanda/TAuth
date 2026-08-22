@@ -64,14 +64,14 @@ class ShowQrDialogTest {
     // Scanning takes the counter as it stands, so the value that leaves is on screen beside the
     // symbol rather than left to be inferred from the account.
     @Test
-    fun `an hotp account states the counter the symbol carries`() {
+    fun `a hotp account states the counter the symbol carries`() {
         show(entry = hotpRow(counter = 41uL))
 
         compose.onNodeWithTag(QR_COUNTER_TAG).assertIsDisplayed()
     }
 
     @Test
-    fun `an hotp account states what scanning that counter does`() {
+    fun `a hotp account states what scanning that counter does`() {
         show(entry = hotpRow(counter = 41uL))
 
         compose.onNodeWithText("41 ($QR_COUNTER_NOTE)").assertIsDisplayed()

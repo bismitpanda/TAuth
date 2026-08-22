@@ -40,7 +40,6 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
 import com.panda.tauth.session.UnlockedEntry
 import com.panda.tauth.totp.OtpType
 import com.panda.tauth.totp.TotpCode
@@ -61,14 +60,12 @@ const val REORDER_LABEL = "Reorder"
 
 const val COUNTER_PREFIX = "Counter "
 
-// The ring says which of the two states it is in through the same choice that colours it, so a
+// The ring says which of the two states it is in through the same choice that colors it, so a
 // reading of one is a reading of the other.
 const val RING_RUNNING_LABEL = "Countdown"
 const val RING_EXPIRING_LABEL = "Countdown, expiring"
 
 private const val SWEEP_MILLIS = 1_000
-
-private val ICON_SIZE = 18.dp
 
 private const val MARK_SATURATION = 0.45f
 private const val MARK_LIGHTNESS = 0.28f
@@ -208,7 +205,7 @@ private fun Identity(entry: UnlockedEntry, counterPrefix: String, modifier: Modi
     }
 }
 
-// Tapping the code copies it. An hotp row with nothing generated has no code to tap, which is what
+// Tapping the code copies it. A hotp row with nothing generated has no code to tap, which is what
 // keeps a stray press from spending a counter value.
 @Composable
 private fun Readout(

@@ -78,7 +78,7 @@ class VaultSession internal constructor(
     // the two must not interleave over one key.
     private val guard = Any()
 
-    // Serialises the suspending vault operations, which the guard cannot: two derivations installing
+    // Serializes the suspending vault operations, which the guard cannot: two derivations installing
     // over one another would leave one set of key holders unzeroed.
     private val vaultWork = Mutex()
 
@@ -219,7 +219,7 @@ class VaultSession internal constructor(
         }
 
     // The secret is not among the fields an edit carries, so the key decoded for this entry is still
-    // its key afterwards and the holder the session keeps for it is untouched.
+    // its key afterward and the holder the session keeps for it is untouched.
     suspend fun editEntry(id: String, edit: EntryEdit): Outcome<Unit, EntryChangeError> =
         onOpenVault(VaultError.VaultClosed) { open ->
             val entry = open.body.entries.find { it.id == id }

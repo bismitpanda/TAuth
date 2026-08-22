@@ -41,7 +41,7 @@ class ShellWindowTest {
 
     @Test
     fun `a window that opens iconified is visible`() {
-        // Iconified is a window on the taskbar, which the shell shows and the platform minimises.
+        // Iconified is a window on the taskbar, which the shell shows and the platform minimizes.
         assertTrue(isVisibleAtStartup(StartupWindow.ICONIFIED))
     }
 
@@ -73,18 +73,18 @@ class ShellWindowTest {
     }
 
     @Test
-    fun `a window opening iconified starts minimised`() {
+    fun `a window opening iconified starts minimized`() {
         assertTrue(windowStateFor(PLACED, StartupWindow.ICONIFIED).isMinimized)
     }
 
     @Test
-    fun `a window opening on the screen does not start minimised`() {
+    fun `a window opening on the screen does not start minimized`() {
         assertFalse(windowStateFor(PLACED, StartupWindow.VISIBLE).isMinimized)
     }
 
     @Test
-    fun `a window opening in the tray does not start minimised`() {
-        // Minimised and hidden are different states, and a hidden window that was also minimised
+    fun `a window opening in the tray does not start minimized`() {
+        // Minimized and hidden are different states, and a hidden window that was also minimized
         // would come back to the taskbar rather than to the screen.
         assertFalse(windowStateFor(UNPLACED, StartupWindow.HIDDEN_TO_TRAY).isMinimized)
     }
@@ -118,12 +118,12 @@ class ShellWindowTest {
     }
 
     @Test
-    fun `a minimised window records nothing`() {
+    fun `a minimized window records nothing`() {
         assertNull(recordedGeometry(stateOf(200, 200, isMinimized = true), PLACED))
     }
 
     @Test
-    fun `a maximised window records nothing`() {
+    fun `a maximized window records nothing`() {
         val recorded = recordedGeometry(
             stateOf(3840, 2160, WindowPosition(0.dp, 0.dp), placement = WindowPlacement.Maximized),
             UNPLACED,

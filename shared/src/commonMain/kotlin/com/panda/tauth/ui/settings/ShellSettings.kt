@@ -11,7 +11,7 @@ import com.panda.tauth.vault.ImportReadError
 class ShellSettings(
     val vaultLocation: String = "",
     val version: String = "",
-    val licence: String = "",
+    val license: String = "",
     // A composition the shell has told nothing offers no tray settings, since a tray it cannot
     // confirm is one the window has no way back from.
     val canConfigureTray: Boolean = false,

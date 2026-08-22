@@ -8,22 +8,28 @@ import com.panda.tauth.settings.WindowGeometry.Companion.MIN_HEIGHT
 import com.panda.tauth.settings.WindowGeometry.Companion.MIN_WIDTH
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 class WindowBoundsTest {
+    // Read through the clamp rather than off the constants: a comparison between two of those is
+    // folded before the test runs and passes whatever they are changed to.
     @Test
-    fun `the default width is inside the bounds the window opens at`() {
-        assertTrue(DEFAULT_WIDTH in MIN_WIDTH..MAX_WIDTH, "$DEFAULT_WIDTH is outside $MIN_WIDTH..$MAX_WIDTH")
+    fun `the default width is one the clamp leaves alone`() {
+        assertEquals(DEFAULT_WIDTH, WindowGeometry().clamped().width)
     }
 
     @Test
-    fun `the default height is inside the bounds the window opens at`() {
-        assertTrue(DEFAULT_HEIGHT in MIN_HEIGHT..MAX_HEIGHT, "$DEFAULT_HEIGHT is outside $MIN_HEIGHT..$MAX_HEIGHT")
+    fun `the default height is one the clamp leaves alone`() {
+        assertEquals(DEFAULT_HEIGHT, WindowGeometry().clamped().height)
     }
 
     @Test
-    fun `the window's floor is below its ceiling`() {
-        assertTrue(MIN_WIDTH < MAX_WIDTH && MIN_HEIGHT < MAX_HEIGHT)
+    fun `a stored width under the floor is brought up to it`() {
+        assertEquals(MIN_WIDTH, WindowGeometry(width = 120).clamped().width)
+    }
+
+    @Test
+    fun `a stored height under the floor is brought up to it`() {
+        assertEquals(MIN_HEIGHT, WindowGeometry(height = 90).clamped().height)
     }
 
     @Test

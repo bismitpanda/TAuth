@@ -19,8 +19,8 @@ class SecurityPolicyTest {
     }
 
     @Test
-    fun `locking on minimise defaults to on`() {
-        assertTrue(SecurityPolicy().lockOnMinimise)
+    fun `locking on minimize defaults to on`() {
+        assertTrue(SecurityPolicy().lockOnMinimize)
     }
 
     @Test
@@ -64,7 +64,7 @@ class SecurityPolicyTest {
     fun `a policy round-trips through JSON`() {
         val policy = SecurityPolicy(
             idleTimeoutMinutes = 1,
-            lockOnMinimise = false,
+            lockOnMinimize = false,
             lockOnFocusLoss = true,
             hideGraceSeconds = 30,
             clipboardClearSeconds = 60,

@@ -120,7 +120,7 @@ private fun subtitleFor(reason: LockReason): String? = when (reason) {
     LockReason.Manual, LockReason.Exit -> null
     LockReason.Idle -> "Locked automatically after a period of inactivity."
     LockReason.HiddenToTray -> "Locked when the window was hidden to the tray."
-    LockReason.Minimised -> "Locked when the window was minimised."
+    LockReason.Minimized -> "Locked when the window was minimized."
     LockReason.FocusLost -> "Locked when the window lost focus."
 }
 

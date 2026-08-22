@@ -95,12 +95,12 @@ class EntryDraftsTest {
     }
 
     @Test
-    fun `an hotp form carries no period`() {
+    fun `a hotp form carries no period`() {
         assertNull(HOTP_DRAFT.copy(period = "30").resolved().valueOrNull?.period)
     }
 
     @Test
-    fun `an hotp counter at the unsigned maximum resolves`() {
+    fun `a hotp counter at the unsigned maximum resolves`() {
         val resolved = HOTP_DRAFT.copy(counter = "18446744073709551615").resolved()
 
         assertEquals(ULong.MAX_VALUE, resolved.valueOrNull?.counter)
@@ -205,17 +205,17 @@ class EntryDraftsTest {
         assertEquals(HashAlgorithm.SHA256, resolved.valueOrNull?.algorithm)
     }
 
-    // The type is the entry's rather than the form's, so an edit against an hotp entry reads the
+    // The type is the entry's rather than the form's, so an edit against a hotp entry reads the
     // counter and leaves the period alone whatever the form still holds in it.
     @Test
-    fun `an edit against an hotp entry carries the counter`() {
+    fun `an edit against a hotp entry carries the counter`() {
         val resolved = TOTP_EDIT.copy(counter = "512").resolved(OtpType.HOTP)
 
         assertEquals(512uL, resolved.valueOrNull?.counter)
     }
 
     @Test
-    fun `an edit against an hotp entry carries no period`() {
+    fun `an edit against a hotp entry carries no period`() {
         assertNull(TOTP_EDIT.copy(counter = "512").resolved(OtpType.HOTP).valueOrNull?.period)
     }
 
@@ -225,7 +225,7 @@ class EntryDraftsTest {
     }
 
     @Test
-    fun `an edit with a half-typed counter against an hotp entry is refused`() {
+    fun `an edit with a half-typed counter against a hotp entry is refused`() {
         assertIs<VaultError.InvalidEntry>(TOTP_EDIT.resolved(OtpType.HOTP).errorOrNull)
     }
 

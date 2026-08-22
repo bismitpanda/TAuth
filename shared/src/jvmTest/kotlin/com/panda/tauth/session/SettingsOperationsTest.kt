@@ -47,7 +47,7 @@ private val ZEROED_KEY = ByteArray(32)
 // wrote disagrees with this in every field rather than in none.
 private val STORED_POLICY = SecurityPolicy(
     idleTimeoutMinutes = 1,
-    lockOnMinimise = false,
+    lockOnMinimize = false,
     lockOnFocusLoss = true,
     hideGraceSeconds = 30,
     clipboardClearSeconds = 10,
@@ -57,7 +57,7 @@ private val STORED_POLICY = SecurityPolicy(
 // lock reads back.
 private val CHOSEN_POLICY = SecurityPolicy(
     idleTimeoutMinutes = 15,
-    lockOnMinimise = true,
+    lockOnMinimize = true,
     lockOnFocusLoss = false,
     hideGraceSeconds = 45,
     clipboardClearSeconds = 60,

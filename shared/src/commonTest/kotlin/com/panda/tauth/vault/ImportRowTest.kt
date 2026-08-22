@@ -235,7 +235,7 @@ class ImportRowTest {
     }
 
     @Test
-    fun `an hotp account off an export code carries its counter`() {
+    fun `a hotp account off an export code carries its counter`() {
         assertEquals(41uL, accountsOf(exportCode()).last().entry.counter)
     }
 

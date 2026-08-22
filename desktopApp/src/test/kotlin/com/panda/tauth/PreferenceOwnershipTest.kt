@@ -21,8 +21,8 @@ private val MOVED = WindowGeometry(width = 960, height = 720, x = 400, y = 50)
 private val OPENING = Preferences(
     theme = Theme.LIGHT,
     sortOrder = SortOrder.ISSUER,
-    startMinimised = true,
-    minimiseToTray = false,
+    startMinimized = true,
+    minimizeToTray = false,
     window = OPENED,
 )
 
@@ -40,7 +40,7 @@ class PreferenceOwnershipTest {
         Outcome.Success(Unit)
     }
 
-    private val recorder = WindowGeometryRecorder(scope, OPENED, SettleDelay {}) { geometry ->
+    private val recorder = WindowGeometryRecorder(scope, OPENED, {}) { geometry ->
         preferences.update { it.copy(window = geometry) }
     }
 

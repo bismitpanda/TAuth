@@ -6,7 +6,6 @@ import com.google.zxing.NotFoundException
 import com.google.zxing.client.j2se.BufferedImageLuminanceSource
 import com.google.zxing.common.HybridBinarizer
 import com.google.zxing.multi.GenericMultipleBarcodeReader
-import com.panda.tauth.Outcome
 import com.panda.tauth.totp.isMigrationUri
 import com.panda.tauth.vault.ImageReadError
 import com.panda.tauth.vault.ImportReadError
@@ -65,7 +64,7 @@ internal suspend fun readQrClipboard(source: suspend () -> BufferedImage?): Outc
     return withContext(Dispatchers.Default) { Outcome.Success(decodeQrCodes(image)) }
 }
 
-// The clipboard belongs to the toolkit thread. A flavour it does not hold is an ordinary answer, and
+// The clipboard belongs to the toolkit thread. A flavor it does not hold is an ordinary answer, and
 // so is contents that changed between the offer and the read.
 internal suspend fun clipboardImage(): BufferedImage? = withContext(Dispatchers.Swing) {
     try {

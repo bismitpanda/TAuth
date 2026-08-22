@@ -4,7 +4,7 @@
 
 TAuth is a desktop TOTP authenticator: Kotlin Multiplatform + Compose Multiplatform, targeting Linux, macOS and Windows. Accounts live in a single file encrypted end to end with a key derived from a master password. The vault is unlocked only while the window is on screen; hiding it to the tray zeroes the key.
 
-The built system is described by its code and its tests. This file and @STYLE_GUIDE.md state what constrains a change to it; `FUTURE_PLANS.md` holds work TAuth does not do. Nothing else is a specification, so **the tests are the behavioural record**: a behaviour worth keeping has a test naming it, and changing one means changing the test that states it, deliberately and in the same commit.
+The built system is described by its code and its tests. This file and @STYLE_GUIDE.md state what constrains a change to it; `FUTURE_PLANS.md` holds work TAuth does not do. Nothing else is a specification, so **the tests are the behavioral record**: a behavior worth keeping has a test naming it, and changing one means changing the test that states it, deliberately and in the same commit.
 
 ## Layout
 
@@ -31,9 +31,9 @@ Where new code goes, in order: pure logic → `commonMain`; needs a platform API
 
 The lint tasks are `lintKotlin`/`formatKotlin`, not `ktlintCheck`/`ktlintFormat` — this project uses the kotlinter plugin, which is configuration-cache clean on Gradle 9. Run `formatKotlin` rather than hand-formatting.
 
-Bare `./gradlew detekt` is misleading in `:shared`: the aggregate task is NO-SOURCE in a KMP module because the analysable tasks are per-source-set. `check` wires up the right ones — use it, or name a source-set task directly.
+Bare `./gradlew detekt` is misleading in `:shared`: the aggregate task is NO-SOURCE in a KMP module because the analyzable tasks are per-source-set. `check` wires up the right ones — use it, or name a source-set task directly.
 
-detekt runs **without type resolution**, so rules that need type information are skipped rather than run, and skipped without a message. That is deliberate: [detekt/detekt#9602](https://github.com/detekt/detekt/issues/9602) makes type-aware analysis misfire on KMP `expect`/`actual`. Type checking is the compiler's job and is unaffected. Dead-code detection is not: `UnusedPrivateProperty`, `UnusedPrivateFunction` and `style>UnusedImport` need type information, so an unused private property or private function fails no task. A dead import is failed by ktlint's `no-unused-imports` instead (@STYLE_GUIDE.md, formatting). Do not switch type resolution on to chase a finding; see `build.gradle.kts`.
+detekt runs **without type resolution**, so rules that need type information are skipped rather than run, and skipped without a message. That is deliberate: [detekt/detekt#9602](https://github.com/detekt/detekt/issues/9602) makes type-aware analysis misfire on KMP `expect`/`actual`. Type checking is the compiler's job and is unaffected. Dead-code detection is not: `UnusedPrivateProperty`, `UnusedPrivateFunction` and `style>UnusedImport` need type information, so an unused private property or private function fails no task. An import whose name appears nowhere else is failed by ktlint's `no-unused-imports` instead (@STYLE_GUIDE.md, formatting); an import of a symbol from the file's own package is not, since the name is used and only the import is redundant, so nothing in `check` reports one. Do not switch type resolution on to chase a finding; see `build.gradle.kts`.
 
 Prefer `:shared:jvmTest` over `build` while iterating. The vault format and OTP core are fully testable headless and most work needs no UI run.
 
@@ -48,13 +48,13 @@ What the encryption is for. A change that weakens a row of the first table is a 
 | Tampering with any byte of the vault file, including metadata | GCM authentication tag covers the body; the header is bound as associated data |
 | Editing the header to weaken or redirect the unwrap | The CRC fails before a key is derived; a repaired CRC fails the unwrap or the body's tag |
 | Another user account on the same machine reading the vault | POSIX mode `0600` / Windows ACL restricted to the owner |
-| Shoulder-surfing of an unattended unlocked window | Relock on hide-to-tray, on minimise, and on idle timeout |
+| Shoulder-surfing of an unattended unlocked window | Relock on hide-to-tray, on minimize, and on idle timeout |
 | Silent weakening of the lock policy by editing a config file | Lock triggers and timeouts live in the vault body, under the GCM tag |
 | Casual recovery of secrets from a memory dump after locking | Key material held in `ByteArray`, zeroed on lock; decoded secrets never converted to `String` |
 
 Not defended against: code execution as the same OS user while the vault is unlocked, since key material is in the process heap by necessity; a vault replaced by an older copy of itself, which stays authentic and so is indistinguishable from the current one; kernel-level keyloggers and screen capture; heap paged to swap, as the JVM exposes no `mlock`; and physical access with the window open.
 
-Two consequences shape the UI. The master password is unrecoverable — no reset, no recovery code, no escrow — and the create screen says so. Whoever can write the vault file can destroy it, and TAuth keeps no spare copy, so the backup path is export and it is the user's to take.
+Two consequences shape the UI. The master password is unrecoverable — no reset, no recovery code, no escrow — and the create screen says so. Whoever can write the vault file can destroy it, and TAuth keeps no spare copy, so the backup path is export, and it is the user's to take.
 
 ## Cryptographic parameters
 
@@ -78,7 +78,7 @@ The two-level hierarchy — password to KEK to DEK to body — makes a password 
 The points most often got wrong here:
 
 - **Errors are return values.** `VaultError` is a sealed interface, never thrown, never an `Exception` subclass. Fallible operations return `Outcome<T, E>`, with `E` a sealed interface of its own naming the cases that operation reports — `VaultUnlockError`, `EntryAddError`, `FileWriteError` — which each case implements alongside `VaultError`, so a `when` over one is exhaustive without an `else`. Exceptions from the JDK are caught where they arise and converted at once.
-- **Comment the trap, and a rule stated in this file is not one.** The invariants below are declared here; a comment repeating one at the site that obeys it adds nothing. A comment earns its place by stopping the next reader making a wrong change — naming the obvious alternative that is wrong, or a behaviour nothing at the call site reveals. Explaining a decision nobody is about to reverse is not that. @STYLE_GUIDE.md's comment rules give the whole of it.
+- **Comment the trap, and a rule stated in this file is not one.** The invariants below are declared here; a comment repeating one at the site that obeys it adds nothing. A comment earns its place by stopping the next reader making a wrong change — naming the obvious alternative that is wrong, or a behavior nothing at the call site reveals. Explaining a decision nobody is about to reverse is not that. @STYLE_GUIDE.md's comment rules give the whole of it.
 - **Trailing commas, 120 columns, Kotlin official style.** Run `formatKotlin` rather than hand-formatting.
 
 ## Writing
@@ -98,7 +98,7 @@ Applies to `FUTURE_PLANS.md`, `STYLE_GUIDE.md`, this file, code comments and KDo
 Breaking one of these is a security defect, not a style problem. This is where they are declared, the parameters above fix the numbers, and @STYLE_GUIDE.md's security-critical rules give the coding rules that follow. They are not repeated as comments at the sites that obey them.
 
 - A fresh 12-byte nonce on **every** vault write. Nonces are generated inside the codec and never accepted as a parameter.
-- Header bytes read from disk are reused verbatim as AEAD associated data, never re-serialised.
+- Header bytes read from disk are reused verbatim as AEAD associated data, never re-serialized.
 - Key material and decoded secrets are `ByteArray`/`SecureBytes`, never `String`. The master password is `CharArray`.
 - The KEK is zeroed immediately after unwrapping the DEK; the DEK is zeroed on lock, on every path including errors.
 - `SecureRandom` only. `kotlin.random.Random` does not appear in `crypto/` or `vault/`.
@@ -108,7 +108,7 @@ Changes under `crypto/` or `vault/` need a test that fails before and passes aft
 
 ## Testing
 
-Backticked behavioural test names. One subject per test. Spec vectors as individual cases so a failure names the vector. No mocking framework — constructor-injected interfaces with hand-written fakes, a fixed `Clock`, a temp directory.
+Backticked behavioral test names. One subject per test. Spec vectors as individual cases so a failure names the vector. No mocking framework — constructor-injected interfaces with handwritten fakes, a fixed `Clock`, a temp directory.
 
 Tests never touch the real vault path. Tests are deterministic: no sleeps, no wall-clock reliance, no unseeded randomness.
 

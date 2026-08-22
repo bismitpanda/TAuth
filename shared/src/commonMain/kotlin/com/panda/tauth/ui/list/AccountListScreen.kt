@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -786,7 +785,7 @@ private fun ScrollWhileDragging(drag: RowDragState, listState: LazyListState, ma
         while (isActive) {
             withFrameNanos { }
             val viewport = listState.layoutInfo.viewportEndOffset - listState.layoutInfo.viewportStartOffset
-            val pixels = edgeScroll(drag.centreY, viewport, margin, step)
+            val pixels = edgeScroll(drag.centerY, viewport, margin, step)
             if (pixels != 0f) listState.scrollBy(pixels)
             drag.retarget(listState.rowBounds())
             listState.keepInView(drag.targetIndex)

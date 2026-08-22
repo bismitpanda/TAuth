@@ -37,7 +37,7 @@ private const val DAMAGED_FILE_MESSAGE = "The vault file is damaged and cannot b
 private const val IDLE_SUBTITLE = "Locked automatically after a period of inactivity."
 private const val FOCUS_LOST_SUBTITLE = "Locked when the window lost focus."
 private const val HIDDEN_TO_TRAY_SUBTITLE = "Locked when the window was hidden to the tray."
-private const val MINIMISED_SUBTITLE = "Locked when the window was minimised."
+private const val MINIMIZED_SUBTITLE = "Locked when the window was minimized."
 
 private class FakeWindowInfo(isFocused: Boolean) : WindowInfo {
     var isFocused by mutableStateOf(isFocused)
@@ -297,10 +297,10 @@ class UnlockScreenTest {
     }
 
     @Test
-    fun `a minimise is reported as a subtitle`() {
-        show(lastReason = LockReason.Minimised)
+    fun `a minimize is reported as a subtitle`() {
+        show(lastReason = LockReason.Minimized)
 
-        compose.onNodeWithText(MINIMISED_SUBTITLE).assertIsDisplayed()
+        compose.onNodeWithText(MINIMIZED_SUBTITLE).assertIsDisplayed()
     }
 
     // The tag is on whatever subtitle the screen draws, so these three see any text a reported

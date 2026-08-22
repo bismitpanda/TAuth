@@ -11,7 +11,7 @@ import kotlin.math.roundToInt
 
 fun isVisibleAtStartup(startup: StartupWindow): Boolean = startup != StartupWindow.HIDDEN_TO_TRAY
 
-// A window opening in the tray is hidden rather than minimised, so the first raise puts it back where
+// A window opening in the tray is hidden rather than minimized, so the first raise puts it back where
 // it stood instead of on the taskbar.
 fun windowStateFor(geometry: WindowGeometry, startup: StartupWindow): WindowState = WindowState(
     isMinimized = startup == StartupWindow.ICONIFIED,
@@ -26,7 +26,7 @@ private fun positionOf(geometry: WindowGeometry): WindowPosition {
 }
 
 // What the file should hold for a window in this state, and null for a state that records nothing: a
-// minimised, maximised or full screen window carries that state's extent, not the one it returns to.
+// minimized, maximized or full screen window carries that state's extent, not the one it returns to.
 fun recordedGeometry(state: WindowState, stored: WindowGeometry): WindowGeometry? {
     if (state.isMinimized || state.placement != WindowPlacement.Floating) return null
     val position = state.position as? WindowPosition.Absolute

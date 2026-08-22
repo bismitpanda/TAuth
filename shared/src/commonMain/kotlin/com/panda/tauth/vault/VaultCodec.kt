@@ -235,7 +235,7 @@ object VaultCodec {
             // offline password search needs. The error reaches the log and the screen, so it carries none.
             return Outcome.Failure(VaultError.Corrupt("header is not valid JSON"))
         }
-        // Re-serialising the header would make decryption depend on the serialiser never changing
+        // Re-serializing the header would make decryption depend on the serializer never changing
         // its output.
         return Outcome.Success(
             Envelope(

@@ -149,7 +149,7 @@ class VaultPathsTest {
     }
 
     @Test
-    fun `an unrecognised os_name is treated as Linux`() {
+    fun `an unrecognized os_name is treated as Linux`() {
         assertEquals(OperatingSystem.LINUX, OperatingSystem.detect("FreeBSD"))
     }
 }

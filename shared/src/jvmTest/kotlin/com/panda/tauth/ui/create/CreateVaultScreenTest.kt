@@ -267,7 +267,7 @@ class CreateVaultScreenTest {
     fun `a vault file gone by the read-back shows its own message`() {
         show(error = VaultError.NoVaultFile)
 
-        compose.onNodeWithText("The vault was created but could not be found afterwards.")
+        compose.onNodeWithText("The vault was created but could not be found afterward.")
             .assertIsDisplayed()
     }
 

@@ -35,7 +35,7 @@ class WindowGeometryRecorder internal constructor(
     private var pending: Job? = null
 
     // A state with no geometry to record leaves the pending write standing, so a move the user makes
-    // and then minimises out of still reaches the file.
+    // and then minimizes out of still reaches the file.
     fun sample(geometry: WindowGeometry?) {
         if (geometry == null) return
         pending?.cancel()

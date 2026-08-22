@@ -61,7 +61,7 @@ internal suspend fun readImportSource(destination: suspend () -> Path?): Outcome
     val path = destination() ?: return Outcome.Success(null)
     return withContext(Dispatchers.IO) {
         try {
-            // Refused by size before it is read rather than by OutOfMemoryError afterwards, which is
+            // Refused by size before it is read rather than by OutOfMemoryError afterward, which is
             // an Error no Outcome carries.
             if (Files.size(path) > MAX_IMPORT_BYTES) {
                 Outcome.Failure(VaultError.Corrupt("that file is larger than any export TAuth writes"))

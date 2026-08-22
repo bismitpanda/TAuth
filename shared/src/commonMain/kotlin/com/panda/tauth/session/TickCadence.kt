@@ -7,7 +7,7 @@ import kotlin.time.Duration.Companion.milliseconds
 private const val MILLIS_PER_SECOND = 1000L
 
 // When to compute again, kept apart from the clock that says which code is current. The wait is a
-// suspension rather than a timer thread, so cancelling the scope that collects the ticker stops it.
+// suspension rather than a timer thread, so canceling the scope that collects the ticker stops it.
 internal fun interface TickCadence {
     suspend fun awaitTick()
 }

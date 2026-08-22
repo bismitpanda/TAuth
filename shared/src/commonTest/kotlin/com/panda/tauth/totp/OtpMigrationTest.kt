@@ -15,7 +15,7 @@ private fun one(vararg accounts: ByteArray): MigrationAccount = read(migrationPa
 
 class OtpMigrationTest {
     @Test
-    fun `an export code is recognised by its scheme`() {
+    fun `an export code is recognized by its scheme`() {
         assertTrue(isMigrationUri("otpauth-migration://offline?data=AA"))
     }
 
@@ -87,7 +87,7 @@ class OtpMigrationTest {
     }
 
     @Test
-    fun `an hotp account carries the counter the payload gave it`() {
+    fun `a hotp account carries the counter the payload gave it`() {
         val parsed = one(migrationAccount(type = MIGRATION_TYPE_HOTP, counter = 42))
 
         assertEquals(OtpType.HOTP to 42uL, parsed.type to parsed.counter)

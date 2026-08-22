@@ -41,7 +41,7 @@ None. The header already carries `vaultId` for exactly this purpose. Enabling th
 }
 ```
 
-Header deserialisation already tolerates unknown keys, so a vault written with this block opens unchanged in a build that predates the feature. The keyring entry's account name incorporates `vaultId`, so two vaults on one machine never collide and a stale entry from a deleted vault is never applied to a new one.
+Header deserialization already tolerates unknown keys, so a vault written with this block opens unchanged in a build that predates the feature. The keyring entry's account name incorporates `vaultId`, so two vaults on one machine never collide and a stale entry from a deleted vault is never applied to a new one.
 
 ### 1.4 Interface
 
@@ -64,7 +64,7 @@ New error cases: `KeyringUnavailable`, `KeyringEntryMissing`, and `KeyringCancel
 
 New operations: enable (requires an unlocked session; writes the DEK, then sets the header flag, so a failed write leaves the header untouched), disable (deletes the entry, clears the flag, warns if deletion failed), and repair (re-writes the entry when it is found missing at unlock time). Changing the master password does not touch the keyring entry, since the DEK is unchanged. Rotating the DEK must rewrite it.
 
-New dependencies: `net.java.dev.jna:jna` and `jna-platform` (5.19.1 current), and on Linux `de.swiesend:secret-service` (3.0.0-beta, requires JDK 17+, pulls in `dbus-java`). The Linux dependency must be loaded reflectively or guarded by an OS check so that a missing D-Bus session on macOS or Windows never causes class initialisation failures. Packaging must then retain `jdk.unsupported`, which JNA requires on some paths.
+New dependencies: `net.java.dev.jna:jna` and `jna-platform` (5.19.1 current), and on Linux `de.swiesend:secret-service` (3.0.0-beta, requires JDK 17+, pulls in `dbus-java`). The Linux dependency must be loaded reflectively or guarded by an OS check so that a missing D-Bus session on macOS or Windows never causes class initialization failures. Packaging must then retain `jdk.unsupported`, which JNA requires on some paths.
 
 ### 1.5 Per-platform implementation
 
@@ -90,7 +90,7 @@ CoreFoundation interop through JNA is the main implementation cost: `CFDictionar
 
 Linux first: it is the development platform, requires no code signing, and exercises the whole `SecretStore` abstraction end to end. macOS tier 2, then tier 1 once a signing identity exists. Windows Credential Manager with DPAPI. Windows Hello last, if at all. The three platform implementations are mutually independent and can proceed in any order once the interface and the session-level unlock path exist.
 
-Keyring behaviour cannot be meaningfully unit-tested; it depends on a live platform store and on user interaction. A written manual checklist covers, per OS: enable, relaunch, unlock via the store, disable, confirm the entry is gone from the platform's own credential UI, delete the entry externally and confirm graceful fallback, and confirm behaviour with the store locked or unavailable.
+Keyring behavior cannot be meaningfully unit-tested; it depends on a live platform store and on user interaction. A written manual checklist covers, per OS: enable, relaunch, unlock via the store, disable, confirm the entry is gone from the platform's own credential UI, delete the entry externally and confirm graceful fallback, and confirm behavior with the store locked or unavailable.
 
 ---
 
@@ -101,7 +101,7 @@ Keyring behaviour cannot be meaningfully unit-tested; it depends on a live platf
 - **The Windows Startup-tab divergence.** Windows keeps the enabled state of a startup entry separately from the entry, under `HKCU\…\Explorer\StartupApproved\Run`. Disabling TAuth in Task Manager's Startup tab leaves the `Run` value in place and untouched, so the setting reads as on while nothing launches. Reflecting it means reading an undocumented binary format, and writing it would override a choice the user made in the platform's own interface; what a fix should do is report the divergence, not resolve it.
 - **A `--vault <path>` argument** overriding the resolved location, for a vault kept on removable media and for exercising the application against a scratch file. `main` takes no arguments, so every path comes from `VaultPaths`. Both the single-instance lock and the preferences file are resolved from the same directory, so an override has to move all three together or a second instance will take the lock of the first.
 - **Screen-region QR capture.** It requires `java.awt.Robot` screen capture permission, which on macOS triggers a Screen Recording privacy prompt and on Wayland needs a portal integration.
-- **System accent-colour following on Windows.**
+- **System accent-color following on Windows.**
 
 ---
 
@@ -122,11 +122,11 @@ Stated rather than left to be discovered:
 
 ### 3.2 Manual verification
 
-Tray behaviour on GNOME (with and without a tray extension), KDE Plasma, Windows 11 and macOS: the click each platform names — a single left click on Windows, macOS and KDE Plasma, a double on GNOME — the menu on the secondary click throughout, and whether the desktop draws the icon at the size it asked for.
+Tray behavior on GNOME (with and without a tray extension), KDE Plasma, Windows 11 and macOS: the click each platform names — a single left click on Windows, macOS and KDE Plasma, a double on GNOME — the menu on the secondary click throughout, and whether the desktop draws the icon at the size it asked for.
 
-The relock triggers on a running window, since the collector reads state a headless test cannot produce: hiding to the tray, minimising, restoring onto a desktop that gives the window no focus, and leaving the window untouched for the idle interval, each against a grace period of 0 and of 30 seconds. What this catches is a window whose composition stops reporting when it leaves the screen, which would leave a hidden window unlocked.
+The relock triggers on a running window, since the collector reads state a headless test cannot produce: hiding to the tray, minimizing, restoring onto a desktop that gives the window no focus, and leaving the window untouched for the idle interval, each against a grace period of 0 and of 30 seconds. What this catches is a window whose composition stops reporting when it leaves the screen, which would leave a hidden window unlocked.
 
-The raise by launching TAuth a second time while the first runs: against a window hidden to the tray, one minimised, and one standing behind another, with the pointer left where it rests each time. The window comes forward in all three, the second launch ends on its own, and a window raised with nobody at the machine locks when its relock falls due.
+The raise by launching TAuth a second time while the first runs: against a window hidden to the tray, one minimized, and one standing behind another, with the pointer left where it rests each time. The window comes forward in all three, the second launch ends on its own, and a window raised with nobody at the machine locks when its relock falls due.
 
 Starting at login, per OS, from a packaged install — the only build where the setting is offered at all: turn it on, log out and back in, confirm TAuth is running and its window is not on screen; move the installation and confirm the next launch rewrites the record; turn it off and confirm the record is gone from the platform's own list.
 

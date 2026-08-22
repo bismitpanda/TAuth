@@ -21,7 +21,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import com.panda.tauth.ui.theme.LocalSpacing
 
-// A labelled line of text. Nothing here masks what it holds: the one field that must is the master
+// A labeled line of text. Nothing here masks what it holds: the one field that must is the master
 // password, which has a holder of its own that keeps its characters out of a String.
 @Composable
 fun FormField(

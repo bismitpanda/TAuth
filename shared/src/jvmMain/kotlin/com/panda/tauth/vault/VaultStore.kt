@@ -191,7 +191,7 @@ class VaultStore internal constructor(private val paths: VaultPaths, private val
         return try {
             createRestrictedDirectory()
             // Beside the vault so that locking never opens the vault for writing. Whoever can
-            // replace it can hold the lock for ever, so its mode is not trusted.
+            // replace it can hold the lock forever, so its mode is not trusted.
             files.openChannel(paths.lockFile, LOCK_OPEN, *ownerOnlyAttributes()).use { channel ->
                 restrictToOwner(paths.lockFile)
                 val lock = channel.tryLock()
@@ -300,7 +300,7 @@ class VaultStore internal constructor(private val paths: VaultPaths, private val
         if (!isPosix()) return
         val actual = files.permissionsOf(path, *options)
         if ((actual - allowed).isNotEmpty()) {
-            throw IOException("$path is $actual; this filesystem does not honour permissions")
+            throw IOException("$path is $actual; this filesystem does not honor permissions")
         }
     }
 }

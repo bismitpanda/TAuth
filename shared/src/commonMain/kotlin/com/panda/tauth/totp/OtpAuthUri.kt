@@ -37,7 +37,7 @@ data class OtpAuthUri(
 ) {
     init {
         require(accountName.isNotEmpty()) { "accountName must not be empty" }
-        // Parsing decodes before it splits, so %3A separates too and a colon here would re-parse as
+        // Parsing decodes before it splits, so %3A separates too and a colon here would reparse as
         // a different account name.
         require(LABEL_SEPARATOR !in accountName) { "accountName must not contain a colon" }
         require(issuer == null || issuer.isNotEmpty()) { "issuer must be absent rather than empty" }
@@ -45,7 +45,7 @@ data class OtpAuthUri(
         // that would find out.
         require(accountName.isWellFormed()) { "accountName must be well-formed text" }
         require(issuer == null || issuer.isWellFormed()) { "issuer must be well-formed text" }
-        // The rule the parser applies, so every URI this constructor accepts re-parses. The message
+        // The rule the parser applies, so every URI this constructor accepts reparses. The message
         // states the rule rather than the value, which is the secret.
         require(Base32.validateSecret(secret) == null) { "secret must be base32 that decodes to a key" }
         require(digits in OtpCore.DIGITS_MIN..OtpCore.DIGITS_MAX) {
@@ -72,7 +72,7 @@ data class OtpAuthUri(
 
     fun build(): String {
         // The prefix is carried only when it round-trips: a colon in the issuer or a leading space
-        // in the account name would re-parse as something else, so the parameter carries it alone.
+        // in the account name would reparse as something else, so the parameter carries it alone.
         val prefixable = issuer != null && LABEL_SEPARATOR !in issuer && !accountName.startsWith(' ')
         val label = if (prefixable) {
             "${percentEncode(issuer)}$LABEL_SEPARATOR${percentEncode(accountName)}"

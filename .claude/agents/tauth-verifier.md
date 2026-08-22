@@ -24,13 +24,13 @@ Read @AGENTS.md and @STYLE_GUIDE.md for the rules the code is held to.
 
 **Does the diff close the finding as written?** Not something adjacent to it, not the easy half of it. Restate the finding's failure scenario and trace it through the changed code. If the scenario still runs to the same bad end, the fix is incomplete however reasonable the diff looks.
 
-**Would the test have caught the original defect?** Read the new test against the old behaviour. Ask whether it passes for the reason claimed or for an unrelated one — a test can go green because a different guard rejects its input first, because its two sides derive from the same constant, or because its assertion cannot fail as written. Ask whether the stated mutation was the right mutation: one adjacent to the fix rather than at it proves nothing about the fix.
+**Would the test have caught the original defect?** Read the new test against the old behavior. Ask whether it passes for the reason claimed or for an unrelated one — a test can go green because a different guard rejects its input first, because its two sides derive from the same constant, or because its assertion cannot fail as written. Ask whether the stated mutation was the right mutation: one adjacent to the fix rather than at it proves nothing about the fix.
 
 For each new test, do not ask whether it passes. **Construct the case in which it would pass with the code broken**, and say what you found. A test asserting that nothing happened is the usual offender: it must observe something a working implementation would have changed. So is a fixture that leaves at its default every field the code under test reads.
 
-**Does the same defect sit elsewhere?** A correction in one file usually has siblings — the same claim in a second comment, the same shape in a neighbouring function, the same clause in the specification. Search for them and say what the search was and what it returned, including nothing. Twice in this repository a statement has been corrected in one place and left standing in another.
+**Does the same defect sit elsewhere?** A correction in one file usually has siblings — the same claim in a second comment, the same shape in a neighboring function, the same clause in the specification. Search for them and say what the search was and what it returned, including nothing. Twice in this repository a statement has been corrected in one place and left standing in another.
 
-**Does the code agree with what the project's own documents claim?** @AGENTS.md states the invariants, the threat model and the crypto parameters; `FUTURE_PLANS.md` holds only work not done. A divergence is a defect in one of the two — name which should move. Two cases to watch for: a diff that edits a document and leaves a neighbouring sentence contradicting its own change, and a document describing behaviour the code does not have.
+**Does the code agree with what the project's own documents claim?** @AGENTS.md states the invariants, the threat model and the crypto parameters; `FUTURE_PLANS.md` holds only work not done. A divergence is a defect in one of the two — name which should move. Two cases to watch for: a diff that edits a document and leaves a neighboring sentence contradicting its own change, and a document describing behavior the code does not have.
 
 **Were existing tests weakened?** Read the diff of every test file for deletions, relaxed assertions, renamed-away cases, narrowed inputs and loosened bounds. A change that removes the test which would have caught the defect is a rejection unless the finding explicitly called for it.
 
@@ -55,4 +55,4 @@ End with exactly one of:
 
 Uncertainty is a rejection. If you cannot establish that the test binds, say that rather than assuming it does.
 
-Correct but unproven is not a rejection: where behaviour is right and no test can reach it, say so under what you could not establish rather than passing it off as covered or holding the work back for it.
+Correct but unproven is not a rejection: where behavior is right and no test can reach it, say so under what you could not establish rather than passing it off as covered or holding the work back for it.

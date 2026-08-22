@@ -197,7 +197,7 @@ class VaultEntryTest {
     }
 
     @Test
-    fun `deserialising a hotp entry with no counter fails rather than defaulting to zero`() {
+    fun `deserializing a hotp entry with no counter fails rather than defaulting to zero`() {
         val json = """
             {"id":"a","type":"hotp","accountName":"bob","secret":"$TEST_SECRET",
              "createdAt":"2026-08-13T09:41:12Z"}
@@ -206,7 +206,7 @@ class VaultEntryTest {
     }
 
     @Test
-    fun `deserialising a totp entry with no period fails`() {
+    fun `deserializing a totp entry with no period fails`() {
         val json = """
             {"id":"a","type":"totp","accountName":"alice","secret":"$TEST_SECRET",
              "createdAt":"2026-08-13T09:41:12Z"}
@@ -215,7 +215,7 @@ class VaultEntryTest {
     }
 
     @Test
-    fun `deserialising an entry whose account name holds an unpaired surrogate fails`() {
+    fun `deserializing an entry whose account name holds an unpaired surrogate fails`() {
         // JSON carries \ud800 through as readily as any other escape, and the decoded string has no
         // UTF-8 encoding.
         val json = """
@@ -226,7 +226,7 @@ class VaultEntryTest {
     }
 
     @Test
-    fun `deserialising an entry whose account name holds the label separator fails`() {
+    fun `deserializing an entry whose account name holds the label separator fails`() {
         // The body is attacker-writable, and an entry the URI constructor would refuse reaches that
         // constructor at export time, where the failure is a throw rather than a returned error.
         val json = """
@@ -237,7 +237,7 @@ class VaultEntryTest {
     }
 
     @Test
-    fun `deserialising an entry whose secret decodes to no key fails`() {
+    fun `deserializing an entry whose secret decodes to no key fails`() {
         val json = """
             {"id":"a","type":"totp","accountName":"alice","secret":" ",
              "createdAt":"2026-08-13T09:41:12Z","period":30}
@@ -249,7 +249,7 @@ class VaultEntryTest {
     fun `an unknown entry key is ignored`() {
         val json = """
             {"id":"a","type":"totp","accountName":"alice","secret":"$TEST_SECRET",
-             "createdAt":"2026-08-13T09:41:12Z","period":30,"colour":"red"}
+             "createdAt":"2026-08-13T09:41:12Z","period":30,"color":"red"}
         """.trimIndent()
         assertEquals("alice", vaultJson.decodeFromString<VaultEntry>(json).accountName)
     }

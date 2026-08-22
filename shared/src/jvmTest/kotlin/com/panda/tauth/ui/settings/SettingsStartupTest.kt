@@ -22,12 +22,12 @@ import kotlin.test.assertEquals
 private val STORED = Preferences(
     theme = Theme.DARK,
     sortOrder = SortOrder.RECENTLY_ADDED,
-    startMinimised = true,
-    minimiseToTray = false,
+    startMinimized = true,
+    minimizeToTray = false,
     startAtLogin = true,
 )
 
-// Start at login holds start-minimised on, so what that control does on its own is read against a
+// Start at login holds start-minimized on, so what that control does on its own is read against a
 // document with the login setting off.
 private val NOT_AT_LOGIN = STORED.copy(startAtLogin = false)
 
@@ -35,31 +35,31 @@ class SettingsStartupTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private var chosenMinimiseToTray: Boolean? = null
-    private var chosenStartMinimised: Boolean? = null
+    private var chosenMinimizeToTray: Boolean? = null
+    private var chosenStartMinimized: Boolean? = null
     private var chosenStartAtLogin: Boolean? = null
 
     @Test
     fun `the tray preference it opens with is the one stored`() {
         show()
 
-        compose.onNodeWithTag(MINIMISE_TO_TRAY_TAG).assertIsOff()
+        compose.onNodeWithTag(MINIMIZE_TO_TRAY_TAG).assertIsOff()
     }
 
     @Test
     fun `a switched tray preference is handed over`() {
         show()
 
-        toggle(MINIMISE_TO_TRAY_TAG)
+        toggle(MINIMIZE_TO_TRAY_TAG)
 
-        compose.runOnIdle { assertEquals(true, chosenMinimiseToTray) }
+        compose.runOnIdle { assertEquals(true, chosenMinimizeToTray) }
     }
 
     @Test
     fun `a desktop with no tray cannot switch the tray preference`() {
         show(shell = shellSettings(canConfigureTray = false))
 
-        compose.onNodeWithTag(MINIMISE_TO_TRAY_TAG).assertIsNotEnabled()
+        compose.onNodeWithTag(MINIMIZE_TO_TRAY_TAG).assertIsNotEnabled()
     }
 
     @Test
@@ -73,7 +73,7 @@ class SettingsStartupTest {
     fun `a desktop with a tray offers the tray preference`() {
         show(shell = shellSettings(canConfigureTray = true))
 
-        compose.onNodeWithTag(MINIMISE_TO_TRAY_TAG).assertIsEnabled()
+        compose.onNodeWithTag(MINIMIZE_TO_TRAY_TAG).assertIsEnabled()
     }
 
     @Test
@@ -87,23 +87,23 @@ class SettingsStartupTest {
     fun `the start preference it opens with is the one stored`() {
         show()
 
-        compose.onNodeWithTag(START_MINIMISED_TAG).assertIsOn()
+        compose.onNodeWithTag(START_MINIMIZED_TAG).assertIsOn()
     }
 
     @Test
     fun `a switched start preference is handed over`() {
         show(preferences = NOT_AT_LOGIN)
 
-        toggle(START_MINIMISED_TAG)
+        toggle(START_MINIMIZED_TAG)
 
-        compose.runOnIdle { assertEquals(false, chosenStartMinimised) }
+        compose.runOnIdle { assertEquals(false, chosenStartMinimized) }
     }
 
     @Test
     fun `a desktop with no tray cannot switch the start preference`() {
         show(preferences = NOT_AT_LOGIN, shell = shellSettings(canConfigureTray = false))
 
-        compose.onNodeWithTag(START_MINIMISED_TAG).assertIsNotEnabled()
+        compose.onNodeWithTag(START_MINIMIZED_TAG).assertIsNotEnabled()
     }
 
     @Test
@@ -126,14 +126,14 @@ class SettingsStartupTest {
     fun `starting at login holds the window out of the way`() {
         show()
 
-        compose.onNodeWithTag(START_MINIMISED_TAG).assertIsNotEnabled()
+        compose.onNodeWithTag(START_MINIMIZED_TAG).assertIsNotEnabled()
     }
 
     @Test
     fun `not starting at login leaves that choice free`() {
         show(preferences = NOT_AT_LOGIN)
 
-        compose.onNodeWithTag(START_MINIMISED_TAG).assertIsEnabled()
+        compose.onNodeWithTag(START_MINIMIZED_TAG).assertIsEnabled()
     }
 
     @Test
@@ -176,8 +176,8 @@ class SettingsStartupTest {
                     policy = SecurityPolicy(),
                     preferences = preferences,
                     shell = shell,
-                    onMinimiseToTrayChange = { chosenMinimiseToTray = it },
-                    onStartMinimisedChange = { chosenStartMinimised = it },
+                    onMinimizeToTrayChange = { chosenMinimizeToTray = it },
+                    onStartMinimizedChange = { chosenStartMinimized = it },
                     onStartAtLoginChange = { chosenStartAtLogin = it },
                 )
             }

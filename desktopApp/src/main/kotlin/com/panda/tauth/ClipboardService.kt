@@ -30,7 +30,7 @@ enum class ClipboardClear {
 sealed interface ClipboardError {
     data class Unavailable(val cause: Throwable) : ClipboardError
 
-    // The scope was already cancelled when the copy was asked for, so nothing was placed.
+    // The scope was already canceled when the copy was asked for, so nothing was placed.
     data object ShuttingDown : ClipboardError
 
     data class InvalidDelay(val seconds: Int) : ClipboardError
@@ -67,7 +67,7 @@ internal object AwtClipboard : SystemClipboard {
     } catch (e: HeadlessException) {
         Outcome.Failure(ClipboardError.Unavailable(e))
     } catch (e: UnsupportedFlavorException) {
-        // The contents changed between the flavour check and the read, so what is there is
+        // The contents changed between the flavor check and the read, so what is there is
         // unknown and the clear is skipped rather than aimed at it.
         Outcome.Failure(ClipboardError.Unavailable(e))
     } catch (e: IOException) {
@@ -141,7 +141,7 @@ class ClipboardService internal constructor(
     private fun scheduleClear(seconds: Int): Job = scope.launch {
         clearDelay.elapse(seconds)
         lock.withLock {
-            // A copy that took the lock first cancelled this job and put its own string on the
+            // A copy that took the lock first canceled this job and put its own string on the
             // clipboard; clearing here would take that string before its own delay elapsed.
             ensureActive()
             if (clearNow() is Outcome.Failure) {

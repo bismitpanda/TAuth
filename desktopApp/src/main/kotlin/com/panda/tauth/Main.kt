@@ -18,7 +18,6 @@ import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import com.panda.tauth.session.CodeTicker
 import com.panda.tauth.session.LockReason
-import com.panda.tauth.session.SessionClipboard
 import com.panda.tauth.session.VaultSession
 import com.panda.tauth.settings.Preferences
 import com.panda.tauth.settings.PreferencesError
@@ -52,12 +51,12 @@ private fun runTAuth(role: InstanceRole) = application {
     val clipboard = remember(scope) { ClipboardService(scope) }
     val paths = remember { VaultPaths() }
     val session = remember(scope, paths) {
-        VaultSession(VaultStore(paths), SessionClipboard { clipboard.clearIfHoldsOwnValue() }, scope)
+        VaultSession(VaultStore(paths), { clipboard.clearIfHoldsOwnValue() }, scope)
     }
     val ticker = remember(session) { CodeTicker(session) }
     val store = remember(paths) { PreferencesStore(paths) }
     // The document as the file held it at launch. The window opens on this and stays where the user
-    // puts it, whatever is chosen in settings afterwards.
+    // puts it, whatever is chosen in settings afterward.
     val opening = remember(store) { store.load() }
     val preferences = remember(store, opening) { PreferencesState(opening) { store.record(it) } }
     val isTraySupported = remember { isSystemTraySupported() }
@@ -249,7 +248,7 @@ private fun shellSettings(
 ): ShellSettings = ShellSettings(
     vaultLocation = paths.vaultFile.toString(),
     version = applicationVersion(),
-    licence = LICENCE_NOTICE,
+    license = LICENSE_NOTICE,
     canConfigureTray = canConfigureTray,
     canStartAtLogin = isPackagedLauncher(launcher),
     // Not held: this hands the window to the file manager, which is the user going elsewhere.

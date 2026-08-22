@@ -10,7 +10,7 @@ import kotlin.test.assertTrue
 // with a number no assertion below accepts.
 private val POLICY = SecurityPolicy(
     idleTimeoutMinutes = 7,
-    lockOnMinimise = true,
+    lockOnMinimize = true,
     lockOnFocusLoss = true,
     hideGraceSeconds = 30,
     clipboardClearSeconds = 20,
@@ -19,27 +19,27 @@ private val POLICY = SecurityPolicy(
 class LockReasonTest {
     @Test
     fun `hiding to the tray is armed whatever the policy says`() {
-        assertTrue(LockReason.HiddenToTray.isArmedBy(POLICY.copy(lockOnMinimise = false)))
+        assertTrue(LockReason.HiddenToTray.isArmedBy(POLICY.copy(lockOnMinimize = false)))
     }
 
     @Test
     fun `a manual lock is armed whatever the policy says`() {
-        assertTrue(LockReason.Manual.isArmedBy(POLICY.copy(lockOnMinimise = false, lockOnFocusLoss = false)))
+        assertTrue(LockReason.Manual.isArmedBy(POLICY.copy(lockOnMinimize = false, lockOnFocusLoss = false)))
     }
 
     @Test
     fun `an exit is armed whatever the policy says`() {
-        assertTrue(LockReason.Exit.isArmedBy(POLICY.copy(lockOnMinimise = false, lockOnFocusLoss = false)))
+        assertTrue(LockReason.Exit.isArmedBy(POLICY.copy(lockOnMinimize = false, lockOnFocusLoss = false)))
     }
 
     @Test
-    fun `minimising is armed when the policy sets it`() {
-        assertTrue(LockReason.Minimised.isArmedBy(POLICY.copy(lockOnMinimise = true)))
+    fun `minimizing is armed when the policy sets it`() {
+        assertTrue(LockReason.Minimized.isArmedBy(POLICY.copy(lockOnMinimize = true)))
     }
 
     @Test
-    fun `minimising is disarmed when the policy clears it`() {
-        assertFalse(LockReason.Minimised.isArmedBy(POLICY.copy(lockOnMinimise = false)))
+    fun `minimizing is disarmed when the policy clears it`() {
+        assertFalse(LockReason.Minimized.isArmedBy(POLICY.copy(lockOnMinimize = false)))
     }
 
     @Test
@@ -68,8 +68,8 @@ class LockReasonTest {
     }
 
     @Test
-    fun `minimising waits the grace period`() {
-        assertEquals(30, LockReason.Minimised.graceSeconds(POLICY))
+    fun `minimizing waits the grace period`() {
+        assertEquals(30, LockReason.Minimized.graceSeconds(POLICY))
     }
 
     @Test

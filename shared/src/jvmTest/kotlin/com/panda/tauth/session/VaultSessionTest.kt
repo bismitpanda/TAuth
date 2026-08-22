@@ -55,7 +55,7 @@ private val IMMEDIATE_VAULT by lazy { vaultBytes(SecurityPolicy()) }
 
 private val GRACE_VAULT by lazy { vaultBytes(SecurityPolicy(hideGraceSeconds = 30)) }
 
-private val NO_MINIMISE_VAULT by lazy { vaultBytes(SecurityPolicy(lockOnMinimise = false)) }
+private val NO_MINIMIZE_VAULT by lazy { vaultBytes(SecurityPolicy(lockOnMinimize = false)) }
 
 // Two entries under one id, which the entry model permits and the session's map of decoded keys
 // cannot hold.
@@ -364,7 +364,7 @@ class VaultSessionTest {
     }
 
     @Test
-    fun `a cancelled schedule leaves the vault open when the grace period elapses`() {
+    fun `a canceled schedule leaves the vault open when the grace period elapses`() {
         val session = unlocked(GRACE_VAULT)
         session.scheduleLock(LockReason.HiddenToTray)
 
@@ -403,7 +403,7 @@ class VaultSessionTest {
         val session = unlocked(GRACE_VAULT)
 
         session.scheduleLock(LockReason.HiddenToTray)
-        session.scheduleLock(LockReason.Minimised)
+        session.scheduleLock(LockReason.Minimized)
 
         assertEquals(listOf(30), lockDelay.requested)
     }
@@ -421,16 +421,16 @@ class VaultSessionTest {
     fun `a schedule for a reason the policy arms locks the vault`() {
         val session = unlocked()
 
-        session.scheduleLock(LockReason.Minimised)
+        session.scheduleLock(LockReason.Minimized)
 
-        assertEquals(SessionState.Locked(LockReason.Minimised), session.state.value)
+        assertEquals(SessionState.Locked(LockReason.Minimized), session.state.value)
     }
 
     @Test
     fun `a schedule for a reason the policy disarms leaves the vault open`() {
-        val session = unlocked(NO_MINIMISE_VAULT)
+        val session = unlocked(NO_MINIMIZE_VAULT)
 
-        session.scheduleLock(LockReason.Minimised)
+        session.scheduleLock(LockReason.Minimized)
 
         assertIs<SessionState.Unlocked>(session.state.value)
     }

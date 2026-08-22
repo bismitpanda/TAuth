@@ -176,7 +176,7 @@ private fun StrengthMeter(strength: PasswordStrength, modifier: Modifier = Modif
 private fun messageFor(error: VaultCreateError): String = when (error) {
     is VaultError.VaultFileExists -> "A vault already exists at this location."
 
-    is VaultError.NoVaultFile -> "The vault was created but could not be found afterwards."
+    is VaultError.NoVaultFile -> "The vault was created but could not be found afterward."
 
     is VaultError.LockedByAnotherProcess -> "Another TAuth process is holding the vault file."
 

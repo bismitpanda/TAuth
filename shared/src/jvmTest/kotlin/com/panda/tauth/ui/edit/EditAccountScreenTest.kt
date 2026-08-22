@@ -189,7 +189,7 @@ class EditAccountScreenTest {
     }
 
     @Test
-    fun `an hotp entry offers no period field`() {
+    fun `a hotp entry offers no period field`() {
         show(hotpRow())
 
         tap(ADVANCED)
@@ -197,10 +197,10 @@ class EditAccountScreenTest {
         compose.onNodeWithTag(EDIT_PERIOD_TAG).assertDoesNotExist()
     }
 
-    // Resynchronising a client that has run past the server's look-ahead window is what the counter
+    // Resynchronizing a client that has run past the server's look-ahead window is what the counter
     // is editable for.
     @Test
-    fun `an hotp counter set backwards is handed over`() {
+    fun `a hotp counter set backwards is handed over`() {
         show(hotpRow(counter = 41uL))
 
         tap(ADVANCED)
@@ -211,7 +211,7 @@ class EditAccountScreenTest {
     }
 
     @Test
-    fun `an hotp counter at the unsigned maximum is handed over`() {
+    fun `a hotp counter at the unsigned maximum is handed over`() {
         show(hotpRow(counter = 0uL))
 
         tap(ADVANCED)
@@ -224,7 +224,7 @@ class EditAccountScreenTest {
     // A save that never fired leaves every field of `saved` null, so each absence below is read off an
     // edit the same test has established was handed over.
     @Test
-    fun `an hotp edit carries no period`() {
+    fun `a hotp edit carries no period`() {
         show(hotpRow(counter = 41uL))
 
         tap(SAVE)
@@ -295,7 +295,7 @@ class EditAccountScreenTest {
     }
 
     @Test
-    fun `cancelling hands over no change`() {
+    fun `canceling hands over no change`() {
         show(totpRow())
 
         retype(EDIT_ACCOUNT_TAG, "erin")
@@ -305,7 +305,7 @@ class EditAccountScreenTest {
     }
 
     @Test
-    fun `cancelling reports the cancellation`() {
+    fun `canceling reports the cancellation`() {
         show(totpRow())
 
         tap(CANCEL)

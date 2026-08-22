@@ -20,7 +20,6 @@ import androidx.compose.ui.test.performTextInput
 import com.panda.tauth.Outcome
 import com.panda.tauth.session.CodeTicker
 import com.panda.tauth.session.LockReason
-import com.panda.tauth.session.SessionClipboard
 import com.panda.tauth.session.SessionState
 import com.panda.tauth.session.VaultSession
 import com.panda.tauth.settings.SecurityPolicy
@@ -117,7 +116,7 @@ private val VAULT by lazy {
 // disagrees with it in every field rather than in none.
 private val STORED_POLICY = SecurityPolicy(
     idleTimeoutMinutes = 1,
-    lockOnMinimise = false,
+    lockOnMinimize = false,
     lockOnFocusLoss = true,
     hideGraceSeconds = 30,
     clipboardClearSeconds = 10,
@@ -223,7 +222,7 @@ class TAuthAppTest {
     }
 
     @Test
-    fun `cancelling the add screen returns to the list`() {
+    fun `canceling the add screen returns to the list`() {
         show(MemoryVaultFile(VAULT))
         unlock()
         waitForText(LIST_TITLE)
@@ -265,7 +264,7 @@ class TAuthAppTest {
         waitForText(LIST_TITLE)
     }
 
-    // Everything from the paste to the vault write to the row the list draws afterwards. Nothing else
+    // Everything from the paste to the vault write to the row the list draws afterward. Nothing else
     // in the suite turns a confirmed account into a stored one.
     @Test
     fun `an account saved from the add screen appears on the list`() {
@@ -436,7 +435,7 @@ class TAuthAppTest {
         assertEquals(
             SecurityPolicy(
                 idleTimeoutMinutes = 15,
-                lockOnMinimise = false,
+                lockOnMinimize = false,
                 lockOnFocusLoss = true,
                 hideGraceSeconds = 30,
                 clipboardClearSeconds = 10,
@@ -520,8 +519,8 @@ class TAuthAppTest {
             preferences(
                 theme = Theme.DARK,
                 sortOrder = SortOrder.RECENTLY_ADDED,
-                startMinimised = true,
-                minimiseToTray = false,
+                startMinimized = true,
+                minimizeToTray = false,
             ),
         )
         show(MemoryVaultFile(VAULT), preferences)
@@ -654,7 +653,7 @@ class TAuthAppTest {
         preferences: RecordingPreferences = RecordingPreferences(),
         shell: ShellSettings = ShellSettings(),
     ): VaultSession {
-        val session = VaultSession(file, SessionClipboard {}, scope)
+        val session = VaultSession(file, {}, scope)
         compose.setContent {
             TauthTheme {
                 TAuthApp(

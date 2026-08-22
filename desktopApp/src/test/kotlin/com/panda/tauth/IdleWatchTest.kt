@@ -250,7 +250,7 @@ class IdleWatchTest {
     }
 
     @Test
-    fun `a cancelled watch takes its listener off`() {
+    fun `a canceled watch takes its listener off`() {
         val job = watchFor(5)
 
         job.cancel()

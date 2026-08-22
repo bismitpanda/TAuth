@@ -16,6 +16,9 @@ class WindowRaise internal constructor(private val monitor: InputMonitor) {
     // reports the user, so a request that landed before this collection began is raised too.
     suspend fun raiseOnRequest(requests: StateFlow<Long>, onRaise: () -> Unit, onShownBy: (ShowSource) -> Unit): Unit =
         coroutineScope {
+            // Named, because the launch below sits inside a suspending collector and would otherwise
+            // read this receiver implicitly, where it looks like the collector's own scope.
+            val raises = this
             var raised = NO_SHOW_REQUESTS
             var arrival: Job? = null
             requests.collect { count ->
@@ -28,7 +31,7 @@ class WindowRaise internal constructor(private val monitor: InputMonitor) {
                     // The arrival that ends this raise is input that follows it, not input a wait an
                     // earlier raise left standing would take.
                     arrival?.cancelAndJoin()
-                    arrival = launch {
+                    arrival = raises.launch {
                         awaitInput()
                         onShownBy(ShowSource.USER)
                     }

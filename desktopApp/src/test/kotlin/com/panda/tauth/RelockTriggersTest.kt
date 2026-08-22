@@ -32,43 +32,43 @@ class RelockTriggersTest {
     @Test
     fun `a window off the screen reports the hide trigger`() {
         val report = windowReport(
-            WindowPresence(isVisible = false, isMinimised = false, isFocused = false, shownBy = ShowSource.USER),
+            WindowPresence(isVisible = false, isMinimized = false, isFocused = false, shownBy = ShowSource.USER),
         )
 
         assertEquals(WindowReport.Trigger(LockReason.HiddenToTray), report)
     }
 
     @Test
-    fun `a window hidden while minimised reports the hide trigger`() {
+    fun `a window hidden while minimized reports the hide trigger`() {
         val report = windowReport(
-            WindowPresence(isVisible = false, isMinimised = true, isFocused = false, shownBy = ShowSource.USER),
+            WindowPresence(isVisible = false, isMinimized = true, isFocused = false, shownBy = ShowSource.USER),
         )
 
         assertEquals(WindowReport.Trigger(LockReason.HiddenToTray), report)
     }
 
     @Test
-    fun `a minimised window reports the minimise trigger`() {
+    fun `a minimized window reports the minimize trigger`() {
         val report = windowReport(
-            WindowPresence(isVisible = true, isMinimised = true, isFocused = false, shownBy = ShowSource.USER),
+            WindowPresence(isVisible = true, isMinimized = true, isFocused = false, shownBy = ShowSource.USER),
         )
 
-        assertEquals(WindowReport.Trigger(LockReason.Minimised), report)
+        assertEquals(WindowReport.Trigger(LockReason.Minimized), report)
     }
 
     @Test
-    fun `a minimised window that kept its focus reports the minimise trigger`() {
+    fun `a minimized window that kept its focus reports the minimize trigger`() {
         val report = windowReport(
-            WindowPresence(isVisible = true, isMinimised = true, isFocused = true, shownBy = ShowSource.USER),
+            WindowPresence(isVisible = true, isMinimized = true, isFocused = true, shownBy = ShowSource.USER),
         )
 
-        assertEquals(WindowReport.Trigger(LockReason.Minimised), report)
+        assertEquals(WindowReport.Trigger(LockReason.Minimized), report)
     }
 
     @Test
     fun `a window on the screen that lost focus reports a return without focus`() {
         val report = windowReport(
-            WindowPresence(isVisible = true, isMinimised = false, isFocused = false, shownBy = ShowSource.USER),
+            WindowPresence(isVisible = true, isMinimized = false, isFocused = false, shownBy = ShowSource.USER),
         )
 
         assertEquals(WindowReport.ReturnedUnfocused, report)
@@ -94,7 +94,7 @@ class RelockTriggersTest {
         val report = windowReport(
             WindowPresence(
                 isVisible = true,
-                isMinimised = false,
+                isMinimized = false,
                 isFocused = false,
                 shownBy = ShowSource.USER,
                 holdsModal = true,
@@ -109,7 +109,7 @@ class RelockTriggersTest {
         val report = windowReport(
             WindowPresence(
                 isVisible = true,
-                isMinimised = false,
+                isMinimized = false,
                 isFocused = false,
                 shownBy = ShowSource.USER,
                 holdsModal = false,
@@ -124,7 +124,7 @@ class RelockTriggersTest {
         val report = windowReport(
             WindowPresence(
                 isVisible = false,
-                isMinimised = false,
+                isMinimized = false,
                 isFocused = false,
                 shownBy = ShowSource.USER,
                 holdsModal = true,
@@ -135,18 +135,18 @@ class RelockTriggersTest {
     }
 
     @Test
-    fun `a window minimised while its chooser is open reports the minimise trigger`() {
+    fun `a window minimized while its chooser is open reports the minimize trigger`() {
         val report = windowReport(
             WindowPresence(
                 isVisible = true,
-                isMinimised = true,
+                isMinimized = true,
                 isFocused = false,
                 shownBy = ShowSource.USER,
                 holdsModal = true,
             ),
         )
 
-        assertEquals(WindowReport.Trigger(LockReason.Minimised), report)
+        assertEquals(WindowReport.Trigger(LockReason.Minimized), report)
     }
 
     @Test
@@ -154,7 +154,7 @@ class RelockTriggersTest {
         val report = windowReport(
             WindowPresence(
                 isVisible = true,
-                isMinimised = false,
+                isMinimized = false,
                 isFocused = false,
                 shownBy = ShowSource.SHOW_REQUEST,
             ),
@@ -166,7 +166,7 @@ class RelockTriggersTest {
     @Test
     fun `a window the user has come back to reports the return`() {
         val report = windowReport(
-            WindowPresence(isVisible = true, isMinimised = false, isFocused = true, shownBy = ShowSource.USER),
+            WindowPresence(isVisible = true, isMinimized = false, isFocused = true, shownBy = ShowSource.USER),
         )
 
         assertEquals(WindowReport.Returned, report)
@@ -177,7 +177,7 @@ class RelockTriggersTest {
         val report = windowReport(
             WindowPresence(
                 isVisible = true,
-                isMinimised = false,
+                isMinimized = false,
                 isFocused = true,
                 shownBy = ShowSource.SHOW_REQUEST,
             ),
@@ -188,21 +188,21 @@ class RelockTriggersTest {
 
     @Test
     fun `hiding the window schedules a lock for the hide`() {
-        apply(WindowPresence(isVisible = false, isMinimised = false, isFocused = false, shownBy = ShowSource.USER))
+        apply(WindowPresence(isVisible = false, isMinimized = false, isFocused = false, shownBy = ShowSource.USER))
 
         assertEquals(listOf(LockReason.HiddenToTray), scheduled)
     }
 
     @Test
-    fun `minimising the window schedules a lock for the minimise`() {
-        apply(WindowPresence(isVisible = true, isMinimised = true, isFocused = false, shownBy = ShowSource.USER))
+    fun `minimizing the window schedules a lock for the minimize`() {
+        apply(WindowPresence(isVisible = true, isMinimized = true, isFocused = false, shownBy = ShowSource.USER))
 
-        assertEquals(listOf(LockReason.Minimised), scheduled)
+        assertEquals(listOf(LockReason.Minimized), scheduled)
     }
 
     @Test
     fun `losing focus schedules a lock for the focus loss`() {
-        apply(WindowPresence(isVisible = true, isMinimised = false, isFocused = false, shownBy = ShowSource.USER))
+        apply(WindowPresence(isVisible = true, isMinimized = false, isFocused = false, shownBy = ShowSource.USER))
 
         assertEquals(listOf(LockReason.FocusLost), scheduled)
     }
@@ -214,7 +214,7 @@ class RelockTriggersTest {
         apply(
             WindowPresence(
                 isVisible = true,
-                isMinimised = false,
+                isMinimized = false,
                 isFocused = false,
                 shownBy = ShowSource.USER,
                 holdsModal = true,
@@ -226,14 +226,14 @@ class RelockTriggersTest {
 
     @Test
     fun `a window that comes back without focus cancels the scheduled lock`() {
-        apply(WindowPresence(isVisible = true, isMinimised = false, isFocused = false, shownBy = ShowSource.USER))
+        apply(WindowPresence(isVisible = true, isMinimized = false, isFocused = false, shownBy = ShowSource.USER))
 
         assertEquals(1, cancels)
     }
 
     @Test
     fun `a window that comes back without focus cancels before it reports the focus loss`() {
-        apply(WindowPresence(isVisible = true, isMinimised = false, isFocused = false, shownBy = ShowSource.USER))
+        apply(WindowPresence(isVisible = true, isMinimized = false, isFocused = false, shownBy = ShowSource.USER))
 
         assertEquals(listOf("cancel", "schedule FocusLost"), calls)
     }
@@ -243,7 +243,7 @@ class RelockTriggersTest {
         apply(
             WindowPresence(
                 isVisible = true,
-                isMinimised = false,
+                isMinimized = false,
                 isFocused = false,
                 shownBy = ShowSource.SHOW_REQUEST,
             ),
@@ -254,14 +254,14 @@ class RelockTriggersTest {
 
     @Test
     fun `the user coming back to the window cancels the scheduled lock`() {
-        apply(WindowPresence(isVisible = true, isMinimised = false, isFocused = true, shownBy = ShowSource.USER))
+        apply(WindowPresence(isVisible = true, isMinimized = false, isFocused = true, shownBy = ShowSource.USER))
 
         assertEquals(1, cancels)
     }
 
     @Test
     fun `the user coming back to the window schedules nothing`() {
-        apply(WindowPresence(isVisible = true, isMinimised = false, isFocused = true, shownBy = ShowSource.USER))
+        apply(WindowPresence(isVisible = true, isMinimized = false, isFocused = true, shownBy = ShowSource.USER))
 
         assertEquals(emptyList(), scheduled)
     }
@@ -269,7 +269,7 @@ class RelockTriggersTest {
     @Test
     fun `a window raised by a show request leaves the scheduled lock standing`() {
         apply(
-            WindowPresence(isVisible = true, isMinimised = false, isFocused = true, shownBy = ShowSource.SHOW_REQUEST),
+            WindowPresence(isVisible = true, isMinimized = false, isFocused = true, shownBy = ShowSource.SHOW_REQUEST),
         )
 
         assertEquals(0, cancels)
@@ -278,7 +278,7 @@ class RelockTriggersTest {
     @Test
     fun `a window raised by a show request schedules nothing of its own`() {
         apply(
-            WindowPresence(isVisible = true, isMinimised = false, isFocused = true, shownBy = ShowSource.SHOW_REQUEST),
+            WindowPresence(isVisible = true, isMinimized = false, isFocused = true, shownBy = ShowSource.SHOW_REQUEST),
         )
 
         assertEquals(emptyList(), scheduled)
@@ -289,7 +289,7 @@ class RelockTriggersTest {
         apply(
             WindowPresence(
                 isVisible = false,
-                isMinimised = false,
+                isMinimized = false,
                 isFocused = false,
                 shownBy = ShowSource.SHOW_REQUEST,
             ),

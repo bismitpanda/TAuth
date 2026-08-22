@@ -36,7 +36,7 @@ import kotlin.test.assertFalse
 // defaults rather than what it was given.
 private val STORED_POLICY = SecurityPolicy(
     idleTimeoutMinutes = 1,
-    lockOnMinimise = false,
+    lockOnMinimize = false,
     lockOnFocusLoss = true,
     hideGraceSeconds = 30,
     clipboardClearSeconds = 10,
@@ -46,8 +46,8 @@ private val STORED_POLICY = SecurityPolicy(
 private val STORED_PREFERENCES = Preferences(
     theme = Theme.DARK,
     sortOrder = SortOrder.RECENTLY_ADDED,
-    startMinimised = true,
-    minimiseToTray = false,
+    startMinimized = true,
+    minimizeToTray = false,
     startAtLogin = true,
 )
 
@@ -57,7 +57,7 @@ private const val SHORT_PASSWORD = "sixchr"
 
 private const val VAULT_LOCATION = "/tmp/tauth-test/vault.tauth"
 private const val VERSION = "9.9.9-test"
-private const val LICENCE = "The licence this build carries"
+private const val LICENSE = "The license this build carries"
 
 // The distinction the screen states once, written out rather than read from the screen's own
 // constant, so wording that stops making it fails this.
@@ -79,8 +79,6 @@ private const val EXPORT = "Export an encrypted copy"
 private const val BACK = "Back to accounts"
 private const val DARK = "Dark"
 private const val LIGHT = "Light"
-private const val RECENTLY_ADDED = "Newest first"
-private const val BY_ISSUER = "Issuer A–Z"
 
 class SettingsScreenTest {
     @get:Rule
@@ -143,7 +141,7 @@ class SettingsScreenTest {
             assertEquals(
                 SecurityPolicy(
                     idleTimeoutMinutes = 15,
-                    lockOnMinimise = false,
+                    lockOnMinimize = false,
                     lockOnFocusLoss = true,
                     hideGraceSeconds = 30,
                     clipboardClearSeconds = 10,
@@ -154,23 +152,23 @@ class SettingsScreenTest {
     }
 
     @Test
-    fun `the minimise lock it opens with is the one the policy carries`() {
+    fun `the minimize lock it opens with is the one the policy carries`() {
         show()
 
-        compose.onNodeWithTag(MINIMISE_LOCK_TAG).assertIsOff()
+        compose.onNodeWithTag(MINIMIZE_LOCK_TAG).assertIsOff()
     }
 
     @Test
-    fun `a switched minimise lock is handed over with the rest of the policy unmoved`() {
+    fun `a switched minimize lock is handed over with the rest of the policy unmoved`() {
         show()
 
-        toggle(MINIMISE_LOCK_TAG)
+        toggle(MINIMIZE_LOCK_TAG)
 
         compose.runOnIdle {
             assertEquals(
                 SecurityPolicy(
                     idleTimeoutMinutes = 1,
-                    lockOnMinimise = true,
+                    lockOnMinimize = true,
                     lockOnFocusLoss = true,
                     hideGraceSeconds = 30,
                     clipboardClearSeconds = 10,
@@ -197,7 +195,7 @@ class SettingsScreenTest {
             assertEquals(
                 SecurityPolicy(
                     idleTimeoutMinutes = 1,
-                    lockOnMinimise = false,
+                    lockOnMinimize = false,
                     lockOnFocusLoss = true,
                     hideGraceSeconds = 120,
                     clipboardClearSeconds = 10,
@@ -224,7 +222,7 @@ class SettingsScreenTest {
             assertEquals(
                 SecurityPolicy(
                     idleTimeoutMinutes = 1,
-                    lockOnMinimise = false,
+                    lockOnMinimize = false,
                     lockOnFocusLoss = false,
                     hideGraceSeconds = 30,
                     clipboardClearSeconds = 10,
@@ -251,7 +249,7 @@ class SettingsScreenTest {
             assertEquals(
                 SecurityPolicy(
                     idleTimeoutMinutes = 1,
-                    lockOnMinimise = false,
+                    lockOnMinimize = false,
                     lockOnFocusLoss = true,
                     hideGraceSeconds = 30,
                     clipboardClearSeconds = 60,
@@ -502,10 +500,10 @@ class SettingsScreenTest {
     }
 
     @Test
-    fun `the licence is the one the shell reports`() {
+    fun `the license is the one the shell reports`() {
         show()
 
-        compose.onNodeWithText("$LICENCE_LABEL: $LICENCE").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("$LICENSE_LABEL: $LICENSE").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -750,7 +748,7 @@ class SettingsScreenTest {
     private fun shellSettings(canConfigureTray: Boolean, canStartAtLogin: Boolean = true) = ShellSettings(
         vaultLocation = VAULT_LOCATION,
         version = VERSION,
-        licence = LICENCE,
+        license = LICENSE,
         canConfigureTray = canConfigureTray,
         canStartAtLogin = canStartAtLogin,
         onReveal = { reveals++ },

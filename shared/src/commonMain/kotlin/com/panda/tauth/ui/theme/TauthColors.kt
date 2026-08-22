@@ -5,7 +5,7 @@ import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
-// Colours the Material scheme has no role for. A screen reads them through LocalTauthColors so a
+// Colors the Material scheme has no role for. A screen reads them through LocalTauthColors so a
 // light and a dark value exist for each, as they do for every Material role.
 @Immutable
 data class TauthColors(
@@ -25,6 +25,6 @@ val DarkTauthColors: TauthColors = TauthColors(
 )
 
 // No default set: a composable drawing outside TauthTheme has no Material scheme to sit these
-// colours beside, and a light default would render dark-on-dark in the dark theme without a word.
+// colors beside, and a light default would render dark-on-dark in the dark theme without a word.
 val LocalTauthColors: ProvidableCompositionLocal<TauthColors> =
     staticCompositionLocalOf { error("TauthColors are provided by TauthTheme") }

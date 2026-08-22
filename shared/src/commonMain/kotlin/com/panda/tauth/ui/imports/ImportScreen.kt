@@ -52,9 +52,9 @@ internal fun importSummary(rows: List<ImportRow>, addAnyway: Set<Int>): String {
     val duplicates = accounts.count { it.isDuplicate }
     val refused = rows.size - accounts.size
 
-    val added = when {
-        accepted == 0 -> "No accounts will be added"
-        accepted == accounts.size -> "$accepted ${if (accepted == 1) "account" else "accounts"} will be added"
+    val added = when (accepted) {
+        0 -> "No accounts will be added"
+        accounts.size -> "$accepted ${if (accepted == 1) "account" else "accounts"} will be added"
         else -> "$accepted of ${accounts.size} accounts will be added"
     }
     val notes = buildList {
@@ -172,7 +172,7 @@ private fun RowEntry(
     }
 }
 
-// A duplicate is drawn back rather than labelled: the summary counts them once, and a note on every
+// A duplicate is drawn back rather than labeled: the summary counts them once, and a note on every
 // row says the same thing as many times as the file holds copies.
 @Composable
 private fun RowScope.Account(row: ImportRow.Account, isAddedAnyway: Boolean, isEnabled: Boolean, onToggle: () -> Unit) {

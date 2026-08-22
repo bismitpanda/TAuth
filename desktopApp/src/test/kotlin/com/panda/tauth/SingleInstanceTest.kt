@@ -24,7 +24,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 // The timeout the cases run the handshake under. What a wait on it ends is a peer's silence rather
-// than a slow machine: a peer that never writes has nothing to send however long it is given.
+// than a slow machine: a silent peer has nothing to send however long it is given.
 private const val HANDSHAKE_MILLIS = 250
 
 // Longer than the handshake above, so a read that ends on this side is the case failing rather than
@@ -73,7 +73,7 @@ private object LockRefusedByFilesystem : InstanceLockFile {
 private const val NEXT_LAUNCH_PORT = "40000"
 
 // The next launch, taking the lock the instant this one gives it up and recording its own port the
-// way any primary does. What happens to that file afterwards is the case's subject.
+// way any primary does. What happens to that file afterward is the case's subject.
 private class NextLaunchOnRelease(private val portFile: Path, private val delegate: InstanceLockFile) :
     InstanceLockFile {
     override fun tryHold(path: Path): HeldInstanceLock? {
@@ -420,20 +420,20 @@ class SingleInstanceTest {
     }
 
     @Test
-    fun `an unrecognised command is answered with nothing`() {
+    fun `an unrecognized command is answered with nothing`() {
         claimPrimary()
         assertNull(exchange(listeningPort(), "QUIT"))
     }
 
     @Test
-    fun `an unrecognised command raises no show request`() {
+    fun `an unrecognized command raises no show request`() {
         val primary = claimPrimary()
         exchange(listeningPort(), "QUIT")
         assertEquals(0L, primary.showRequests.value)
     }
 
     @Test
-    fun `an unrecognised command leaves the listener serving`() {
+    fun `an unrecognized command leaves the listener serving`() {
         val primary = claimPrimary()
         exchange(listeningPort(), "QUIT")
         exchange(listeningPort(), "SHOW")

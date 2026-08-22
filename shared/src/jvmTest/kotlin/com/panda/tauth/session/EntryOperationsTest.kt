@@ -55,7 +55,7 @@ private const val EIGHT_DIGITS = 8
 // SHA-1 default, so an assumed algorithm misses the published value.
 private val SHA256_SECRET = Base32.encode("12345678901234567890123456789012".encodeToByteArray())
 
-// Appendix B's T for 1111111109 seconds at a 30-second period, which is the counter an hotp entry
+// Appendix B's T for 1111111109 seconds at a 30-second period, which is the counter a hotp entry
 // needs to stand where that vector stands.
 private const val SHA256_COUNTER = 37037036uL
 

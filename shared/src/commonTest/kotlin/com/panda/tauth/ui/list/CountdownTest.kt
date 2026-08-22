@@ -13,7 +13,7 @@ private const val EXPIRING_BOUNDARY = 5
 
 class CountdownTest {
     @Test
-    fun `a code with a whole period left runs in the running colour`() {
+    fun `a code with a whole period left runs in the running color`() {
         assertEquals(LightTauthColors.countdown, countdownColor(30, LightTauthColors))
     }
 
@@ -76,15 +76,15 @@ class CountdownTest {
         assertEquals(0f, countdownFraction(secondsRemaining = 15, period = 0))
     }
 
-    // The colours are read from whichever set the theme provides, so the dark set has to reach the
+    // The colors are read from whichever set the theme provides, so the dark set has to reach the
     // ring rather than the light one being baked in.
     @Test
-    fun `the dark set supplies its own expiring colour`() {
+    fun `the dark set supplies its own expiring color`() {
         assertEquals(DarkTauthColors.countdownExpiring, countdownColor(EXPIRING_BOUNDARY, DarkTauthColors))
     }
 
     @Test
-    fun `the dark set supplies its own running colour`() {
+    fun `the dark set supplies its own running color`() {
         assertEquals(DarkTauthColors.countdown, countdownColor(30, DarkTauthColors))
     }
 }

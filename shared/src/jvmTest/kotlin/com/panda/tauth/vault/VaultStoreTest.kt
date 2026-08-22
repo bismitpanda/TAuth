@@ -425,10 +425,10 @@ class VaultStoreTest {
 
     @Test
     fun `a write refused for a linked directory's mode does not blame the filesystem`() {
-        // The target sits on the same mount as every other file here, which honours a chmod; what
+        // The target sits on the same mount as every other file here, which honors a chmod; what
         // the mode survived is the link, through which no chmod is attempted.
         if (!linkedOntoTraversableDirectory()) return
-        assertFalse("does not honour permissions" in failedWriteMessage())
+        assertFalse("does not honor permissions" in failedWriteMessage())
     }
 
     @Test
@@ -450,7 +450,7 @@ class VaultStoreTest {
     fun `the data root above the vault directory keeps the mode a plain directory is created with`() {
         if (!posixOrSkip()) return
         val plain = Files.getPosixFilePermissions(Files.createDirectory(directory.resolve("plain")))
-        // A umask that makes a plain directory owner-only makes it the mode a data root would take
+        // An umask that makes a plain directory owner-only makes it the mode a data root would take
         // from a creation attribute as well, and there is then nothing to tell the two apart.
         if (plain == DIRECTORY_OWNER_ONLY_MODE) {
             println("skipping: this umask creates a plain directory $plain, the vault directory's own mode")
@@ -524,7 +524,7 @@ class VaultStoreTest {
 
     @Test
     fun `the file left by concurrent writes is one whole payload, not a mixture`() {
-        // What "serialise" has to mean observably: no interleaving, so the survivor is byte-for-byte
+        // What "serialize" has to mean observably: no interleaving, so the survivor is byte-for-byte
         // one of the payloads written rather than a blend of two.
         val payloads = concurrentWrites().map { it.first }
         val survivor = checkNotNull(store.read().valueOrNull)

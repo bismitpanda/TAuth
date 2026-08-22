@@ -37,14 +37,14 @@ class EntryUriTest {
     }
 
     @Test
-    fun `an hotp entry carries its counter`() {
+    fun `a hotp entry carries its counter`() {
         assertEquals(HOTP_COUNTED, hotpEntry(counter = 41uL).toOtpAuthUri().build())
     }
 
     // The counter is an unsigned 64-bit value throughout, and one past the signed ceiling is where a
     // conversion to Long would report a negative number.
     @Test
-    fun `an hotp counter at the unsigned maximum survives the build`() {
+    fun `a hotp counter at the unsigned maximum survives the build`() {
         assertEquals(HOTP_MAXIMUM, hotpEntry(counter = ULong.MAX_VALUE).toOtpAuthUri().build())
     }
 

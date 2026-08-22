@@ -60,9 +60,9 @@ data class Preferences(
     val theme: Theme = Theme.SYSTEM,
     val sortOrder: SortOrder = SortOrder.MANUAL,
     val sortDescending: Boolean = false,
-    val startMinimised: Boolean = false,
+    val startMinimized: Boolean = false,
     val startAtLogin: Boolean = false,
-    val minimiseToTray: Boolean = true,
+    val minimizeToTray: Boolean = true,
     // This is the only place a geometry is decoded from the file, so clamping it here covers every
     // untrusted value the model can receive.
     @Serializable(with = WindowGeometrySerializer::class)
@@ -94,7 +94,7 @@ internal object WindowGeometrySerializer : KSerializer<WindowGeometry> {
 // An authenticator that seizes the screen at every login is one the user turns off again, so taking
 // the setting on takes the window out of the way with it. Turning it off returns no choice.
 fun Preferences.withStartAtLogin(isEnabled: Boolean): Preferences =
-    copy(startAtLogin = isEnabled, startMinimised = if (isEnabled) true else startMinimised)
+    copy(startAtLogin = isEnabled, startMinimized = isEnabled || startMinimized)
 
 fun WindowGeometry.clamped(): WindowGeometry {
     val coordinates = -WindowGeometry.MAX_COORDINATE..WindowGeometry.MAX_COORDINATE

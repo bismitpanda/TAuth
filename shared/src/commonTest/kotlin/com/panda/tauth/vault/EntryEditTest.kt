@@ -145,7 +145,7 @@ class EntryEditTest {
     fun `a refused edit states the rule rather than the value`() {
         val outcome = totpEntry().edited(RENAME.copy(digits = 9))
 
-        assertEquals("digits must be 6..8", (outcome.errorOrNull as? VaultError.InvalidEntry)?.detail)
+        assertEquals("digits must be 6..8", outcome.errorOrNull?.detail)
     }
 
     @Test

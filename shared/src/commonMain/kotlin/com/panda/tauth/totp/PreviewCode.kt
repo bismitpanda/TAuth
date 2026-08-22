@@ -2,7 +2,7 @@ package com.panda.tauth.totp
 
 import com.panda.tauth.valueOrNull
 
-// Computed without storing anything, so confirming an hotp account does not advance the counter the
+// Computed without storing anything, so confirming a hotp account does not advance the counter the
 // server expects. The key decoded from the base32 text is zeroed before this returns.
 fun previewCode(uri: OtpAuthUri, epochSeconds: Long): String? {
     val key = Base32.decode(uri.secret).valueOrNull ?: return null

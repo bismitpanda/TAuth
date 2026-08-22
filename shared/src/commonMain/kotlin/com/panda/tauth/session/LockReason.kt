@@ -6,7 +6,7 @@ import com.panda.tauth.settings.SecurityPolicy
 enum class LockReason {
     Manual,
     HiddenToTray,
-    Minimised,
+    Minimized,
     FocusLost,
     Idle,
     Exit,
@@ -16,7 +16,7 @@ enum class LockReason {
 // policy in the encrypted body, where an edit is detected rather than obeyed.
 internal fun LockReason.isArmedBy(policy: SecurityPolicy): Boolean = when (this) {
     LockReason.Manual, LockReason.HiddenToTray, LockReason.Exit -> true
-    LockReason.Minimised -> policy.lockOnMinimise
+    LockReason.Minimized -> policy.lockOnMinimize
     LockReason.FocusLost -> policy.lockOnFocusLoss
     LockReason.Idle -> policy.idleTimeoutMinutes > 0
 }
@@ -28,7 +28,7 @@ const val FOCUS_SETTLE_SECONDS = 1
 // The grace period covers the window leaving the screen, the one trigger the user reverses by
 // bringing it back. An idle timeout has already elapsed by the time it reports.
 internal fun LockReason.graceSeconds(policy: SecurityPolicy): Int = when (this) {
-    LockReason.HiddenToTray, LockReason.Minimised -> policy.hideGraceSeconds
+    LockReason.HiddenToTray, LockReason.Minimized -> policy.hideGraceSeconds
     LockReason.FocusLost -> FOCUS_SETTLE_SECONDS
     LockReason.Manual, LockReason.Idle, LockReason.Exit -> 0
 }

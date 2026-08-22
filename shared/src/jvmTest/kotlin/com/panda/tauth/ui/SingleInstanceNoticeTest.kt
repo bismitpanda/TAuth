@@ -7,7 +7,6 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import com.panda.tauth.Outcome
 import com.panda.tauth.session.CodeTicker
-import com.panda.tauth.session.SessionClipboard
 import com.panda.tauth.session.VaultSession
 import com.panda.tauth.ui.theme.TauthTheme
 import com.panda.tauth.vault.VaultError
@@ -73,7 +72,7 @@ class SingleInstanceNoticeTest {
     }
 
     private fun show(isSingleInstanceUnprotected: Boolean) {
-        val session = VaultSession(NoVaultFile, SessionClipboard {}, scope)
+        val session = VaultSession(NoVaultFile, {}, scope)
         val preferences = RecordingPreferences().state
         compose.setContent {
             TauthTheme {

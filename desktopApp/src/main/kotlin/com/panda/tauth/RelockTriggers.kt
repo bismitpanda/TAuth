@@ -14,7 +14,7 @@ enum class ShowSource {
 // long its grace runs are the session's to answer from the policy in the encrypted body.
 data class WindowPresence(
     val isVisible: Boolean,
-    val isMinimised: Boolean,
+    val isMinimized: Boolean,
     val isFocused: Boolean,
     val shownBy: ShowSource,
     val holdsModal: Boolean = false,
@@ -30,12 +30,12 @@ sealed interface WindowReport {
     data object Raised : WindowReport
 }
 
-// A hidden window and a minimised one are both unfocused, so the state that took the window off the
+// A hidden window and a minimized one are both unfocused, so the state that took the window off the
 // screen names the reason rather than the focus loss that comes with it.
 fun windowReport(presence: WindowPresence): WindowReport = when {
     !presence.isVisible -> WindowReport.Trigger(LockReason.HiddenToTray)
 
-    presence.isMinimised -> WindowReport.Trigger(LockReason.Minimised)
+    presence.isMinimized -> WindowReport.Trigger(LockReason.Minimized)
 
     presence.shownBy == ShowSource.SHOW_REQUEST -> WindowReport.Raised
 

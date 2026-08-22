@@ -6,10 +6,10 @@ import kotlin.test.assertEquals
 
 // Three booleans, so every configuration is a case below rather than a sample. Each expected
 // lifecycle is written out member by member rather than through the expression that produced it.
-private fun lifecycleOf(isTraySupported: Boolean, minimiseToTray: Boolean, startMinimised: Boolean): WindowLifecycle =
+private fun lifecycleOf(isTraySupported: Boolean, minimizeToTray: Boolean, startMinimized: Boolean): WindowLifecycle =
     WindowLifecycle.of(
         isTraySupported,
-        Preferences(minimiseToTray = minimiseToTray, startMinimised = startMinimised),
+        Preferences(minimizeToTray = minimizeToTray, startMinimized = startMinimized),
     )
 
 class WindowLifecycleTest {
@@ -23,7 +23,7 @@ class WindowLifecycleTest {
                 isTrayShown = true,
                 canConfigureTray = true,
             ),
-            lifecycleOf(isTraySupported = true, minimiseToTray = true, startMinimised = false),
+            lifecycleOf(isTraySupported = true, minimizeToTray = true, startMinimized = false),
         )
     }
 
@@ -36,7 +36,7 @@ class WindowLifecycleTest {
                 isTrayShown = true,
                 canConfigureTray = true,
             ),
-            lifecycleOf(isTraySupported = true, minimiseToTray = true, startMinimised = true),
+            lifecycleOf(isTraySupported = true, minimizeToTray = true, startMinimized = true),
         )
     }
 
@@ -49,7 +49,7 @@ class WindowLifecycleTest {
                 isTrayShown = false,
                 canConfigureTray = true,
             ),
-            lifecycleOf(isTraySupported = true, minimiseToTray = false, startMinimised = false),
+            lifecycleOf(isTraySupported = true, minimizeToTray = false, startMinimized = false),
         )
     }
 
@@ -62,7 +62,7 @@ class WindowLifecycleTest {
                 isTrayShown = false,
                 canConfigureTray = true,
             ),
-            lifecycleOf(isTraySupported = true, minimiseToTray = false, startMinimised = true),
+            lifecycleOf(isTraySupported = true, minimizeToTray = false, startMinimized = true),
         )
     }
 
@@ -75,7 +75,7 @@ class WindowLifecycleTest {
                 isTrayShown = false,
                 canConfigureTray = false,
             ),
-            lifecycleOf(isTraySupported = false, minimiseToTray = true, startMinimised = false),
+            lifecycleOf(isTraySupported = false, minimizeToTray = true, startMinimized = false),
         )
     }
 
@@ -88,7 +88,7 @@ class WindowLifecycleTest {
                 isTrayShown = false,
                 canConfigureTray = false,
             ),
-            lifecycleOf(isTraySupported = false, minimiseToTray = true, startMinimised = true),
+            lifecycleOf(isTraySupported = false, minimizeToTray = true, startMinimized = true),
         )
     }
 
@@ -101,7 +101,7 @@ class WindowLifecycleTest {
                 isTrayShown = false,
                 canConfigureTray = false,
             ),
-            lifecycleOf(isTraySupported = false, minimiseToTray = false, startMinimised = false),
+            lifecycleOf(isTraySupported = false, minimizeToTray = false, startMinimized = false),
         )
     }
 
@@ -114,7 +114,7 @@ class WindowLifecycleTest {
                 isTrayShown = false,
                 canConfigureTray = false,
             ),
-            lifecycleOf(isTraySupported = false, minimiseToTray = false, startMinimised = true),
+            lifecycleOf(isTraySupported = false, minimizeToTray = false, startMinimized = true),
         )
     }
 }

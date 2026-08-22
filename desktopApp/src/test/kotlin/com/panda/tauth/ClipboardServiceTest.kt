@@ -341,7 +341,7 @@ class ClipboardServiceTest {
     }
 
     @Test
-    fun `cancelling the owning scope stops a pending clear`() {
+    fun `canceling the owning scope stops a pending clear`() {
         service.copy(CODE, 20)
 
         scope.cancel()
@@ -367,7 +367,7 @@ class ClipboardServiceTest {
     }
 
     @Test
-    fun `a copy needing no clear still succeeds after the scope is cancelled`() {
+    fun `a copy needing no clear still succeeds after the scope is canceled`() {
         scope.cancel()
 
         assertEquals(Outcome.Success(Unit), service.copy(CODE, 0))

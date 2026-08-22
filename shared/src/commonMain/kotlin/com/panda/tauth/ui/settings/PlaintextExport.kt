@@ -28,10 +28,10 @@ internal const val PLAINTEXT_TITLE = "Export accounts unencrypted"
 internal const val PLAINTEXT_WARNING =
     "The file this writes holds every secret in the vault in plain text. Anything that can read it " +
         "can generate your codes, and no password protects it once it has left TAuth. It is created " +
-        "readable by you alone, and where it is copied to afterwards is not something TAuth can see."
+        "readable by you alone, and where it is copied to afterward is not something TAuth can see."
 
 internal const val PLAINTEXT_COUNTER_NOTE =
-    "Counter-based accounts are written at the counter they stand at. Codes generated here afterwards " +
+    "Counter-based accounts are written at the counter they stand at. Codes generated here afterward " +
         "move this vault on and leave the file behind."
 
 internal const val PLAINTEXT_FORMAT_LABEL = "Format"
@@ -41,7 +41,6 @@ internal const val PLAINTEXT_CONTINUE_LABEL = "Continue"
 internal const val PLAINTEXT_CANCEL_LABEL = "Cancel"
 
 internal const val PLAINTEXT_WARNING_TAG = "plaintext-warning"
-internal const val PLAINTEXT_PROBLEM_TAG = "plaintext-problem"
 
 internal fun plaintextStatement(count: Int): String =
     "The complete secret for every one of the $count accounts in this vault is about to be written to " +

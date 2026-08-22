@@ -41,7 +41,7 @@ private class FakeSettle : SettleDelay {
         gates[index].complete(Unit)
     }
 
-    // A cancelled wait is a gate nothing awaits, so completing every one of them ends only the
+    // A canceled wait is a gate nothing awaits, so completing every one of them ends only the
     // waits still standing.
     fun finishAll() {
         gates.forEach { it.complete(Unit) }
@@ -152,7 +152,7 @@ class WindowGeometryRecorderTest {
     // The shell hands recordedGeometry the geometry the file held at launch on every sample, so a
     // state that records nothing must not put that constant back over where the window went.
     @Test
-    fun `a minimised sample after a move leaves the moved geometry standing`() {
+    fun `a minimized sample after a move leaves the moved geometry standing`() {
         recorder.sample(recordedGeometry(stateOf(MOVED), OPENED))
         settle.finish(0)
 
@@ -163,7 +163,7 @@ class WindowGeometryRecorderTest {
     }
 
     @Test
-    fun `a minimise before the wait elapses still writes the move`() {
+    fun `a minimize before the wait elapses still writes the move`() {
         recorder.sample(recordedGeometry(stateOf(MOVED), OPENED))
 
         recorder.sample(recordedGeometry(stateOf(MOVED, isMinimized = true), OPENED))
@@ -186,7 +186,7 @@ class WindowGeometryRecorderTest {
     }
 
     @Test
-    fun `cancelling the owning scope stops a pending write`() {
+    fun `canceling the owning scope stops a pending write`() {
         recorder.sample(MOVED)
 
         scope.cancel()

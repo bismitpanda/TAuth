@@ -32,7 +32,6 @@ import com.panda.tauth.ui.components.DISCLOSURE_PASSWORD_TAG
 import com.panda.tauth.ui.components.DISCLOSURE_STATEMENT_TAG
 import com.panda.tauth.ui.hotpRow
 import com.panda.tauth.ui.qr.QR_SAVE_PROBLEM_TAG
-import com.panda.tauth.ui.qr.QrEncoding
 import com.panda.tauth.ui.qr.QrSymbol
 import com.panda.tauth.ui.settings.ExportError
 import com.panda.tauth.ui.settings.FileWriteError
@@ -407,7 +406,7 @@ class AccountListScreenTest {
     }
 
     @Test
-    fun `an hotp row shows no code before the control is pressed`() {
+    fun `a hotp row shows no code before the control is pressed`() {
         show()
 
         compose.onNodeWithText(HOTP_GROUPED).assertDoesNotExist()
@@ -431,10 +430,10 @@ class AccountListScreenTest {
         compose.onNodeWithContentDescription(GENERATE).assertIsNotEnabled()
     }
 
-    // The ticker computes no hotp code, so a map carrying one for an hotp id is a map the screen must
+    // The ticker computes no hotp code, so a map carrying one for a hotp id is a map the screen must
     // not read: the row draws the code it generated and the copy has to take the same one.
     @Test
-    fun `an hotp row copies the code it generated rather than one supplied for its id`() {
+    fun `a hotp row copies the code it generated rather than one supplied for its id`() {
         show(codes = mapOf(TOTP.id to TotpCode(TOTP_CODE, 30, 30), HOTP.id to TotpCode(TOTP_CODE, 30, 30)))
 
         compose.onNodeWithContentDescription(GENERATE).performClick()
@@ -932,7 +931,7 @@ class AccountListScreenTest {
                     isSortDescending = isSortDescending,
                     clipboardClearSeconds = clearSeconds,
                     clipboard = clipboard,
-                    qrEncoding = QrEncoding { text ->
+                    qrEncoding = { text ->
                         encodedText = text
                         FAKE_SYMBOL
                     },

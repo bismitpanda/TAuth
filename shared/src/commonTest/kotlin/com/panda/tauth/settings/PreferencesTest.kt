@@ -29,8 +29,8 @@ class PreferencesTest {
     }
 
     @Test
-    fun `starting minimised defaults to off`() {
-        assertFalse(Preferences().startMinimised)
+    fun `starting minimized defaults to off`() {
+        assertFalse(Preferences().startMinimized)
     }
 
     @Test
@@ -40,7 +40,7 @@ class PreferencesTest {
 
     @Test
     fun `starting at login takes the window out of the way with it`() {
-        assertTrue(Preferences().withStartAtLogin(true).startMinimised)
+        assertTrue(Preferences().withStartAtLogin(true).startMinimized)
     }
 
     @Test
@@ -50,28 +50,28 @@ class PreferencesTest {
 
     @Test
     fun `no longer starting at login leaves the window choice where it stood`() {
-        val stored = Preferences(startAtLogin = true, startMinimised = true)
+        val stored = Preferences(startAtLogin = true, startMinimized = true)
 
-        assertTrue(stored.withStartAtLogin(false).startMinimised)
+        assertTrue(stored.withStartAtLogin(false).startMinimized)
     }
 
     @Test
     fun `no longer starting at login clears the setting`() {
-        val stored = Preferences(startAtLogin = true, startMinimised = true)
+        val stored = Preferences(startAtLogin = true, startMinimized = true)
 
         assertFalse(stored.withStartAtLogin(false).startAtLogin)
     }
 
     @Test
     fun `no longer starting at login leaves a window that was never out of the way alone`() {
-        val stored = Preferences(startAtLogin = true, startMinimised = false)
+        val stored = Preferences(startAtLogin = true, startMinimized = false)
 
-        assertFalse(stored.withStartAtLogin(false).startMinimised)
+        assertFalse(stored.withStartAtLogin(false).startMinimized)
     }
 
     @Test
-    fun `minimising to the tray defaults to on`() {
-        assertTrue(Preferences().minimiseToTray)
+    fun `minimizing to the tray defaults to on`() {
+        assertTrue(Preferences().minimizeToTray)
     }
 
     @Test
@@ -179,9 +179,9 @@ class PreferencesTest {
         val preferences = Preferences(
             theme = Theme.DARK,
             sortOrder = SortOrder.RECENTLY_ADDED,
-            startMinimised = true,
+            startMinimized = true,
             startAtLogin = true,
-            minimiseToTray = false,
+            minimizeToTray = false,
             window = WindowGeometry(width = 640, height = 800, x = 12, y = -34),
         )
         assertEquals(preferences, read(write(preferences)))
@@ -195,9 +195,9 @@ class PreferencesTest {
                 "theme",
                 "sortOrder",
                 "sortDescending",
-                "startMinimised",
+                "startMinimized",
                 "startAtLogin",
-                "minimiseToTray",
+                "minimizeToTray",
                 "window",
             ),
             keys,
@@ -227,7 +227,7 @@ class PreferencesTest {
     fun `a locking setting in the file changes nothing`() {
         // Locking is governed inside the encrypted body. A plaintext copy would be a file an
         // attacker rewrites to switch the control off.
-        val json = """{"idleTimeoutMinutes":0,"lockOnMinimise":false,"clipboardClearSeconds":0}"""
+        val json = """{"idleTimeoutMinutes":0,"lockOnMinimize":false,"clipboardClearSeconds":0}"""
         assertEquals(Preferences(), read(json))
     }
 

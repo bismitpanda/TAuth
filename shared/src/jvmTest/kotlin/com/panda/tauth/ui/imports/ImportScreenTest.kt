@@ -155,7 +155,7 @@ class ImportScreenTest {
     }
 
     @Test
-    fun `cancelling reports the dismissal`() {
+    fun `canceling reports the dismissal`() {
         show()
 
         compose.onNodeWithText(CANCEL).performClick()

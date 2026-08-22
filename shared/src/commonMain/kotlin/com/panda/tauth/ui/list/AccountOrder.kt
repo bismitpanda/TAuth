@@ -5,8 +5,8 @@ import com.panda.tauth.settings.SortOrder
 
 fun matchesQuery(entry: UnlockedEntry, query: String): Boolean {
     val trimmed = query.trim()
-    if (trimmed.isEmpty()) return true
-    return entry.accountName.contains(trimmed, ignoreCase = true) ||
+    return trimmed.isEmpty() ||
+        entry.accountName.contains(trimmed, ignoreCase = true) ||
         entry.issuer?.contains(trimmed, ignoreCase = true) == true
 }
 

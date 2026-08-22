@@ -451,42 +451,42 @@ class VaultCodecTest {
 
     @Test
     fun `the KEK is zeroed once the caller is done with it`() {
-        var lent = ByteArray(0)
-        VaultCodec.withKek(password(), ByteArray(ARGON2_SALT_BYTES) { 0x07 }) { kek -> lent = kek }
-        assertContentEquals(ByteArray(AEAD_KEY_BYTES), lent)
+        val lent = mutableListOf<ByteArray>()
+        VaultCodec.withKek(password(), ByteArray(ARGON2_SALT_BYTES) { 0x07 }) { kek -> lent += kek }
+        assertContentEquals(ByteArray(AEAD_KEY_BYTES), lent.single())
     }
 
     @Test
     fun `the KEK is zeroed when the block throws`() {
         // A throw out of the block leaves nothing else holding the KEK, so the zeroing has to happen
         // on the way out rather than after the block returns.
-        var lent = ByteArray(0)
+        val lent = mutableListOf<ByteArray>()
         runCatching {
             VaultCodec.withKek(password(), ByteArray(ARGON2_SALT_BYTES) { 0x07 }) { kek ->
-                lent = kek
+                lent += kek
                 throw IllegalStateException("the unwrap threw")
             }
         }
-        assertContentEquals(ByteArray(AEAD_KEY_BYTES), lent)
+        assertContentEquals(ByteArray(AEAD_KEY_BYTES), lent.single())
     }
 
     @Test
     fun `a fresh DEK is zeroed once the caller is done with it`() {
-        var lent = ByteArray(0)
-        VaultCodec.withFreshDek { dek -> lent = dek }
-        assertContentEquals(ByteArray(AEAD_KEY_BYTES), lent)
+        val lent = mutableListOf<ByteArray>()
+        VaultCodec.withFreshDek { dek -> lent += dek }
+        assertContentEquals(ByteArray(AEAD_KEY_BYTES), lent.single())
     }
 
     @Test
     fun `a fresh DEK is zeroed when the block throws`() {
-        var lent = ByteArray(0)
+        val lent = mutableListOf<ByteArray>()
         runCatching {
             VaultCodec.withFreshDek { dek ->
-                lent = dek
+                lent += dek
                 throw IllegalStateException("the write threw")
             }
         }
-        assertContentEquals(ByteArray(AEAD_KEY_BYTES), lent)
+        assertContentEquals(ByteArray(AEAD_KEY_BYTES), lent.single())
     }
 
     @Test
@@ -735,7 +735,7 @@ private fun openTampered(field: String, value: String) = VaultCodec.open(tampere
 private const val LEAK_RUN = 16
 
 private fun carriesRunOf(text: String, secret: String): Boolean {
-    // A shorter value has no run to look for, and the search would answer no to everything.
+    // A shorter value has no run to look for, and the search would then clear everything.
     check(secret.length >= LEAK_RUN) { "a secret of $LEAK_RUN characters or more is needed to see a leak" }
     return (0..secret.length - LEAK_RUN).any { start -> secret.substring(start, start + LEAK_RUN) in text }
 }

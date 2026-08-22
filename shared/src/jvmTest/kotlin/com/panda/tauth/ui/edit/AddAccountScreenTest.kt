@@ -121,7 +121,7 @@ class AddAccountScreenTest {
         compose.onNodeWithText("Starting counter 0").assertIsDisplayed()
     }
 
-    // Nothing is stored to work this out, so confirming an hotp account does not spend the counter
+    // Nothing is stored to work this out, so confirming a hotp account does not spend the counter
     // value the server is still waiting for.
     @Test
     fun `a pasted hotp URI previews the code its starting counter produces`() {
@@ -171,7 +171,7 @@ class AddAccountScreenTest {
     }
 
     @Test
-    fun `cancelling hands over no account`() {
+    fun `canceling hands over no account`() {
         show()
 
         paste(TOTP_URI)
@@ -181,7 +181,7 @@ class AddAccountScreenTest {
     }
 
     @Test
-    fun `cancelling reports the cancellation`() {
+    fun `canceling reports the cancellation`() {
         show()
 
         compose.onNodeWithText(CANCEL).performClick()
@@ -340,7 +340,7 @@ class AddAccountScreenTest {
 
     // The advanced section offers the moving factor the chosen type carries and not the other one.
     @Test
-    fun `an hotp form offers a counter rather than a period`() {
+    fun `a hotp form offers a counter rather than a period`() {
         show()
 
         tap(MANUAL_PATH)
@@ -351,7 +351,7 @@ class AddAccountScreenTest {
     }
 
     @Test
-    fun `an hotp form saves the counter that was typed`() {
+    fun `a hotp form saves the counter that was typed`() {
         show()
 
         enterHotpManually()
@@ -363,7 +363,7 @@ class AddAccountScreenTest {
     }
 
     @Test
-    fun `an hotp form saves an account of its own type`() {
+    fun `a hotp form saves an account of its own type`() {
         show()
 
         enterHotpManually()

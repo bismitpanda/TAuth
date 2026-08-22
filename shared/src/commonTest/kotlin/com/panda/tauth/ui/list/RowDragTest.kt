@@ -17,64 +17,64 @@ private val IDS = listOf("a", "b", "c", "d")
 
 class RowDragTest {
     @Test
-    fun `a centre inside a row lands on that row`() {
-        assertEquals(2, dropIndex(centreY = 200f, rows = ROWS, fallback = 0))
+    fun `a center inside a row lands on that row`() {
+        assertEquals(2, dropIndex(centerY = 200f, rows = ROWS, fallback = 0))
     }
 
     @Test
-    fun `a centre in the gap above a row lands on that row`() {
-        assertEquals(2, dropIndex(centreY = 170f, rows = ROWS, fallback = 0))
+    fun `a center in the gap above a row lands on that row`() {
+        assertEquals(2, dropIndex(centerY = 170f, rows = ROWS, fallback = 0))
     }
 
     @Test
-    fun `a centre above every row lands on the first`() {
-        assertEquals(0, dropIndex(centreY = -400f, rows = ROWS, fallback = 3))
+    fun `a center above every row lands on the first`() {
+        assertEquals(0, dropIndex(centerY = -400f, rows = ROWS, fallback = 3))
     }
 
     @Test
-    fun `a centre below every row lands on the last`() {
-        assertEquals(3, dropIndex(centreY = 9000f, rows = ROWS, fallback = 0))
+    fun `a center below every row lands on the last`() {
+        assertEquals(3, dropIndex(centerY = 9000f, rows = ROWS, fallback = 0))
     }
 
     @Test
     fun `an unequal row above the target is not counted as more than one row of travel`() {
         // Row 1 is 100 tall against row 0's 60. Dividing 168 pixels by row 0's pitch reaches row 2.
-        assertEquals(1, dropIndex(centreY = 100f, rows = ROWS, fallback = 0))
+        assertEquals(1, dropIndex(centerY = 100f, rows = ROWS, fallback = 0))
     }
 
     @Test
     fun `an empty layout keeps the target it was given`() {
-        assertEquals(2, dropIndex(centreY = 100f, rows = emptyList(), fallback = 2))
+        assertEquals(2, dropIndex(centerY = 100f, rows = emptyList(), fallback = 2))
     }
 
     @Test
     fun `a row away from both edges does not scroll`() {
-        assertEquals(0f, edgeScroll(centreY = 300f, viewportHeight = 600, margin = 64f, perFrame = 16f))
+        assertEquals(0f, edgeScroll(centerY = 300f, viewportHeight = 600, margin = 64f, perFrame = 16f))
     }
 
     @Test
     fun `a row at the top edge scrolls towards the start`() {
-        assertEquals(-16f, edgeScroll(centreY = 0f, viewportHeight = 600, margin = 64f, perFrame = 16f))
+        assertEquals(-16f, edgeScroll(centerY = 0f, viewportHeight = 600, margin = 64f, perFrame = 16f))
     }
 
     @Test
     fun `a row at the bottom edge scrolls towards the end`() {
-        assertEquals(16f, edgeScroll(centreY = 600f, viewportHeight = 600, margin = 64f, perFrame = 16f))
+        assertEquals(16f, edgeScroll(centerY = 600f, viewportHeight = 600, margin = 64f, perFrame = 16f))
     }
 
     @Test
     fun `a row part way into the margin scrolls at part of the rate`() {
-        assertEquals(-8f, edgeScroll(centreY = 32f, viewportHeight = 600, margin = 64f, perFrame = 16f))
+        assertEquals(-8f, edgeScroll(centerY = 32f, viewportHeight = 600, margin = 64f, perFrame = 16f))
     }
 
     @Test
     fun `a row past the viewport does not scroll faster than the rate`() {
-        assertEquals(16f, edgeScroll(centreY = 5000f, viewportHeight = 600, margin = 64f, perFrame = 16f))
+        assertEquals(16f, edgeScroll(centerY = 5000f, viewportHeight = 600, margin = 64f, perFrame = 16f))
     }
 
     @Test
     fun `an unmeasured list does not scroll`() {
-        assertEquals(0f, edgeScroll(centreY = 10f, viewportHeight = 0, margin = 64f, perFrame = 16f))
+        assertEquals(0f, edgeScroll(centerY = 10f, viewportHeight = 0, margin = 64f, perFrame = 16f))
     }
 
     @Test
@@ -208,7 +208,7 @@ class RowDragTest {
     }
 
     @Test
-    fun `a cancelled drag leaves the order alone`() {
+    fun `a canceled drag leaves the order alone`() {
         val drag = started()
         drag.dragBy(amountY = 180f, rows = ROWS)
 

@@ -67,25 +67,25 @@ class PreviewCodeTest {
     }
 
     @Test
-    fun `an hotp preview at counter zero carries the published vector`() {
+    fun `a hotp preview at counter zero carries the published vector`() {
         assertEquals("84755224", previewCode(hotp(counter = 0uL), epochSeconds = 0))
     }
 
-    // The counter is the whole moving factor of an hotp account, so the preview has to move with it.
+    // The counter is the whole moving factor of a hotp account, so the preview has to move with it.
     @Test
-    fun `an hotp preview at counter one carries the published vector`() {
+    fun `a hotp preview at counter one carries the published vector`() {
         assertEquals("94287082", previewCode(hotp(counter = 1uL), epochSeconds = 0))
     }
 
     @Test
-    fun `an hotp preview reads the digit count the account names`() {
+    fun `a hotp preview reads the digit count the account names`() {
         assertEquals("755224", previewCode(hotp(counter = 0uL, digits = 6), epochSeconds = 0))
     }
 
-    // The clock plays no part in an hotp code, and a preview that moved with it would show one the
+    // The clock plays no part in a hotp code, and a preview that moved with it would show one the
     // server never computes.
     @Test
-    fun `an hotp preview does not move with the clock`() {
+    fun `a hotp preview does not move with the clock`() {
         assertEquals(
             previewCode(hotp(counter = 0uL), epochSeconds = 0),
             previewCode(hotp(counter = 0uL), epochSeconds = 1111111109),

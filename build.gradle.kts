@@ -37,13 +37,13 @@ subprojects {
     }
 
     // In a KMP module the aggregate `detekt` task is NO-SOURCE: the analysable
-    // tasks are per-compilation. Without this, `check` silently analyses nothing
+    // tasks are per-compilation. Without this, `check` silently analyzes nothing
     // in :shared, which is where nearly all the code lives.
     //
     // The *SourceSet tasks run without type resolution. The per-compilation
     // alternatives (detektMainJvm, detektMain…) would enable it, and are not used:
     // detekt/detekt#9602 makes a type-resolution task spanning two KMP source sets
-    // analyse `expect` and `actual` as one fragment, so type-aware rules misfire in
+    // analyze `expect` and `actual` as one fragment, so type-aware rules misfire in
     // both directions while the build still reports success. The upstream report
     // documents false UnusedPrivateProperty findings nearly acted on as dead code.
     // That is the wrong failure mode for a module whose contents are cryptographic.

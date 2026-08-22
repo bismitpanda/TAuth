@@ -52,7 +52,7 @@ class CodeTicker internal constructor(
     }
 
     private fun codeFor(entry: UnlockedEntry, epochSeconds: Long): TotpCode? {
-        // Advancing an hotp counter on a timer would spend a code nobody asked to see, and a period
+        // Advancing a hotp counter on a timer would spend a code nobody asked to see, and a period
         // guessed for a totp entry carrying none would show a code no server is computing.
         if (entry.type != OtpType.TOTP) return null
         val period = entry.period ?: return null

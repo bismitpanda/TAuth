@@ -23,14 +23,14 @@ private val CORNER_RADIUS = 12.dp
 
 @Composable
 internal fun DragSlot(modifier: Modifier = Modifier) {
-    val colour = MaterialTheme.colorScheme.outline
+    val color = MaterialTheme.colorScheme.outline
     Box(
         modifier = modifier
             .testTag(DRAG_SLOT_TAG)
             .drawBehind {
                 val dash = DASH_LENGTH.toPx()
                 drawRoundRect(
-                    color = colour,
+                    color = color,
                     cornerRadius = CornerRadius(CORNER_RADIUS.toPx()),
                     style = Stroke(
                         width = OUTLINE_WIDTH.toPx(),
@@ -40,6 +40,6 @@ internal fun DragSlot(modifier: Modifier = Modifier) {
             },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(TauthIcons.reorder, contentDescription = null, tint = colour)
+        Icon(TauthIcons.reorder, contentDescription = null, tint = color)
     }
 }

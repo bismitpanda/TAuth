@@ -10,13 +10,13 @@ import com.panda.tauth.settings.WindowGeometry
 internal fun preferences(
     theme: Theme,
     sortOrder: SortOrder,
-    startMinimised: Boolean,
-    minimiseToTray: Boolean,
+    startMinimized: Boolean,
+    minimizeToTray: Boolean,
     window: WindowGeometry = WindowGeometry(),
 ): Preferences = Preferences(
     theme = theme,
     sortOrder = sortOrder,
-    startMinimised = startMinimised,
-    minimiseToTray = minimiseToTray,
+    startMinimized = startMinimized,
+    minimizeToTray = minimizeToTray,
     window = window,
 )

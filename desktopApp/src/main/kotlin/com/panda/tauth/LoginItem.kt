@@ -73,7 +73,8 @@ internal class FileLoginItem(
 }
 
 internal class RegistryLoginItem : LoginItem {
-    // A value that is not there exits non-zero, which is an absent record rather than a failure.
+    // A value that is not there makes the command exit non-zero, which is an absent record rather
+    // than a failure.
     override fun read(): Outcome<String?, AutostartError> = run(registryQueryCommand()) { code, output ->
         if (code == 0) commandInRegistryOutput(output) else null
     }

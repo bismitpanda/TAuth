@@ -363,7 +363,7 @@ class OtpAuthUriTest {
 
     @Test
     fun `an account name containing a colon is rejected at construction`() {
-        // The colon is the label separator, so building anyway produces a URI that re-parses to a
+        // The colon is the label separator, so building anyway produces a URI that reparses to a
         // different account with an issuer that was never there.
         assertFailsWith<IllegalArgumentException> { OtpAuthUri(OtpType.TOTP, "alice:bob", SECRET) }
     }

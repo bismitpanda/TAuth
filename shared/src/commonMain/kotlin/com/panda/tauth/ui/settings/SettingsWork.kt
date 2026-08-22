@@ -61,7 +61,7 @@ internal class SettingsWork<E : VaultError> {
     }
 
     // The arrays are copies the password fields handed over and no holder owns them. A lock or a
-    // closing window cancels this scope mid-derivation, so the zeroing sits in a finally.
+    // closing window cancels this scope mid-derivation, so the zeroing sits in a `finally` block.
     fun run(scope: CoroutineScope, vararg passwords: CharArray, work: suspend () -> Outcome<*, E>) {
         isBusy = true
         error = null

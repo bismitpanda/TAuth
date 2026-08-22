@@ -19,7 +19,7 @@ val TauthSpacing: Spacing = Spacing(
     extraLarge = 32.dp,
 )
 
-// No default scale: a composable drawing outside TauthTheme has no theme to take its colours and
+// No default scale: a composable drawing outside TauthTheme has no theme to take its colors and
 // typography from either, and saying so here names the missing wrapper.
 val LocalSpacing: ProvidableCompositionLocal<Spacing> =
     staticCompositionLocalOf { error("Spacing is provided by TauthTheme") }

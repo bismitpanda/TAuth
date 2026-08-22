@@ -7,8 +7,6 @@ import org.jetbrains.compose.resources.painterResource
 import tauth.shared.generated.resources.Res
 import tauth.shared.generated.resources.ic_add
 import tauth.shared.generated.resources.ic_arrow_back
-import tauth.shared.generated.resources.ic_arrow_downward
-import tauth.shared.generated.resources.ic_arrow_upward
 import tauth.shared.generated.resources.ic_check
 import tauth.shared.generated.resources.ic_close
 import tauth.shared.generated.resources.ic_content_copy
@@ -67,6 +65,4 @@ object TauthIcons {
     val sortIssuer: Painter @Composable get() = painterResource(Res.drawable.ic_sort_by_alpha)
     val sortRecent: Painter @Composable get() = painterResource(Res.drawable.ic_schedule)
     val password: Painter @Composable get() = painterResource(Res.drawable.ic_password)
-    val ascending: Painter @Composable get() = painterResource(Res.drawable.ic_arrow_upward)
-    val descending: Painter @Composable get() = painterResource(Res.drawable.ic_arrow_downward)
 }

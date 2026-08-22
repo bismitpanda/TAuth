@@ -59,7 +59,7 @@ internal const val ROTATE_NOTE =
 
 internal const val LOCKING_HEADING = "Locking"
 internal const val IDLE_LABEL = "Lock after this long without input"
-internal const val MINIMISE_LOCK_LABEL = "Lock when the window is minimised"
+internal const val MINIMIZE_LOCK_LABEL = "Lock when the window is minimized"
 internal const val GRACE_LABEL = "Wait this long before locking a hidden window"
 internal const val FOCUS_LOSS_LABEL = "Lock when the window loses focus"
 
@@ -73,14 +73,14 @@ internal const val THEME_LIGHT_LABEL = "Light"
 internal const val THEME_DARK_LABEL = "Dark"
 
 internal const val TRAY_HEADING = "Tray"
-internal const val MINIMISE_TO_TRAY_LABEL = "Close to the tray instead of quitting"
+internal const val MINIMIZE_TO_TRAY_LABEL = "Close to the tray instead of quitting"
 internal const val NO_TRAY_NOTE =
     "This desktop offers no system tray, so a window sent to one would leave TAuth running with " +
         "nothing to bring it back."
 
 internal const val STARTUP_HEADING = "Startup"
 internal const val START_AT_LOGIN_LABEL = "Start TAuth when I log in"
-internal const val START_MINIMISED_LABEL = "Start with the window out of the way"
+internal const val START_MINIMIZED_LABEL = "Start with the window out of the way"
 internal const val NO_LAUNCHER_NOTE =
     "Starting at login needs an installed copy of TAuth to point at, which a build run from source " +
         "does not provide."
@@ -109,7 +109,7 @@ internal const val EXPORT_NOTE =
 
 internal const val ABOUT_HEADING = "About"
 internal const val VERSION_LABEL = "Version"
-internal const val LICENCE_LABEL = "Licence"
+internal const val LICENSE_LABEL = "License"
 internal const val PROTECTS_NOTE =
     "The vault file is encrypted whole, so a copy taken from a disk, a backup or a synced folder is " +
         "unreadable without your password, and any tampering is detected rather than decrypted. " +
@@ -132,10 +132,10 @@ internal const val CURRENT_PASSWORD_TAG = "settings-current-password"
 internal const val NEW_PASSWORD_TAG = "settings-new-password"
 internal const val CONFIRM_PASSWORD_TAG = "settings-confirm-password"
 internal const val ROTATE_PASSWORD_TAG = "settings-rotate-password"
-internal const val MINIMISE_LOCK_TAG = "settings-lock-on-minimise"
+internal const val MINIMIZE_LOCK_TAG = "settings-lock-on-minimize"
 internal const val FOCUS_LOSS_TAG = "settings-lock-on-focus-loss"
-internal const val MINIMISE_TO_TRAY_TAG = "settings-minimise-to-tray"
-internal const val START_MINIMISED_TAG = "settings-start-minimised"
+internal const val MINIMIZE_TO_TRAY_TAG = "settings-minimize-to-tray"
+internal const val START_MINIMIZED_TAG = "settings-start-minimized"
 internal const val START_AT_LOGIN_TAG = "settings-start-at-login"
 
 // Minutes, and zero for a vault that never locks on its own.
@@ -184,8 +184,8 @@ fun SettingsScreen(
     importError: ImportReadError? = null,
     onPolicyChange: (SecurityPolicy) -> Unit = {},
     onThemeChange: (Theme) -> Unit = {},
-    onMinimiseToTrayChange: (Boolean) -> Unit = {},
-    onStartMinimisedChange: (Boolean) -> Unit = {},
+    onMinimizeToTrayChange: (Boolean) -> Unit = {},
+    onStartMinimizedChange: (Boolean) -> Unit = {},
     onStartAtLoginChange: (Boolean) -> Unit = {},
     onChangePassword: (CharArray, CharArray) -> Unit = { _, _ -> },
     onRotate: (CharArray) -> Unit = {},
@@ -229,7 +229,7 @@ fun SettingsScreen(
             preferences = preferences,
             canConfigureTray = shell.canConfigureTray,
             isEnabled = isEnabled,
-            onMinimiseToTrayChange = onMinimiseToTrayChange,
+            onMinimizeToTrayChange = onMinimizeToTrayChange,
         )
         StartupGroup(
             preferences = preferences,
@@ -237,7 +237,7 @@ fun SettingsScreen(
             canStartAtLogin = shell.canStartAtLogin,
             isEnabled = isEnabled,
             onStartAtLoginChange = onStartAtLoginChange,
-            onStartMinimisedChange = onStartMinimisedChange,
+            onStartMinimizedChange = onStartMinimizedChange,
         )
         DataGroup(
             shell = shell,
@@ -386,10 +386,10 @@ private fun LockingGroup(
             enabled = isEnabled,
         )
         ToggleRow(
-            label = MINIMISE_LOCK_LABEL,
-            isChecked = policy.lockOnMinimise,
-            onCheckedChange = { onPolicyChange(policy.copy(lockOnMinimise = it)) },
-            tag = MINIMISE_LOCK_TAG,
+            label = MINIMIZE_LOCK_LABEL,
+            isChecked = policy.lockOnMinimize,
+            onCheckedChange = { onPolicyChange(policy.copy(lockOnMinimize = it)) },
+            tag = MINIMIZE_LOCK_TAG,
             enabled = isEnabled,
         )
         ChoiceRow(
@@ -453,7 +453,7 @@ private fun TrayGroup(
     preferences: Preferences,
     canConfigureTray: Boolean,
     isEnabled: Boolean,
-    onMinimiseToTrayChange: (Boolean) -> Unit,
+    onMinimizeToTrayChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Group(TRAY_HEADING, modifier) {
@@ -461,10 +461,10 @@ private fun TrayGroup(
             Note(NO_TRAY_NOTE)
         }
         ToggleRow(
-            label = MINIMISE_TO_TRAY_LABEL,
-            isChecked = preferences.minimiseToTray,
-            onCheckedChange = onMinimiseToTrayChange,
-            tag = MINIMISE_TO_TRAY_TAG,
+            label = MINIMIZE_TO_TRAY_LABEL,
+            isChecked = preferences.minimizeToTray,
+            onCheckedChange = onMinimizeToTrayChange,
+            tag = MINIMIZE_TO_TRAY_TAG,
             enabled = isEnabled && canConfigureTray,
         )
     }
@@ -477,7 +477,7 @@ private fun StartupGroup(
     canStartAtLogin: Boolean,
     isEnabled: Boolean,
     onStartAtLoginChange: (Boolean) -> Unit,
-    onStartMinimisedChange: (Boolean) -> Unit,
+    onStartMinimizedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Group(STARTUP_HEADING, modifier) {
@@ -492,10 +492,10 @@ private fun StartupGroup(
             enabled = isEnabled && canStartAtLogin,
         )
         ToggleRow(
-            label = START_MINIMISED_LABEL,
-            isChecked = preferences.startMinimised,
-            onCheckedChange = onStartMinimisedChange,
-            tag = START_MINIMISED_TAG,
+            label = START_MINIMIZED_LABEL,
+            isChecked = preferences.startMinimized,
+            onCheckedChange = onStartMinimizedChange,
+            tag = START_MINIMIZED_TAG,
             enabled = isEnabled && canConfigureTray && !preferences.startAtLogin,
         )
     }
@@ -586,7 +586,7 @@ private fun plaintextMessageFor(error: FileWriteError): String = when (error) {
 private fun AboutGroup(shell: ShellSettings, modifier: Modifier = Modifier) {
     Group(ABOUT_HEADING, modifier) {
         Text("$VERSION_LABEL: ${shell.version}", style = MaterialTheme.typography.bodyMedium)
-        Text("$LICENCE_LABEL: ${shell.licence}", style = MaterialTheme.typography.bodyMedium)
+        Text("$LICENSE_LABEL: ${shell.license}", style = MaterialTheme.typography.bodyMedium)
         Note(PROTECTS_NOTE)
         Note(PROTECTS_NOT_NOTE)
         Note(BACKUP_NOTE)

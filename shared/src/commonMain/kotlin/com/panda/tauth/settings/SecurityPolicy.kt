@@ -7,7 +7,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class SecurityPolicy(
     val idleTimeoutMinutes: Int = DEFAULT_IDLE_TIMEOUT_MINUTES,
-    val lockOnMinimise: Boolean = true,
+    val lockOnMinimize: Boolean = true,
     val lockOnFocusLoss: Boolean = false,
     val hideGraceSeconds: Int = 0,
     val clipboardClearSeconds: Int = DEFAULT_CLIPBOARD_CLEAR_SECONDS,

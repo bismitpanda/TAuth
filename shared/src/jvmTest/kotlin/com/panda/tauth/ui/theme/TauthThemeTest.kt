@@ -40,45 +40,45 @@ class TauthThemeTest {
         assertTrue(dark.luminance() < light.luminance())
     }
 
-    // The theme paints a background and sets the content colour to match it. Without that surface
+    // The theme paints a background and sets the content color to match it. Without that surface
     // LocalContentColor falls back to black in both modes, which is black text on a dark background.
     @Test
-    fun `the content colour follows the mode`() {
+    fun `the content color follows the mode`() {
         val (light, dark) = compose.readBothModes { LocalContentColor.current }
 
         assertTrue(dark.luminance() > light.luminance())
     }
 
     @Test
-    fun `the dark text colour is lighter than the light text colour`() {
+    fun `the dark text color is lighter than the light text color`() {
         val (light, dark) = compose.readBothModes { MaterialTheme.colorScheme.onSurface }
 
         assertTrue(dark.luminance() > light.luminance())
     }
 
     @Test
-    fun `the primary colour differs between light and dark`() {
+    fun `the primary color differs between light and dark`() {
         val (light, dark) = compose.readBothModes { MaterialTheme.colorScheme.primary }
 
         assertNotEquals(light, dark)
     }
 
     @Test
-    fun `the countdown colour differs between light and dark`() {
+    fun `the countdown color differs between light and dark`() {
         val (light, dark) = compose.readBothModes { LocalTauthColors.current.countdown }
 
         assertNotEquals(light, dark)
     }
 
     @Test
-    fun `the expiring countdown colour differs between light and dark`() {
+    fun `the expiring countdown color differs between light and dark`() {
         val (light, dark) = compose.readBothModes { LocalTauthColors.current.countdownExpiring }
 
         assertNotEquals(light, dark)
     }
 
     @Test
-    fun `an expiring countdown is not the colour of a running one`() {
+    fun `an expiring countdown is not the color of a running one`() {
         val (light, dark) = compose.readBothModes { LocalTauthColors.current }
 
         assertNotEquals(light.countdown, light.countdownExpiring)
@@ -86,14 +86,14 @@ class TauthThemeTest {
     }
 
     @Test
-    fun `the expiring countdown colour is amber in the light theme`() {
+    fun `the expiring countdown color is amber in the light theme`() {
         val (light, _) = compose.readBothModes { LocalTauthColors.current.countdownExpiring }
 
         assertTrue(isAmber(light))
     }
 
     @Test
-    fun `the expiring countdown colour is amber in the dark theme`() {
+    fun `the expiring countdown color is amber in the dark theme`() {
         val (_, dark) = compose.readBothModes { LocalTauthColors.current.countdownExpiring }
 
         assertTrue(isAmber(dark))

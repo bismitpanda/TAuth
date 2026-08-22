@@ -19,7 +19,7 @@ IntelliJ's **Kotlin style guide** preset matches this. Set it once under Setting
 
 ktlint runs through the kotlinter Gradle plugin and takes its rules from `.editorconfig`, so the IDE and the build read the same file. `./gradlew formatKotlin` fixes what is mechanically fixable; `./gradlew lintKotlin` reports the rest. Do not hand-format around ktlint; if a rule is wrong for this project, change it in `.editorconfig` and say why in the commit.
 
-Static analysis is detekt, configured in `config/detekt/detekt.yml` on top of its default ruleset. detekt's formatting ruleset is deliberately absent so the two tools cannot disagree about the same line: kotlinter owns formatting, detekt owns code smells. It runs without type resolution while [detekt/detekt#9602](https://github.com/detekt/detekt/issues/9602) is open, so type-aware rules are skipped without a message; the Kotlin compiler remains the type checker. The dead-code rules `UnusedPrivateProperty` and `UnusedPrivateFunction` need type information too and therefore report nothing, so an unused private property or private function fails no task. `style>UnusedImport` is enabled there and needs type information as well, so what fails a dead import is ktlint's `no-unused-imports`, enabled in `.editorconfig`.
+Static analysis is detekt, configured in `config/detekt/detekt.yml` on top of its default ruleset. detekt's formatting ruleset is deliberately absent so the two tools cannot disagree about the same line: kotlinter owns formatting, detekt owns code smells. It runs without type resolution while [detekt/detekt#9602](https://github.com/detekt/detekt/issues/9602) is open, so type-aware rules are skipped without a message; the Kotlin compiler remains the type checker. The dead-code rules `UnusedPrivateProperty` and `UnusedPrivateFunction` need type information too and therefore report nothing, so an unused private property or private function fails no task. `style>UnusedImport` is enabled there and needs type information as well, so what fails an import whose name appears nowhere else is ktlint's `no-unused-imports`, enabled in `.editorconfig`. It does not fail an import of a symbol from the file's own package: the name is used and only the import is redundant, so no task reports one.
 
 ## 2. Naming
 
@@ -27,7 +27,7 @@ Standard Kotlin conventions apply. The project-specific points:
 
 - **Files.** One top-level class per file, named for it. Files holding several top-level declarations get a descriptive name — `VaultPaths.kt`, not `VaultUtils.kt`. `Util`, `Helper`, `Manager` and `Common` are not acceptable file or class names; if no better name exists, the file is doing more than one thing.
 - **Platform files.** A file holding `actual` declarations carries the source-set suffix: `Aead.kt` in `commonMain`, `Aead.jvm.kt` in `jvmMain`. This is a Kotlin convention, not a preference. A platform file with no `actual` in it is named for what it holds, like any other.
-- **Acronyms.** Two letters uppercase (`IOStream`); three or more capitalise the first only (`TotpGenerator`, `QrEncoder`, `OtpAuthUri`, `HttpClient`). `TOTP`, `QR` and `URI` do not appear in identifiers in those forms.
+- **Acronyms.** Two letters uppercase (`IOStream`); three or more capitalize the first only (`TotpGenerator`, `QrEncoder`, `OtpAuthUri`, `HttpClient`). `TOTP`, `QR` and `URI` do not appear in identifiers in those forms.
 - **Backing properties.** `private val _entries` exposed as `val entries: List<VaultEntry> get() = _entries`. Used for every mutable collection or flow exposed read-only.
 - **Constants.** `const val` in screaming snake case, declared in a `companion object` or at file top level, never inline as a magic number. Cryptographic sizes in particular are named: `NONCE_BYTES = 12`, `TAG_BITS = 128`, `DEK_BYTES = 32`.
 - **Booleans.** Prefixed `is`, `has`, `should`, or `can`. `isLocked`, not `locked`.
@@ -42,7 +42,7 @@ The rule for where code goes, in order:
 
 Rule 3 is decided first and takes its concern whole. A concern that belongs to the desktop shell keeps its pure parts with it: the text of a freedesktop desktop entry and the argv handed to `reg.exe` are `String` and `List` operations with no platform import, and putting them in `commonMain` on rule 1 alone would move Windows registry syntax into the module that has to stay portable. Rules 1 and 2 sort what is left. The test is what the code is *about*, not which APIs it happens to call: `VaultPaths` resolves a path for the vault, which every target has, so it is rule 2; `LoginItem` writes a record only a desktop session reads, so it is rule 3 along with the record text it writes.
 
-`expect`/`actual` is for platform primitives (AEAD, KDF, HMAC, CSPRNG, base64, filesystem), not for feature switching. An `expect` declaration with one `actual` that differs by behaviour rather than by platform capability is an interface in disguise; use an interface.
+`expect`/`actual` is for platform primitives (AEAD, KDF, HMAC, CSPRNG, base64, filesystem), not for feature switching. An `expect` declaration with one `actual` that differs by behavior rather than by platform capability is an interface in disguise; use an interface.
 
 Keep `commonMain` free of `java.*` imports. The `jvm()` target makes them compile, and that is exactly why the discipline has to be deliberate: an accidental `java.util.Base64` in `commonMain` compiles today and blocks an Android or iOS target later.
 
@@ -81,7 +81,7 @@ Distinct failures get distinct types. `WrongPassword` and `IntegrityFailure` are
 ## 6. Coroutines
 
 - Suspend functions do not decide their own dispatcher at the call site; they use `withContext` internally so callers can call them from anywhere. Argon2id derivation and all file I/O wrap themselves in `withContext(Dispatchers.Default)` or `Dispatchers.IO`.
-- No `GlobalScope`. Every coroutine belongs to a scope with a defined lifetime — the application scope, or a `CoroutineScope` owned by `VaultSession` and cancelled on lock.
+- No `GlobalScope`. Every coroutine belongs to a scope with a defined lifetime — the application scope, or a `CoroutineScope` owned by `VaultSession` and canceled on lock.
 - Cancellation is cooperative and must be preserved: never catch `CancellationException`, and never swallow it inside a broad `catch (e: Exception)`. Use `runCatching` only where the block cannot suspend, or rethrow `CancellationException` explicitly.
 - State is exposed as `StateFlow`, never as a mutable flow. `private val _state = MutableStateFlow(...)` with `val state: StateFlow<T> = _state.asStateFlow()`.
 - Timers are coroutines with `delay`, not `java.util.Timer` or `ScheduledExecutorService`, so that scope cancellation stops them deterministically.
@@ -94,19 +94,19 @@ Distinct failures get distinct types. `WrongPassword` and `IntegrityFailure` are
 - No business logic in composables. Code generation, formatting and validation live in `:shared` outside `ui/` and are called from there.
 - `remember` for values that are expensive and derived; `derivedStateOf` when a computed value depends on other state and would otherwise recompose too often.
 - Never launch work in composition. Use `LaunchedEffect` with a key that genuinely identifies the work.
-- Colours, spacing and typography come from the theme. No hardcoded `Color(0xFF...)` or raw `.dp` spacing constants in screen code; add a theme token instead. Two things are drawn outside the theme and carry their own colours, each saying so in a comment: the QR dialog, which is dark-on-light regardless of theme so that it stays scannable, and the shell's tray and window icon, which the desktop draws on surfaces no composition reaches. The QR dialog holds its minimum size the same way and for the same reason: a theme free to shrink the symbol is free to make it unscannable, so that measurement sits beside the symbol rather than in the palette.
+- Colors, spacing and typography come from the theme. No hardcoded `Color(0xFF...)` or raw `.dp` spacing constants in screen code; add a theme token instead. Two things are drawn outside the theme and carry their own colors, each saying so in a comment: the QR dialog, which is dark-on-light regardless of theme so that it stays scannable, and the shell's tray and window icon, which the desktop draws on surfaces no composition reaches. The QR dialog holds its minimum size the same way and for the same reason: a theme free to shrink the symbol is free to make it unscannable, so that measurement sits beside the symbol rather than in the palette.
 
 ## 8. Comments and documentation
 
 Comments are the exception, not the norm. Names, types and structure carry the meaning.
 
-**Comment the trap.** A comment exists to stop the next reader making a wrong change. It earns its place by naming the trap: the obvious alternative that is wrong, a behaviour nothing at the call site reveals, a constant whose value cannot be derived. `Char.isWhitespace` is wider than the four characters a paste adds; a `Set` lookup would leave the password in the heap as a `String`; focus is the wrong signal for a raise that asks for focus itself; the frame lands past the tick, so the constant is 1100 and not 1000. Each stops an edit that would otherwise look like an improvement.
+**Comment the trap.** A comment exists to stop the next reader making a wrong change. It earns its place by naming the trap: the obvious alternative that is wrong, a behavior nothing at the call site reveals, a constant whose value cannot be derived. `Char.isWhitespace` is wider than the four characters a paste adds; a `Set` lookup would leave the password in the heap as a `String`; focus is the wrong signal for a raise that asks for focus itself; the frame lands past the tick, so the constant is 1100 and not 1000. Each stops an edit that would otherwise look like an improvement.
 
 **The test is whether it prevents an edit, not whether it explains a decision.** A note recording why a dependency was not taken, or what an upstream project does not publish, prevents nothing — nobody reading that file is about to reverse it — and it rots on its own. Delete it.
 
 **Cut everything that follows from the trap.** The consequence, the restatement of the line below, the derivation, the second sentence that says the first again. `// RFC 6238 §4.2` earns its place; the formula after it is the code. `// nothing here decodes a secret` earns its place; "padding and case are what differ" is the `uppercase()` and the filter. A comment's second sentence is suspect by default: read it and ask what it adds that the first sentence and the code do not.
 
-**A rule this project already states is not a comment.** AGENTS.md declares the non-negotiable invariants and the threat model; this guide states the conventions; the tests state the behaviour. Nonce freshness, AAD reuse, KEK zeroing, the no-`String`-for-secrets rule, and a `when` over a sealed hierarchy having no `else` are stated once in those documents and never again at the sites that obey them, however many sites that is.
+**A rule this project already states is not a comment.** AGENTS.md declares the non-negotiable invariants and the threat model; this guide states the conventions; the tests state the behavior. Nonce freshness, AAD reuse, KEK zeroing, the no-`String`-for-secrets rule, and a `when` over a sealed hierarchy having no `else` are stated once in those documents and never again at the sites that obey them, however many sites that is.
 
 This does not make every documented fact off limits. A rule the code *obeys* needs no comment. A trap at this *site* still does, even where a document covers the same ground: the policy lives inside the encrypted body so that an edit is detected rather than obeyed, and whoever is about to move it to the plaintext preferences file is reading the class, not the threat model.
 
@@ -133,10 +133,10 @@ These rules override convenience and are not subject to local judgment.
 
 ## 10. Testing
 
-- Test functions use backticked names describing behaviour: ``@Test fun `wrong password fails at unwrap, not body decryption`() { }``.
+- Test functions use backticked names describing behavior: ``@Test fun `wrong password fails at unwrap, not body decryption`() { }``.
 - One assertion subject per test. A test that needs "and" in its name is two tests.
 - Spec vectors are individual test cases, not a loop over a table, so a failure names the exact vector rather than an index.
-- No mocking framework. Dependencies are constructor-injected interfaces with hand-written fakes; a fixed `Clock` for time, a temp directory for the filesystem.
+- No mocking framework. Dependencies are constructor-injected interfaces with handwritten fakes; a fixed `Clock` for time, a temp directory for the filesystem.
 - Tests do not read or write outside a temp directory, and do not touch the real vault path.
 - Tests are deterministic. No `Random` without a fixed seed, no reliance on wall-clock time, no sleeps — advance an injected clock instead.
 - Expected values are written out in the test, never derived from the code under test. A rebuilt expectation agrees with whatever the code happened to do.

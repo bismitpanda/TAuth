@@ -61,7 +61,7 @@ private class RaisedWindow {
     }
 
     fun presence(isFocused: Boolean) =
-        WindowPresence(isVisible = isVisible, isMinimised = false, isFocused = isFocused, shownBy = shownBy)
+        WindowPresence(isVisible = isVisible, isMinimized = false, isFocused = isFocused, shownBy = shownBy)
 }
 
 class WindowRaiseTest {
@@ -249,7 +249,7 @@ class WindowRaiseTest {
     }
 
     @Test
-    fun `a cancelled collection takes the listener off`() {
+    fun `a canceled collection takes the listener off`() {
         val job = startRaising()
         requests.value = 1
 
